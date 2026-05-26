@@ -250,13 +250,15 @@ if [[ -n "$DO_NVMEMOUNT" ]]; then
                         log "NVMe смонтирован в $MOUNT_POINT"
 
                         # Спрашиваем какие подпапки создать
+                        # Примечание: lbb сам создаёт папки lbb_<источник> в корне диска,
+                        # отдельная папка для него не нужна.
                         SUBDIRS=$(whiptail \
                             --title "Подпапки на NVMe" \
-                            --checklist "Какие подпапки создать в $MOUNT_POINT?" \
+                            --checklist "Какие подпапки создать в $MOUNT_POINT?\n(lbb сам создаёт lbb_* папки в корне, отдельная папка не нужна)" \
                             15 70 4 \
-                            "lbb-backups"  "Куда lbb будет писать бэкапы SD-карт" ON \
                             "casaos-data"  "Данные CasaOS-контейнеров (Immich и т.п.)" OFF \
                             "photos"       "Общая папка для Samba-шары" ON \
+                            "shared"       "Общая папка для всего остального" OFF \
                             3>&1 1>&2 2>&3) || SUBDIRS=""
 
                         for subdir in $SUBDIRS; do

@@ -1,0 +1,14 @@
+# Локальные эксперименты
+*.local
+*.swp
+*~
+.DS_Store
+
+# Логи установки
+*.log
+install-error.log
+lbb-install-error.log
+
+# Бэкапы конфигов (не коммитим, они с приватными данными)
+pi-config-backups/
+*.original

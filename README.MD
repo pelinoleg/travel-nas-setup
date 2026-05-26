@@ -6,14 +6,14 @@
 
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/pelinleg/travel-nas-setup/main/setup-lbb.sh -o setup-lbb.sh && bash setup-lbb.sh
+curl -fsSL https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/main/setup-lbb.sh -o setup-lbb.sh && bash setup-lbb.sh
 ```
 ```bash
-wget -qO setup-lbb.sh https://raw.githubusercontent.com/pelinleg/travel-nas-setup/main/setup-lbb.sh && bash setup-lbb.sh
+wget -qO setup-lbb.sh https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/main/setup-lbb.sh && bash setup-lbb.sh
 ```
 
 ```bash
-git clone https://github.com/pelinleg/travel-nas-setup.git
+git clone https://github.com/pelinoleg/travel-nas-setup.git
 cd travel-nas-setup
 bash setup-lbb.sh
 ```

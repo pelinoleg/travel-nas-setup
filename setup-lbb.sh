@@ -66,7 +66,7 @@ else
         "UTILS"     "Утилиты (htop, ncdu, tmux, git, nvme-cli...)" ON \
         "NVMEMOUNT" "Авто-монтирование NVMe через fstab" ON \
         "LBB"       "Установить Little Backup Box" ON \
-        "CASAOS"    "Установить CasaOS (порт 100)" OFF \
+        "CASAOS"    "Установить CasaOS (порт 80, http://lbb.local)" OFF \
         "SAMBA"     "SMB-шара (открытая, для домашней сети)" ON \
         "LOG2RAM"   "Log2ram (экономит microSD)" ON \
         "ZRAM"      "Тюнинг zram swap (4GB, swappiness=10)" ON \
@@ -332,22 +332,18 @@ if [[ -n "$DO_CASAOS" ]]; then
         echo "Нажми Enter для продолжения, Ctrl+C для отмены..."
         read -r
 
+        # Установщик иногда требует curl
+        if ! command -v curl &>/dev/null; then
+            sudo apt install -y curl
+        fi
+
         curl -fsSL https://get.casaos.io | sudo bash || true
 
         if command -v casaos-cli &>/dev/null; then
             log "CasaOS установлен"
+            info "Откроется на: http://lbb.local (порт 80)"
         else
             err "CasaOS установить не удалось"
-        fi
-    fi
-
-    if command -v casaos-cli &>/dev/null; then
-        CURRENT_PORT=$(sudo casaos-cli gateway port 2>/dev/null || echo "80")
-        if [[ "$CURRENT_PORT" != "100" ]]; then
-            sudo casaos-cli gateway port set 100 2>/dev/null || \
-                warn "Не удалось сменить порт. Сделай вручную: sudo casaos-cli gateway port set 100"
-            sudo systemctl restart casaos-gateway 2>/dev/null || true
-            log "CasaOS на порту 100 → http://lbb.local:100"
         fi
     fi
 fi
@@ -607,7 +603,7 @@ echo "================================================================"
 echo ""
 
 [[ -n "$DO_LBB" ]]     && info "Little Backup Box: http://lbb.local:8080"
-[[ -n "$DO_CASAOS" ]]  && info "CasaOS:            http://lbb.local:100"
+[[ -n "$DO_CASAOS" ]]  && info "CasaOS:            http://lbb.local (порт 80)"
 [[ -n "$DO_SAMBA" ]]   && info "Samba шара:        smb://lbb.local/travel-nas"
 [[ -n "$DO_PCIE" ]]    && warn "PCIe/NVMe применятся ПОСЛЕ ребута"
 

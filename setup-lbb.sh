@@ -547,31 +547,60 @@ fi
 
 mkdir -p "$BACKUP_DIR"
 
-# Системные файлы
+# === Системные файлы ===
 cp -r /etc/fstab          "$BACKUP_DIR/" 2>/dev/null || true
 cp -r /etc/samba          "$BACKUP_DIR/" 2>/dev/null || true
 cp -r /etc/network        "$BACKUP_DIR/" 2>/dev/null || true
-cp -r /boot/firmware/cmdline.txt "$BACKUP_DIR/" 2>/dev/null || true
-cp -r /boot/firmware/config.txt  "$BACKUP_DIR/" 2>/dev/null || true
+cp /boot/firmware/cmdline.txt "$BACKUP_DIR/" 2>/dev/null || true
+cp /boot/firmware/config.txt  "$BACKUP_DIR/" 2>/dev/null || true
 
-# Конфиг lbb (если есть)
+# === lbb config ===
 if [[ -d /var/www/little-backup-box ]]; then
     cp /var/www/little-backup-box/config.cfg "$BACKUP_DIR/lbb-config.cfg" 2>/dev/null || true
 fi
 
-# Список установленных пакетов
-dpkg --get-selections > "$BACKUP_DIR/installed-packages.txt"
-
-# Список docker-контейнеров CasaOS (если есть)
-if command -v docker &>/dev/null; then
-    docker ps -a --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}' > "$BACKUP_DIR/docker-containers.txt" 2>/dev/null || true
+# === CasaOS configs ===
+# Compose-файлы и метаданные всех установленных приложений
+if [[ -d /var/lib/casaos ]]; then
+    mkdir -p "$BACKUP_DIR/casaos"
+    cp -r /var/lib/casaos/apps "$BACKUP_DIR/casaos/" 2>/dev/null || true
+    cp -r /var/lib/casaos/db   "$BACKUP_DIR/casaos/" 2>/dev/null || true
+fi
+if [[ -d /etc/casaos ]]; then
+    cp -r /etc/casaos "$BACKUP_DIR/" 2>/dev/null || true
 fi
 
-# Cron jobs
+# === Devmon config (наша защита от CasaOS) ===
+if [[ -f /etc/conf.d/devmon ]]; then
+    cp /etc/conf.d/devmon "$BACKUP_DIR/devmon.conf" 2>/dev/null || true
+fi
+
+# === Docker info ===
+if command -v docker &>/dev/null; then
+    docker ps -a --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}' > "$BACKUP_DIR/docker-containers.txt" 2>/dev/null || true
+    docker images --format 'table {{.Repository}}\t{{.Tag}}\t{{.Size}}' > "$BACKUP_DIR/docker-images.txt" 2>/dev/null || true
+    docker network ls > "$BACKUP_DIR/docker-networks.txt" 2>/dev/null || true
+    docker volume ls > "$BACKUP_DIR/docker-volumes.txt" 2>/dev/null || true
+fi
+
+# === Список пакетов ===
+dpkg --get-selections > "$BACKUP_DIR/installed-packages.txt"
+
+# === Cron jobs ===
 crontab -l > "$BACKUP_DIR/crontab-$(whoami).txt" 2>/dev/null || true
 sudo crontab -l > "$BACKUP_DIR/crontab-root.txt" 2>/dev/null || true
 
-# Чистка старых бэкапов — оставляем 4 последних
+# === Метаданные бэкапа ===
+cat > "$BACKUP_DIR/backup-info.txt" << INFOEOF
+Backup created: $(date)
+Hostname:       $(hostname)
+Kernel:         $(uname -r)
+OS:             $(lsb_release -d 2>/dev/null | cut -f2 || echo "unknown")
+Uptime:         $(uptime -p)
+NVMe mount:     $(mount | grep nvme || echo "not mounted")
+INFOEOF
+
+# === Чистка старых бэкапов — оставляем 4 последних ===
 cd "$BACKUP_ROOT"
 ls -1t | tail -n +5 | xargs -r rm -rf
 

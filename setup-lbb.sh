@@ -249,12 +249,22 @@ if [[ -n "$DO_NVMEMOUNT" ]]; then
                     if findmnt -n "$MOUNT_POINT" &>/dev/null; then
                         log "NVMe смонтирован в $MOUNT_POINT"
 
-                        # Создаём подпапки для разных применений
-                        sudo mkdir -p "$MOUNT_POINT/lbb-backups"
-                        sudo mkdir -p "$MOUNT_POINT/casaos-data"
-                        sudo mkdir -p "$MOUNT_POINT/photos"
-                        sudo chmod 777 "$MOUNT_POINT/lbb-backups" "$MOUNT_POINT/photos"
-                        log "Подпапки созданы: lbb-backups, casaos-data, photos"
+                        # Спрашиваем какие подпапки создать
+                        SUBDIRS=$(whiptail \
+                            --title "Подпапки на NVMe" \
+                            --checklist "Какие подпапки создать в $MOUNT_POINT?" \
+                            15 70 4 \
+                            "lbb-backups"  "Куда lbb будет писать бэкапы SD-карт" ON \
+                            "casaos-data"  "Данные CasaOS-контейнеров (Immich и т.п.)" OFF \
+                            "photos"       "Общая папка для Samba-шары" ON \
+                            3>&1 1>&2 2>&3) || SUBDIRS=""
+
+                        for subdir in $SUBDIRS; do
+                            sd_clean=$(echo "$subdir" | tr -d '"')
+                            sudo mkdir -p "$MOUNT_POINT/$sd_clean"
+                            sudo chmod 777 "$MOUNT_POINT/$sd_clean"
+                            log "Создана $MOUNT_POINT/$sd_clean"
+                        done
                     else
                         err "Не удалось смонтировать. Проверь /etc/fstab вручную"
                     fi

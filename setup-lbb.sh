@@ -202,7 +202,7 @@ if [[ -n "$DO_NVMEMOUNT" ]]; then
 
         SELECTED_PART=$(whiptail \
             --title "Выбор NVMe-раздела" \
-            --menu "Какой раздел монтировать в /media/nvme_target?" \
+            --menu "Какой раздел монтировать в /mnt/nvme_target?" \
             18 70 8 \
             "${MENU_ARGS[@]}" \
             3>&1 1>&2 2>&3) || SELECTED_PART=""
@@ -217,7 +217,7 @@ if [[ -n "$DO_NVMEMOUNT" ]]; then
                 warn "Раздел отформатирован? Если нет — сначала отформатируй в ext4:"
                 warn "  sudo mkfs.ext4 -L lbb-nvme $SELECTED_PART"
             else
-                MOUNT_POINT="/media/nvme_target"
+                MOUNT_POINT="/mnt/nvme_target"
                 sudo mkdir -p "$MOUNT_POINT"
 
                 # Размонтируем если уже примонтировано в другом месте
@@ -358,12 +358,34 @@ if [[ -n "$DO_CASAOS" ]]; then
             err "CasaOS установить не удалось"
         fi
     fi
+
+    # Защита fstab-монтирований от CasaOS devmon
+    # Без этого CasaOS перехватывает диски из fstab и монтирует в /mnt/tech_*
+    if [[ -f /etc/conf.d/devmon ]] && [[ -f /etc/fstab ]]; then
+        info "Защищаю fstab-диски от devmon..."
+
+        # Извлекаем устройства из fstab (только UUID-based, не системные)
+        FSTAB_DEVICES=$(awk '/^UUID=/ {print $2}' /etc/fstab | while read mount_point; do
+            # Находим реальный device для каждой точки монтирования
+            findmnt -n -o SOURCE "$mount_point" 2>/dev/null || true
+        done | grep -E '^/dev/' | sort -u)
+
+        if [[ -n "$FSTAB_DEVICES" ]]; then
+            for dev in $FSTAB_DEVICES; do
+                if ! grep -q "ignore-device $dev" /etc/conf.d/devmon; then
+                    sudo sed -i "s|ARGS=\"\(.*\)\"|ARGS=\"\1 --ignore-device $dev\"|" /etc/conf.d/devmon
+                    log "Добавил в devmon ignore: $dev"
+                fi
+            done
+            sudo systemctl restart devmon@devmon.service 2>/dev/null || true
+        fi
+    fi
 fi
 
 # =============================================================================
 # 9. Samba (SMB-шара)
 # =============================================================================
-# Открытая шара /media/nvme_target для домашней сети
+# Открытая шара /mnt/nvme_target для домашней сети
 # Доступ с Mac: Finder → Cmd+K → smb://lbb.local
 # Доступ с iPhone: Files → Browse → Connect to Server → smb://lbb.local
 
@@ -375,16 +397,23 @@ if [[ -n "$DO_SAMBA" ]]; then
         log "Samba установлен"
     fi
 
-    # Определяем что шарить
-    if [[ -d /media/nvme_target ]]; then
-        SHARE_PATH="/media/nvme_target"
-    elif [[ -d /mnt/Kingston2TB ]]; then
+    # Определяем что шарить — приоритет: NVMe, потом старый Kingston2TB, потом fallback
+    if mountpoint -q /mnt/nvme_target; then
+        SHARE_PATH="/mnt/nvme_target"
+    elif mountpoint -q /mnt/Kingston2TB; then
         SHARE_PATH="/mnt/Kingston2TB"
+    elif [[ -d /mnt/nvme_target ]]; then
+        # Папка есть но не примонтирована — fstab монтирует при загрузке
+        SHARE_PATH="/mnt/nvme_target"
+        warn "/mnt/nvme_target существует но не примонтирован. Шара заработает после ребута."
     else
         SHARE_PATH="/home/$(whoami)/share"
         sudo mkdir -p "$SHARE_PATH"
         sudo chmod 777 "$SHARE_PATH"
-        warn "NVMe не найден. Шара создана в $SHARE_PATH"
+        warn "NVMe не найден — шара создана в $SHARE_PATH"
+        warn "Когда NVMe будет настроен, поменяй путь в /etc/samba/smb.conf вручную:"
+        warn "  sudo sed -i 's|path = $SHARE_PATH|path = /mnt/nvme_target|' /etc/samba/smb.conf"
+        warn "  sudo systemctl restart smbd nmbd"
     fi
 
     SHARE_NAME="travel-nas"
@@ -491,7 +520,7 @@ fi
 # =============================================================================
 # 12. Скрипт еженедельного бэкапа конфига Pi
 # =============================================================================
-# Сохраняет важные файлы конфигурации в /media/nvme_target/pi-config-backups/
+# Сохраняет важные файлы конфигурации в /mnt/nvme_target/pi-config-backups/
 # Раз в неделю, через cron. Хранит последние 4 копии (~месяц).
 
 if [[ -n "$DO_PIBACKUP" ]]; then
@@ -506,12 +535,12 @@ if [[ -n "$DO_PIBACKUP" ]]; then
 
 set -e
 
-BACKUP_ROOT="/media/nvme_target/pi-config-backups"
+BACKUP_ROOT="/mnt/nvme_target/pi-config-backups"
 DATE=$(date +%Y-%m-%d_%H-%M)
 BACKUP_DIR="$BACKUP_ROOT/$DATE"
 
 # Если NVMe не примонтирован — пишем в /home
-if ! mountpoint -q /media/nvme_target; then
+if ! mountpoint -q /mnt/nvme_target; then
     BACKUP_ROOT="/home/$(logname 2>/dev/null || echo pi)/pi-config-backups"
     BACKUP_DIR="$BACKUP_ROOT/$DATE"
 fi

@@ -183,8 +183,8 @@ fi
 if [[ -n "$DO_NVMEMOUNT" ]]; then
     info "=== Авто-монтирование NVMe ==="
 
-    # Находим все NVMe-разделы
-    NVME_PARTS=$(lsblk -rno NAME,SIZE,FSTYPE,LABEL /dev/nvme*n* 2>/dev/null | grep -E "p[0-9]" || true)
+    # Находим все NVMe-разделы (только разделы, без самих дисков; уникальные)
+    NVME_PARTS=$(lsblk -rno NAME,SIZE,FSTYPE,LABEL 2>/dev/null | awk '$1 ~ /^nvme[0-9]+n[0-9]+p[0-9]+$/' | sort -u)
 
     if [[ -z "$NVME_PARTS" ]]; then
         warn "NVMe-разделов не найдено. Пропускаю."

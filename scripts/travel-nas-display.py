@@ -860,10 +860,14 @@ def page_menu():
     row_pair("Reboot",     "open_reboot",     WARN,
              "Shutdown",   "open_off",        ERROR)
 
-    # Back — фиксирован внизу
+    # Bottom row: Back | Exit to desktop
+    bot_y = SCREEN_H - btn_h - 8
     back = Btn("Back", "back_to_status",
-               pygame.Rect(margin, SCREEN_H - btn_h - 8, full_w, btn_h), MUTED)
-    draw_button(back); btns.append(back)
+               pygame.Rect(margin, bot_y, half_w, btn_h), MUTED)
+    exit_b = Btn("Exit to desktop", "exit_to_desktop",
+                 pygame.Rect(SCREEN_W - margin - half_w, bot_y, half_w, btn_h), MUTED)
+    draw_button(back); draw_button(exit_b)
+    btns.extend([back, exit_b])
     return btns
 
 
@@ -1381,6 +1385,11 @@ def do_action(action):
         state["log_paused"] = not state.get("log_paused", False)
     elif action == "open_ap_info":      go(PAGE_AP_INFO)
     elif action == "open_services":     go(PAGE_SERVICES)
+    elif action == "exit_to_desktop":
+        # Постим QUIT — main loop корректно остановится, pygame.quit() в конце.
+        # Пользователь вернётся через Desktop ярлык "Travel-NAS Dashboard".
+        pygame.event.post(pygame.event.Event(pygame.QUIT))
+        toast("Exiting to desktop…", MUTED)
     elif action == "open_nas_status":   go(PAGE_NAS_STATUS)
     elif action == "open_daily":        go(PAGE_DAILY_SUMMARY)
     elif action == "nas_status_refresh":

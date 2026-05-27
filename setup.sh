@@ -1181,6 +1181,18 @@ Icon=utilities-log-viewer
 Terminal=false
 Categories=System;
 EOF
+            # Запуск/возврат dashboard'а после "Exit to desktop"
+            cat > "$DESKTOP_DIR/Travel-NAS-Dashboard.desktop" << EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Travel-NAS Dashboard
+Comment=Re-open the kiosk dashboard
+Exec=/usr/bin/python3 /usr/local/bin/travel-nas-display.py
+Icon=display
+Terminal=false
+Categories=System;
+EOF
             chmod +x "$DESKTOP_DIR"/*.desktop
         else
             echo "Desktop folder not found"

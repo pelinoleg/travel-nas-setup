@@ -569,6 +569,7 @@ PAGE_OFF_CONFIRM    = "off_confirm"
 PAGE_SERVICES       = "services"
 PAGE_NAS_STATUS     = "nas_status"
 PAGE_DAILY_SUMMARY  = "daily_summary"
+PAGE_CONFIGS        = "configs"
 
 state = {
     "page":        PAGE_STATUS,
@@ -815,9 +816,9 @@ def page_menu():
     margin   = 8
     full_w   = SCREEN_W - margin * 2
     half_w   = (SCREEN_W - margin * 2 - 10) // 2
-    btn_h    = 46
-    gap_row  = 8
-    sect_h   = 18
+    btn_h    = 44
+    gap_row  = 6
+    sect_h   = 16
 
     def section(title, color):
         nonlocal y
@@ -854,6 +855,7 @@ def page_menu():
              "Today",      "open_daily",      INFO)
     row_pair("Logs",       "open_logs",       INFO,
              "Services",   "open_services",   INFO)
+    row_full("Configs",    "open_configs", INFO)
 
     # === SYSTEM ===
     section("SYSTEM", WARN)
@@ -1224,6 +1226,67 @@ def page_services():
     draw_button(back); return [back]
 
 
+def page_configs():
+    """Шпаргалка где что лежит — чтоб не забыть перед перепрошивкой."""
+    screen.fill(BG)
+    y = draw_top_strip("Configs")
+    y += 6
+
+    confs = [
+        ("/etc/travel-nas/tg-notify.conf",    "Telegram bot token"),
+        ("/etc/travel-nas/nas-backup.conf",   "NAS host + password"),
+        ("/etc/travel-nas/services.conf",     "Dashboard URL list"),
+        ("/etc/travel-nas/power-mode.conf",   "Home WiFi SSIDs"),
+        ("/etc/travel-nas/photo-backup.conf", "USB backup settings"),
+        ("/etc/travel-nas/t7-info.conf",      "T7 UUID (auto)"),
+    ]
+
+    screen.blit(F_TINY.render("/etc/travel-nas/  (●=exists)", True, MUTED), (10, y))
+    y += 14
+    pygame.draw.line(screen, BTN_BG, (10, y), (SCREEN_W - 10, y), 1)
+    y += 4
+
+    for path, desc in confs:
+        name = path.split("/")[-1]
+        exists = Path(path).exists()
+        col = ACCENT if exists else MUTED
+        # ●/○ dot слева
+        pygame.draw.circle(screen, col, (16, y + 8), 4 if exists else 3,
+                           0 if exists else 1)
+        screen.blit(F_SMALL.render(name, True, FG if exists else MUTED), (28, y))
+        screen.blit(F_TINY.render(desc, True, MUTED), (28, y + 13))
+        y += 28
+
+    y += 2
+    pygame.draw.line(screen, BTN_BG, (10, y), (SCREEN_W - 10, y), 1)
+    y += 6
+
+    # Backup команда
+    screen.blit(F_TINY.render("BACKUP TO T7 before re-flash:", True, INFO), (10, y))
+    y += 14
+    for line in [
+        "sudo cp -r /etc/travel-nas \\",
+        "  /mnt/t7/_etc-backup",
+    ]:
+        screen.blit(F_MONO.render(line, True, FG), (12, y))
+        y += 13
+
+    y += 8
+    screen.blit(F_TINY.render("T7 SURVIVES microSD wipe:", True, ACCENT), (10, y))
+    y += 14
+    for line in [
+        "  /mnt/t7/usb-imports  (USB backups)",
+        "  /mnt/t7/nas-backup   (NAS sync)",
+        "  /mnt/t7/_logs        (script logs)",
+    ]:
+        screen.blit(F_TINY.render(line, True, MUTED), (10, y))
+        y += 13
+
+    back = Btn("Back", "open_menu",
+               pygame.Rect(8, SCREEN_H - 54, SCREEN_W - 16, 46), MUTED)
+    draw_button(back); return [back]
+
+
 def page_ap_info():
     screen.fill(BG)
     y = draw_top_strip("AP info")
@@ -1329,6 +1392,7 @@ PAGES = {
     PAGE_SERVICES:       page_services,
     PAGE_NAS_STATUS:     page_nas_status,
     PAGE_DAILY_SUMMARY:  page_daily_summary,
+    PAGE_CONFIGS:        page_configs,
 }
 
 
@@ -1414,6 +1478,7 @@ def do_action(action):
         toast("Exiting to desktop…", MUTED)
     elif action == "open_nas_status":   go(PAGE_NAS_STATUS)
     elif action == "open_daily":        go(PAGE_DAILY_SUMMARY)
+    elif action == "open_configs":      go(PAGE_CONFIGS)
     elif action == "nas_status_refresh":
         subprocess.Popen(
             ["sudo", "-n", "/usr/local/bin/nas-backup-status.py"],

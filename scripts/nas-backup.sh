@@ -231,6 +231,14 @@ Duration: ${hours}h ${mins}m ${secs}s
 Check: \`$DEST/_logs/\`"
     fi
     echo "================================================="
+
+    # Триггерим обновление JSON-status для dashboard (фоном чтобы не задерживать
+    # завершение). Может занять минуту на большой папке.
+    if [[ -x /usr/local/bin/nas-backup-status.py ]]; then
+        nohup /usr/bin/python3 /usr/local/bin/nas-backup-status.py \
+            >/dev/null 2>&1 &
+        disown 2>/dev/null || true
+    fi
 }
 
 # Diff mode

@@ -11,7 +11,6 @@
 # =============================================================================
 
 CasaOS=http://{host}
-Photoview=http://{host}:8000
 yt-archiver=http://{host}:8081
 Samba=smb://{host}/travel-nas
 SSH=ssh oleg@{host}

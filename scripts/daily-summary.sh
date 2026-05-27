@@ -1,9 +1,12 @@
 #!/bin/bash
 # =============================================================================
-# daily-summary.sh - Вечерний отчёт в Telegram (21:00)
+# daily-summary.sh - Вечерний отчёт в Telegram (21:00) + JSON для dashboard
 # =============================================================================
-# Собирает за день: статус системы, температуры, бэкапы, использование места.
-# Также включает накопленные info-уведомления из summary-queue.
+# Default:   собирает метрики, ПИШЕТ JSON и шлёт Telegram (как было)
+# --json:    только пишет JSON (для периодического refresh из таймера/UI)
+#
+# JSON:      /var/lib/travel-nas/daily-summary.json
+# Telegram:  через /usr/local/bin/tg-notify.sh
 # =============================================================================
 
 set -u
@@ -12,48 +15,74 @@ TG_NOTIFY="/usr/local/bin/tg-notify.sh"
 T7_MOUNT="/mnt/t7"
 SUMMARY_QUEUE="/var/lib/travel-nas/summary-queue.txt"
 LOG="$T7_MOUNT/_logs/daily-summary.log"
+STATUS_FILE="/var/lib/travel-nas/daily-summary.json"
+
+MODE="full"   # full | json
+for arg in "$@"; do
+    case "$arg" in
+        --json|--json-only) MODE="json" ;;
+        --help|-h)
+            cat <<EOF
+Usage: $0 [--json]
+  (no args)  Collect data, write JSON, send Telegram (21:00 cron use)
+  --json     Only write JSON (for periodic UI refresh)
+EOF
+            exit 0
+            ;;
+    esac
+done
 
 mkdir -p "$(dirname "$LOG")" 2>/dev/null
+mkdir -p "$(dirname "$STATUS_FILE")"
 
 log_msg() {
     echo "[$(date '+%d-%m-%Y %H:%M:%S')] $*" >> "$LOG"
 }
 
-# === Сбор информации ===
-
-# Uptime
+# =============================================================================
+# Сбор данных
+# =============================================================================
 UPTIME=$(uptime -p | sed 's/^up //')
 
-# CPU temp (current + max за день из логов system-monitor если есть)
-CPU_TEMP="?"
+CPU_TEMP=""
 if command -v vcgencmd &>/dev/null; then
     CPU_TEMP=$(vcgencmd measure_temp 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | cut -d. -f1)
 fi
 
-# T7 disk
-T7_INFO=""
-T7_TEMP=""
+T7_USED=""; T7_TOTAL=""; T7_PCT=""; T7_AVAIL=""; T7_TEMP=""; T7_MOUNTED="no"
 if mountpoint -q "$T7_MOUNT"; then
-    DISK_USED=$(df -h "$T7_MOUNT" --output=used 2>/dev/null | tail -1 | tr -d ' ')
-    DISK_TOTAL=$(df -h "$T7_MOUNT" --output=size 2>/dev/null | tail -1 | tr -d ' ')
-    DISK_PCT=$(df --output=pcent "$T7_MOUNT" 2>/dev/null | tail -1 | tr -d ' %')
-    T7_INFO="${DISK_USED} / ${DISK_TOTAL} (${DISK_PCT}%)"
+    T7_MOUNTED="yes"
+    T7_USED=$(df -h "$T7_MOUNT" --output=used 2>/dev/null | tail -1 | tr -d ' ')
+    T7_TOTAL=$(df -h "$T7_MOUNT" --output=size 2>/dev/null | tail -1 | tr -d ' ')
+    T7_AVAIL=$(df -h "$T7_MOUNT" --output=avail 2>/dev/null | tail -1 | tr -d ' ')
+    T7_PCT=$(df --output=pcent "$T7_MOUNT" 2>/dev/null | tail -1 | tr -d ' %')
 
-    # SMART temp
     if command -v smartctl &>/dev/null; then
         T7_DEV=$(findmnt -n -o SOURCE "$T7_MOUNT" 2>/dev/null | sed 's/[0-9]*$//')
         if [[ -n "$T7_DEV" ]]; then
-            T7_TEMP=$(sudo smartctl -a -d sat "$T7_DEV" 2>/dev/null | grep -iE "Temperature_Celsius|Current Drive Temperature|Temperature:" | head -1 | grep -oE '[0-9]+' | head -1)
+            T7_TEMP=$(sudo -n smartctl -a -d sat "$T7_DEV" 2>/dev/null \
+                | grep -iE "Temperature_Celsius|Current Drive Temperature|Temperature:" \
+                | head -1 | grep -oE '[0-9]+' | head -1)
         fi
     fi
-else
-    T7_INFO="❌ NOT MOUNTED"
+fi
+
+# Throttling status — Pi 5 power monitor (хватает ли питания)
+THROTTLE_VAL=""
+THROTTLE_NOW="no"
+THROTTLE_PAST="no"
+if command -v vcgencmd &>/dev/null; then
+    THROTTLE_VAL=$(vcgencmd get_throttled 2>/dev/null | sed 's/throttled=//')
+    if [[ -n "$THROTTLE_VAL" ]]; then
+        v=$((THROTTLE_VAL))
+        (( v & 0x7      )) && THROTTLE_NOW="yes"
+        (( v & 0x70000  )) && THROTTLE_PAST="yes"
+    fi
 fi
 
 # Бэкапы за день
 TODAY=$(date '+%d-%m-%Y')
 
-# Photo backups сегодня
 PHOTO_COUNT=0
 PHOTO_FILES=0
 PHOTO_SIZE="0"
@@ -65,7 +94,6 @@ if [[ -d "$T7_MOUNT/usb-imports/$TODAY" ]]; then
     fi
 fi
 
-# NAS backup был сегодня?
 NAS_BACKUP_TODAY="no"
 if [[ -d "$T7_MOUNT/nas-backup/_logs" ]]; then
     if find "$T7_MOUNT/nas-backup/_logs" -name "${TODAY}_*.log" -type f 2>/dev/null | grep -q .; then
@@ -73,20 +101,94 @@ if [[ -d "$T7_MOUNT/nas-backup/_logs" ]]; then
     fi
 fi
 
-# Errors из логов за сегодня
 ERRORS_TODAY=0
 if [[ -d "$T7_MOUNT/_logs" ]]; then
-    ERRORS_TODAY=$(find "$T7_MOUNT/_logs" -type f -name "*.log" -exec grep -l "ERROR\|CRITICAL\|FAILED" {} \; 2>/dev/null | wc -l)
+    ERRORS_TODAY=$(find "$T7_MOUNT/_logs" -type f -name "*.log" -mtime -1 \
+        -exec grep -l "ERROR\|CRITICAL\|FAILED" {} \; 2>/dev/null | wc -l)
 fi
 
-# IP адрес
 IP_ADDR=$(hostname -I | awk '{print $1}')
 SSID=""
-if command -v iwgetid &>/dev/null; then
-    SSID=$(iwgetid -r 2>/dev/null || echo "")
+if command -v iw &>/dev/null; then
+    SSID=$(iw dev wlan0 link 2>/dev/null | awk -F: '/^\s*SSID:/ {sub(/^ /,"",$2); print $2; exit}')
 fi
 
-# === Формируем сообщение ===
+# События дня (из summary-queue) — массив для JSON, очередь НЕ очищаем в json-mode
+EVENTS_JSON="[]"
+if [[ -f "$SUMMARY_QUEUE" && -s "$SUMMARY_QUEUE" ]]; then
+    EVENTS_JSON=$(python3 -c '
+import json, sys
+lines = [l.rstrip("\n") for l in sys.stdin if l.strip()]
+print(json.dumps(lines))
+' < "$SUMMARY_QUEUE")
+fi
+
+# =============================================================================
+# Пишем JSON атомарно
+# =============================================================================
+TMP_JSON="${STATUS_FILE}.tmp"
+# os.environ читает только exported переменные
+export TODAY UPTIME CPU_TEMP IP_ADDR SSID
+export T7_MOUNTED T7_USED T7_AVAIL T7_TOTAL T7_PCT T7_TEMP
+export THROTTLE_VAL THROTTLE_NOW THROTTLE_PAST
+export PHOTO_COUNT PHOTO_FILES PHOTO_SIZE
+export NAS_BACKUP_TODAY ERRORS_TODAY EVENTS_JSON
+python3 - <<PYEOF > "$TMP_JSON"
+import json, os, time
+data = {
+    "updated": int(time.time()),
+    "date":    os.environ.get("TODAY", ""),
+    "uptime":  os.environ.get("UPTIME", ""),
+    "cpu_temp": int(os.environ["CPU_TEMP"]) if os.environ.get("CPU_TEMP") else None,
+    "ip":      os.environ.get("IP_ADDR") or None,
+    "ssid":    os.environ.get("SSID") or None,
+    "t7": {
+        "mounted":  os.environ.get("T7_MOUNTED") == "yes",
+        "used":     os.environ.get("T7_USED") or None,
+        "avail":    os.environ.get("T7_AVAIL") or None,
+        "total":    os.environ.get("T7_TOTAL") or None,
+        "pct":      int(os.environ["T7_PCT"]) if os.environ.get("T7_PCT") else None,
+        "temp":     int(os.environ["T7_TEMP"]) if os.environ.get("T7_TEMP") else None,
+    },
+    "throttle": {
+        "raw":  os.environ.get("THROTTLE_VAL") or None,
+        "now":  os.environ.get("THROTTLE_NOW") == "yes",
+        "past": os.environ.get("THROTTLE_PAST") == "yes",
+    },
+    "photo_today": {
+        "cards": int(os.environ.get("PHOTO_COUNT") or 0),
+        "files": int(os.environ.get("PHOTO_FILES") or 0),
+        "size":  os.environ.get("PHOTO_SIZE") or "0",
+    },
+    "nas_today":    os.environ.get("NAS_BACKUP_TODAY") == "yes",
+    "errors_today": int(os.environ.get("ERRORS_TODAY") or 0),
+    "events":       json.loads(os.environ.get("EVENTS_JSON") or "[]"),
+}
+print(json.dumps(data, indent=2))
+PYEOF
+
+mv "$TMP_JSON" "$STATUS_FILE"
+chmod 0644 "$STATUS_FILE" 2>/dev/null || true
+
+# =============================================================================
+# Только JSON режим — выходим, не трогаем Telegram, не очищаем очередь
+# =============================================================================
+if [[ "$MODE" == "json" ]]; then
+    log_msg "JSON refreshed: $STATUS_FILE"
+    exit 0
+fi
+
+# =============================================================================
+# Формируем Telegram-сообщение
+# =============================================================================
+THROTTLE_LINE=""
+if [[ "$THROTTLE_NOW" == "yes" ]]; then
+    THROTTLE_LINE="
+⚡ *Under-voltage NOW* — \`${THROTTLE_VAL}\`"
+elif [[ "$THROTTLE_PAST" == "yes" ]]; then
+    THROTTLE_LINE="
+⚡ Power dipped earlier today"
+fi
 
 MSG="📊 *Daily Report — Travel-NAS*
 $(date '+%d-%m-%Y %H:%M')
@@ -95,10 +197,10 @@ $(date '+%d-%m-%Y %H:%M')
 ⏱  Uptime: \`${UPTIME}\`
 🌡  CPU: \`${CPU_TEMP}°C\`
 🌡  T7: \`${T7_TEMP:-?}°C\`
-📡 IP: \`${IP_ADDR}\` ${SSID:+(${SSID})}
+📡 IP: \`${IP_ADDR}\` ${SSID:+(${SSID})}${THROTTLE_LINE}
 
 *Storage*
-💾 T7: \`${T7_INFO}\`"
+💾 T7: \`${T7_USED} / ${T7_TOTAL} (${T7_PCT}%)\`"
 
 if [[ "$PHOTO_COUNT" -gt 0 ]]; then
     MSG+="
@@ -123,7 +225,6 @@ if [[ "$ERRORS_TODAY" -gt 0 ]]; then
 Check: \`/mnt/t7/_logs/\`"
 fi
 
-# Дописываем накопленные info-уведомления
 if [[ -f "$SUMMARY_QUEUE" && -s "$SUMMARY_QUEUE" ]]; then
     MSG+="
 
@@ -132,16 +233,13 @@ if [[ -f "$SUMMARY_QUEUE" && -s "$SUMMARY_QUEUE" ]]; then
         MSG+="
 ${line}"
     done < "$SUMMARY_QUEUE"
-
-    # Очищаем очередь после отправки
     > "$SUMMARY_QUEUE"
 fi
 
-# === Отправляем ===
 if [[ -x "$TG_NOTIFY" ]]; then
-    # Через временный файл — много текста и переносов
-    "$TG_NOTIFY" -l info "$(date '+%d-%m')" "$MSG" 2>/dev/null || log_msg "Failed to send summary"
+    "$TG_NOTIFY" -l info "$(date '+%d-%m')" "$MSG" 2>/dev/null \
+        || log_msg "Failed to send summary"
 fi
 
-log_msg "Daily summary sent"
+log_msg "Daily summary sent + JSON written"
 exit 0

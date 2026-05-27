@@ -126,7 +126,7 @@ fetch_conf_example() {
 # =============================================================================
 
 if [[ "${1:-}" == "--all" ]]; then
-    SELECTED="UPDATE UTILS HOSTNAME T7_MOUNT TG_NOTIFY SAMBA PI_BACKUP PHOTO_BACKUP NAS_BACKUP WATCHDOG SYS_MONITOR DAILY_SUM LOG2RAM ZRAM COMITUP CASAOS PHOTOVIEW DISPLAY DESKTOP"
+    SELECTED="UPDATE UTILS HOSTNAME T7_MOUNT TG_NOTIFY SAMBA PI_BACKUP PHOTO_BACKUP NAS_BACKUP WATCHDOG SYS_MONITOR DAILY_SUM LOG2RAM ZRAM COMITUP CASAOS DISPLAY DESKTOP"
 elif [[ "${1:-}" == "--help" ]]; then
     cat << EOF
 Travel-NAS Setup v2
@@ -151,8 +151,7 @@ Components:
   LOG2RAM        Logs in RAM (microSD friendly)
   ZRAM           Compressed swap
   COMITUP        Field WiFi AP mode
-  CASAOS         For Photoview/Syncthing/etc
-  PHOTOVIEW      Photo gallery via Docker (после CASAOS)
+  CASAOS         For yt-archiver/Syncthing/etc
   DISPLAY        MHS35 3.5" + Python dashboard
   DESKTOP        Desktop shortcuts (Pi Desktop)
 EOF
@@ -175,8 +174,7 @@ else
         "LOG2RAM"      "Логи в RAM (microSD friendly)"                    ON \
         "ZRAM"         "Сжатый swap"                                       ON \
         "COMITUP"      "Полевой WiFi AP-режим"                            ON \
-        "CASAOS"       "CasaOS (для Photoview/Syncthing)"                 ON \
-        "PHOTOVIEW"    "Photoview (нужен CASAOS)"                         ON \
+        "CASAOS"       "CasaOS (yt-archiver/Syncthing и т.п.)"            ON \
         "DISPLAY"      "MHS35 3.5\" + Python dashboard"                  ON \
         "DESKTOP"      "Ярлыки на десктоп Pi"                             ON \
         3>&1 1>&2 2>&3) || exit 0
@@ -432,7 +430,40 @@ if [[ -n "${DO_NAS_BACKUP:-}" ]]; then
         if ! command -v sshpass &>/dev/null; then
             sudo apt-get install -y sshpass
         fi
-        fetch_script "nas-backup.sh" "$SCRIPT_DIR/nas-backup.sh"
+        fetch_script "nas-backup.sh"        "$SCRIPT_DIR/nas-backup.sh"
+        # Helper для JSON-статуса бэкапов (читает dashboard)
+        fetch_script "nas-backup-status.py" "$SCRIPT_DIR/nas-backup-status.py"
+
+        # /var/lib/travel-nas создаём заранее (туда пишутся status JSON'ы)
+        sudo install -d -m 0755 /var/lib/travel-nas
+
+        # Systemd timer — обновляет размеры папок раз в час фоном
+        sudo tee /etc/systemd/system/nas-backup-status.service > /dev/null << 'EOF'
+[Unit]
+Description=Refresh NAS-backup folder sizes/status
+After=network.target
+
+[Service]
+Type=oneshot
+Nice=15
+IOSchedulingClass=idle
+ExecStart=/usr/bin/python3 /usr/local/bin/nas-backup-status.py
+EOF
+        sudo tee /etc/systemd/system/nas-backup-status.timer > /dev/null << 'EOF'
+[Unit]
+Description=Hourly NAS-backup status refresh
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1h
+Unit=nas-backup-status.service
+
+[Install]
+WantedBy=timers.target
+EOF
+        sudo systemctl daemon-reload
+        sudo systemctl enable --now nas-backup-status.timer
+
         if [[ ! -f "$CONFIG_DIR/nas-backup.conf" ]]; then
             NAS_HOST=$(whiptail --inputbox "NAS IP:" 10 60 "192.168.1.95" 3>&1 1>&2 2>&3) || NAS_HOST="192.168.1.95"
             NAS_USER=$(whiptail --inputbox "NAS user:" 10 60 "oleg" 3>&1 1>&2 2>&3) || NAS_USER="oleg"
@@ -566,10 +597,36 @@ Unit=daily-summary.service
 [Install]
 WantedBy=timers.target
 EOF
+        # Второй сервис/таймер: только JSON для dashboard, каждые 10 минут.
+        # Без Telegram, без очистки event queue — лёгкий refresh для UI.
+        sudo tee /etc/systemd/system/daily-summary-refresh.service > /dev/null << 'EOF'
+[Unit]
+Description=Refresh daily-summary JSON for dashboard
+After=network.target
+
+[Service]
+Type=oneshot
+Nice=15
+ExecStart=/usr/local/bin/daily-summary.sh --json
+EOF
+        sudo tee /etc/systemd/system/daily-summary-refresh.timer > /dev/null << 'EOF'
+[Unit]
+Description=Daily-summary JSON refresh every 10 min
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=10min
+Unit=daily-summary-refresh.service
+
+[Install]
+WantedBy=timers.target
+EOF
+        sudo install -d -m 0755 /var/lib/travel-nas
         sudo systemctl daemon-reload
         sudo systemctl enable --now daily-summary.timer
+        sudo systemctl enable --now daily-summary-refresh.timer
     ); then
-        mark_ok "DAILY_SUM" "21:00"
+        mark_ok "DAILY_SUM" "21:00 + UI refresh every 10min"
     else
         mark_fail "DAILY_SUM" "systemd setup failed"
     fi
@@ -682,55 +739,8 @@ if [[ -n "${DO_CASAOS:-}" ]]; then
     fi
 fi
 
-# =============================================================================
-# 17. PHOTOVIEW
-# =============================================================================
-if [[ -n "${DO_PHOTOVIEW:-}" ]]; then
-    info "=== Photoview ==="
-    if ! command -v docker &>/dev/null; then
-        mark_fail "PHOTOVIEW" "Docker не установлен (сначала CASAOS)"
-    elif (
-        set -e
-        sudo mkdir -p /opt/photoview
-        sudo tee /opt/photoview/docker-compose.yml > /dev/null << EOF
-version: "3"
-services:
-  db:
-    image: mariadb:10.11
-    restart: unless-stopped
-    environment:
-      - MYSQL_DATABASE=photoview
-      - MYSQL_USER=photoview
-      - MYSQL_PASSWORD=photoview
-      - MYSQL_RANDOM_ROOT_PASSWORD=1
-    volumes:
-      - /opt/photoview/db:/var/lib/mysql
-
-  photoview:
-    image: viktorstrate/photoview:latest
-    restart: unless-stopped
-    ports:
-      - "8000:80"
-    depends_on:
-      - db
-    environment:
-      - PHOTOVIEW_DATABASE_DRIVER=mysql
-      - PHOTOVIEW_MYSQL_URL=photoview:photoview@tcp(db)/photoview
-      - PHOTOVIEW_LISTEN_IP=0.0.0.0
-      - PHOTOVIEW_LISTEN_PORT=80
-      - PHOTOVIEW_MEDIA_CACHE=/app/cache
-    volumes:
-      - /opt/photoview/cache:/app/cache
-      - $T7_MOUNT/usb-imports:/photos:ro
-EOF
-        cd /opt/photoview
-        sudo docker compose up -d
-    ); then
-        mark_ok "PHOTOVIEW" "http://travel-nas.local:8000"
-    else
-        mark_fail "PHOTOVIEW" "docker compose failed"
-    fi
-fi
+# Photoview удалён: не работал с /mnt/t7/usb-imports (требует "system folders").
+# Если когда-то установится подходящая замена — добавить сюда новый блок.
 
 # =============================================================================
 # 18. DISPLAY (MHS35 + Python dashboard в X-kiosk режиме)
@@ -775,6 +785,8 @@ EOF
         sudo tee /etc/sudoers.d/travel-nas-dashboard >/dev/null << EOF
 # Generated by travel-nas-setup. Allows dashboard buttons to run privileged ops.
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/nas-backup.sh
+$DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/nas-backup-status.py
+$DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/daily-summary.sh
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/comitup-cli
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/sbin/smartctl

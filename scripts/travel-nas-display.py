@@ -41,10 +41,11 @@ ERROR_LOG = Path("/tmp/travel-nas-display.error.log")
 
 T7_MOUNT = "/mnt/t7"
 
-SERVICES_CONF = Path("/etc/travel-nas/services.conf")
+SERVICES_CONF      = Path("/etc/travel-nas/services.conf")
+NAS_STATUS_JSON    = Path("/var/lib/travel-nas/nas-backup-status.json")
+DAILY_SUMMARY_JSON = Path("/var/lib/travel-nas/daily-summary.json")
 SERVICES_DEFAULTS = [
     ("CasaOS",      "http://{host}"),
-    ("Photoview",   "http://{host}:8000"),
     ("yt-archiver", "http://{host}:8081"),
     ("Samba",       "smb://{host}/travel-nas"),
     ("SSH",         "ssh oleg@{host}"),
@@ -564,6 +565,8 @@ PAGE_AP_CONFIRM     = "ap_confirm"
 PAGE_REBOOT_CONFIRM = "reboot_confirm"
 PAGE_OFF_CONFIRM    = "off_confirm"
 PAGE_SERVICES       = "services"
+PAGE_NAS_STATUS     = "nas_status"
+PAGE_DAILY_SUMMARY  = "daily_summary"
 
 state = {
     "page":        PAGE_STATUS,
@@ -820,6 +823,13 @@ def page_menu():
     btns.append(Btn("Diff",    "nas_diff", r2, INFO))
     draw_button(btns[-2]); draw_button(btns[-1]); y += btn_h + gap
 
+    # NAS status | Today (info-страницы со статистикой)
+    r1 = pygame.Rect(8, y, half_w, btn_h)
+    r2 = pygame.Rect(SCREEN_W - 8 - half_w, y, half_w, btn_h)
+    btns.append(Btn("NAS status", "open_nas_status", r1, INFO))
+    btns.append(Btn("Today",      "open_daily",      r2, INFO))
+    draw_button(btns[-2]); draw_button(btns[-1]); y += btn_h + gap
+
     # View logs | Services
     r1 = pygame.Rect(8, y, half_w, btn_h)
     r2 = pygame.Rect(SCREEN_W - 8 - half_w, y, half_w, btn_h)
@@ -965,6 +975,185 @@ def page_log_view():
     return [pause, back]
 
 
+def _ago(ts):
+    """Human-friendly 'X ago' для unix timestamp. None → '—'."""
+    if not ts:
+        return "—"
+    delta = int(time.time() - ts)
+    if delta < 60:    return f"{delta}s ago"
+    if delta < 3600:  return f"{delta // 60}m ago"
+    if delta < 86400: return f"{delta // 3600}h ago"
+    return f"{delta // 86400}d ago"
+
+
+def _load_json(path):
+    if not path.exists():
+        return None
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def page_nas_status():
+    screen.fill(BG)
+    y = draw_top_strip("NAS backup")
+    y += 8
+    btns = []
+
+    data = _load_json(NAS_STATUS_JSON)
+    if not data:
+        screen.blit(F_NORMAL.render("No status data yet.", True, MUTED), (10, y))
+        y += 22
+        screen.blit(F_SMALL.render("Tap Refresh to scan now.", True, MUTED), (10, y))
+    else:
+        # Header — total used + updated time
+        di = data.get("disk") or {}
+        if di:
+            head = f"{di.get('used','?')} / {di.get('total','?')}  ({di.get('pct','?')}%)"
+            screen.blit(F_MED.render(head, True, FG), (10, y))
+            avail_s = F_SMALL.render(f"{di.get('avail','?')} free", True, MUTED)
+            screen.blit(avail_s, (SCREEN_W - avail_s.get_width() - 10, y + 5))
+        y += 26
+        upd = data.get("updated")
+        if upd:
+            screen.blit(F_TINY.render(f"updated {_ago(upd)}", True, MUTED), (10, y))
+        y += 14
+        pygame.draw.line(screen, BTN_BG, (10, y), (SCREEN_W - 10, y), 1)
+        y += 8
+
+        modules = data.get("modules") or []
+        bottom = SCREEN_H - 60
+        avail_h = bottom - y - 8
+        row_h = max(38, min(54, avail_h // max(1, len(modules))))
+
+        for m in modules:
+            name = m.get("name", "?")
+            ex = m.get("exists", False)
+            status = m.get("status")
+            size = m.get("size") or "?"
+            last_run = m.get("last_run")
+
+            if not ex:
+                dot_color = MUTED
+                status_label = "absent"
+            elif status == "ok":
+                dot_color = ACCENT
+                status_label = "ok"
+            elif status == "warn":
+                dot_color = WARN
+                status_label = "warn"
+            elif status == "fail":
+                dot_color = ERROR
+                status_label = "fail"
+            else:
+                dot_color = MUTED
+                status_label = "never"
+
+            # Точка статуса + имя модуля
+            pygame.draw.circle(screen, dot_color, (16, y + 9), 5)
+            screen.blit(F_NORMAL.render(name, True, FG), (28, y))
+            # Размер справа
+            ss = F_NORMAL.render(size, True, FG if ex else MUTED)
+            screen.blit(ss, (SCREEN_W - ss.get_width() - 10, y))
+            # Подстрока: last_run + status
+            sub = f"{_ago(last_run)}  ·  {status_label}"
+            screen.blit(F_SMALL.render(sub, True, MUTED), (28, y + 20))
+            y += row_h
+
+    # Buttons: Refresh | Back
+    half_w = (SCREEN_W - 28) // 2
+    refresh = Btn("Refresh", "nas_status_refresh",
+                  pygame.Rect(8, SCREEN_H - 54, half_w, 46), INFO)
+    back    = Btn("Back",    "open_menu",
+                  pygame.Rect(SCREEN_W - 8 - half_w, SCREEN_H - 54, half_w, 46), MUTED)
+    draw_button(refresh); draw_button(back)
+    return [refresh, back]
+
+
+def page_daily_summary():
+    screen.fill(BG)
+    y = draw_top_strip("Today")
+    y += 8
+    btns = []
+
+    data = _load_json(DAILY_SUMMARY_JSON)
+    if not data:
+        screen.blit(F_NORMAL.render("No summary data yet.", True, MUTED), (10, y))
+        y += 22
+        screen.blit(F_SMALL.render("Tap Refresh to gather.", True, MUTED), (10, y))
+    else:
+        # Дата + updated
+        date_s = data.get("date") or "today"
+        screen.blit(F_MED.render(date_s, True, FG), (10, y))
+        upd_s = F_TINY.render(f"updated {_ago(data.get('updated'))}", True, MUTED)
+        screen.blit(upd_s, (SCREEN_W - upd_s.get_width() - 10, y + 8))
+        y += 24
+        pygame.draw.line(screen, BTN_BG, (10, y), (SCREEN_W - 10, y), 1)
+        y += 8
+
+        # Двухколоночная вёрстка метрик
+        def kv(key, val, color=FG, big=False):
+            nonlocal y
+            screen.blit(F_SMALL.render(key, True, MUTED), (10, y))
+            font = F_NORMAL if big else F_NORMAL
+            v_surf = font.render(str(val), True, color)
+            screen.blit(v_surf, (SCREEN_W - v_surf.get_width() - 10, y))
+            y += 20
+
+        # Throttle / undervoltage — заметно если есть
+        th = data.get("throttle") or {}
+        if th.get("now"):
+            screen.blit(F_NORMAL.render("⚡ Under-voltage NOW", True, ERROR), (10, y))
+            y += 22
+        elif th.get("past"):
+            screen.blit(F_SMALL.render("⚡ power dipped today", True, WARN), (10, y))
+            y += 18
+
+        kv("Uptime",   data.get("uptime") or "?")
+        ct = data.get("cpu_temp")
+        kv("CPU temp", f"{ct}°C" if ct else "?",
+           ACCENT if (ct or 0) < 65 else (WARN if (ct or 0) < 75 else ERROR))
+        t7 = data.get("t7") or {}
+        tt = t7.get("temp")
+        kv("T7 temp",  f"{tt}°C" if tt else "?",
+           ACCENT if (tt or 0) < 55 else (WARN if (tt or 0) < 65 else ERROR))
+        ip = data.get("ip")
+        ssid = data.get("ssid")
+        kv("Network",  f"{ip or '?'}" + (f" ({ssid})" if ssid else ""))
+        if t7.get("mounted"):
+            kv("T7 disk", f"{t7.get('used','?')} / {t7.get('total','?')} ({t7.get('pct','?')}%)")
+        else:
+            kv("T7 disk", "NOT MOUNTED", ERROR)
+
+        y += 4
+        pygame.draw.line(screen, BTN_BG, (10, y), (SCREEN_W - 10, y), 1)
+        y += 8
+
+        ph = data.get("photo_today") or {}
+        if ph.get("cards", 0) > 0:
+            kv("Photo cards", ph.get("cards"), ACCENT)
+            kv("Photo files", ph.get("files"))
+            kv("Photo size",  ph.get("size"))
+        else:
+            kv("Photo today", "none")
+
+        kv("NAS backup", "done" if data.get("nas_today") else "—",
+           ACCENT if data.get("nas_today") else MUTED)
+
+        errs = data.get("errors_today") or 0
+        kv("Errors",   errs, ACCENT if errs == 0 else ERROR)
+
+    half_w = (SCREEN_W - 28) // 2
+    refresh = Btn("Refresh", "daily_refresh",
+                  pygame.Rect(8, SCREEN_H - 54, half_w, 46), INFO)
+    back    = Btn("Back",    "open_menu",
+                  pygame.Rect(SCREEN_W - 8 - half_w, SCREEN_H - 54, half_w, 46), MUTED)
+    draw_button(refresh); draw_button(back)
+    return [refresh, back]
+
+
 def page_services():
     screen.fill(BG)
     y = draw_top_strip("Services")
@@ -1106,6 +1295,8 @@ PAGES = {
     PAGE_REBOOT_CONFIRM: page_reboot_confirm,
     PAGE_OFF_CONFIRM:    page_off_confirm,
     PAGE_SERVICES:       page_services,
+    PAGE_NAS_STATUS:     page_nas_status,
+    PAGE_DAILY_SUMMARY:  page_daily_summary,
 }
 
 
@@ -1184,6 +1375,22 @@ def do_action(action):
         state["log_paused"] = not state.get("log_paused", False)
     elif action == "open_ap_info":      go(PAGE_AP_INFO)
     elif action == "open_services":     go(PAGE_SERVICES)
+    elif action == "open_nas_status":   go(PAGE_NAS_STATUS)
+    elif action == "open_daily":        go(PAGE_DAILY_SUMMARY)
+    elif action == "nas_status_refresh":
+        subprocess.Popen(
+            ["sudo", "-n", "/usr/local/bin/nas-backup-status.py"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL, start_new_session=True,
+        )
+        toast("Refreshing NAS status…", INFO)
+    elif action == "daily_refresh":
+        subprocess.Popen(
+            ["sudo", "-n", "/usr/local/bin/daily-summary.sh", "--json"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL, start_new_session=True,
+        )
+        toast("Refreshing daily summary…", INFO)
     elif action == "open_ap_confirm":   go(PAGE_AP_CONFIRM)
     elif action == "open_reboot":       go(PAGE_REBOOT_CONFIRM)
     elif action == "open_off":          go(PAGE_OFF_CONFIRM)

@@ -9,7 +9,10 @@ elif (
     set -e
     sudo mkdir -p /opt/photoview
     sudo tee /opt/photoview/docker-compose.yml > /dev/null << EOF
-version: "3"
+# Photoview app + MariaDB
+# В UI Photoview добавляй путь /t7/usb-imports или /t7/media — это пути
+# ВНУТРИ контейнера (мы монтируем /mnt/t7 как /t7:ro). Указать /mnt/t7/...
+# не получится — внутри контейнера такого пути не существует.
 services:
   db:
     image: mariadb:10.11
@@ -21,14 +24,23 @@ services:
       - MYSQL_RANDOM_ROOT_PASSWORD=1
     volumes:
       - /opt/photoview/db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
 
   photoview:
     image: viktorstrate/photoview:latest
     restart: unless-stopped
     ports:
       - "8000:80"
+    # Ждём пока MariaDB реально ответит — иначе первый GraphQL initialSetup
+    # фейлится с "internal system error" на медленной SD-карте.
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     environment:
       - PHOTOVIEW_DATABASE_DRIVER=mysql
       - PHOTOVIEW_MYSQL_URL=photoview:photoview@tcp(db)/photoview

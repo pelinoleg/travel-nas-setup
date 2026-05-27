@@ -175,3 +175,9 @@ echo "Done. Configs in /etc/travel-nas/ untouched."
 if [[ ${#RESTARTED[@]} -gt 0 ]]; then
     echo "Restarted: ${RESTARTED[*]}"
 fi
+
+# Marker для tg-listener: он переживёт собственный рестарт (запущен через
+# Popen start_new_session=True) и на следующем старте увидит /tmp/...done →
+# пришлёт "✅ Update done" в Telegram. Так юзер получает обратную связь
+# несмотря на то что вызывающий бот был перезапущен этим же скриптом.
+echo "$OK ok / $((OK + FAIL)) fetched, sudoers +${ADDED:-0}" > /tmp/travel-nas-update.done

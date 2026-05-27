@@ -285,23 +285,41 @@ def cmd_yes(token, chat_id, args):
             stdin=subprocess.DEVNULL, start_new_session=True)
 
 
+UPDATE_LOG_PATH    = Path("/tmp/travel-nas-update.log")
+UPDATE_DONE_MARKER = Path("/tmp/travel-nas-update.done")
+
+
 def cmd_update(token, chat_id, args):
-    """Запускает travel-nas-update — pull всех скриптов из GitHub."""
-    send(token, chat_id, "🔄 Updating scripts from GitHub…")
+    """travel-nas-update в фоне (detached) — он сам себя рестартует
+    через systemctl restart tg-listener в конце, поэтому ждать sync'но
+    нельзя: убьёт хэндлер до того как он отправит ответ.
+
+    Решение: запускаем detached → отправляем "Update started" → бот
+    умирает → systemd поднимает новый процесс → main() читает marker
+    и шлёт "✅ Update done" сразу после старта."""
     try:
-        out = subprocess.check_output(
-            ["sudo", "-n", "/usr/local/bin/travel-nas-update"],
-            timeout=180, stderr=subprocess.STDOUT,
-        ).decode(errors="replace")
-    except subprocess.TimeoutExpired:
-        send(token, chat_id, "⏱ Timeout >3 мин — посмотри на устройстве")
-        return
-    except subprocess.CalledProcessError as e:
-        body = e.output.decode(errors="replace")[-2000:]
-        send(token, chat_id, f"❌ Update failed:\n```\n{body}\n```")
-        return
-    tail = "\n".join(out.strip().split("\n")[-20:])
-    send(token, chat_id, f"✅ Update complete:\n```\n{tail}\n```")
+        UPDATE_LOG_PATH.write_text("")
+    except Exception:
+        pass
+    try:
+        UPDATE_DONE_MARKER.unlink()
+    except Exception:
+        pass
+
+    # start_new_session=True ⇒ child в своей сессии, переживёт systemctl
+    # restart tg-listener (который придёт нам через SIGTERM в конце апдейта)
+    log_fd = open(UPDATE_LOG_PATH, "w")
+    subprocess.Popen(
+        ["sudo", "-n", "/usr/local/bin/travel-nas-update"],
+        stdout=log_fd, stderr=subprocess.STDOUT,
+        stdin=subprocess.DEVNULL, start_new_session=True,
+    )
+    send(token, chat_id, """🔄 *Update запущен в фоне.*
+
+Длительность ~20-40 сек.
+Бот сам перезапустится и сразу пришлёт итог.
+
+Лог: `/tmp/travel-nas-update.log`""")
 
 
 def _resolve_host_ip():
@@ -446,6 +464,26 @@ def main():
     OFFSET_FILE.parent.mkdir(parents=True, exist_ok=True)
 
     print(f"tg-listener started, authorized chat_id={chat_id}, offset={offset}")
+
+    # Если предыдущий /update оставил marker — отправляем итог сразу после старта
+    if UPDATE_DONE_MARKER.exists():
+        try:
+            marker = UPDATE_DONE_MARKER.read_text().strip()
+            log_tail = ""
+            if UPDATE_LOG_PATH.exists():
+                try:
+                    log_tail = UPDATE_LOG_PATH.read_text()
+                except Exception:
+                    pass
+            tail_lines = "\n".join(log_tail.strip().split("\n")[-15:])
+            send(token, chat_id,
+                 f"✅ *Update done* — {marker}\n```\n{tail_lines}\n```")
+        except Exception as e:
+            print(f"update marker error: {e}", file=sys.stderr)
+        try:
+            UPDATE_DONE_MARKER.unlink()
+        except Exception:
+            pass
 
     while True:
         result = tg_request(token, "getUpdates", {

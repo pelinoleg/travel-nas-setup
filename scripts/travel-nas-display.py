@@ -558,12 +558,24 @@ def draw_bar(x, y, w, h, pct, color):
 
 
 def draw_top_strip(page_label=None):
-    """Хостнейм + health-точка слева, время справа. Возвращает y после полосы."""
+    """Top-strip: health-точка, hostname, ⚡ при under-voltage, часы.
+    Возвращает y после полосы."""
     pygame.draw.rect(screen, PANEL, (0, 0, SCREEN_W, 22))
     _, color = health_status()
     pygame.draw.circle(screen, color, (12, 11), 5)
     host_text = page_label or socket.gethostname()
-    screen.blit(F_SMALL.render(host_text, True, FG), (24, 4))
+    host_surf = F_SMALL.render(host_text, True, FG)
+    screen.blit(host_surf, (24, 4))
+
+    # ⚡ значок если детектится under-voltage (как в PiOS desktop tray)
+    th = c_throttle.get()
+    if th and th[0] == "NOW":
+        bolt = F_SMALL.render("⚡", True, ERROR)
+        screen.blit(bolt, (24 + host_surf.get_width() + 4, 4))
+    elif th and th[0] == "past":
+        bolt = F_SMALL.render("⚡", True, WARN)
+        screen.blit(bolt, (24 + host_surf.get_width() + 4, 4))
+
     now = datetime.now().strftime("%H:%M")
     t = F_SMALL.render(now, True, MUTED)
     screen.blit(t, (SCREEN_W - t.get_width() - 8, 4))

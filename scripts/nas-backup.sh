@@ -124,7 +124,7 @@ run_module() {
     local rsync_args=(
         -rltD
         --info=progress2 --no-inc-recursive
-        --no-owner --no-group --no-perms
+        --no-owner --no-group --no-perms --chown=oleg:oleg
         --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r
         --omit-dir-times
         --human-readable

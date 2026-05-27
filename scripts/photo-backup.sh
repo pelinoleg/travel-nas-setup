@@ -188,7 +188,7 @@ if [[ -x "$PROGRESS_WRITER" ]]; then
     rsync -avh \
         --info=progress2 --no-inc-recursive \
         --stats \
-        --no-owner --no-group --no-perms \
+        --no-owner --no-group --no-perms --chown=oleg:oleg \
         --min-size="${MIN_SIZE}" \
         --exclude='*$recycle.bin/*' \
         --exclude='*trash*' \
@@ -210,7 +210,7 @@ else
     rsync -avh \
         --info=progress2 --no-inc-recursive \
         --stats \
-        --no-owner --no-group --no-perms \
+        --no-owner --no-group --no-perms --chown=oleg:oleg \
         --min-size="${MIN_SIZE}" \
         --exclude='*$recycle.bin/*' \
         --exclude='*trash*' \

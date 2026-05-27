@@ -274,6 +274,10 @@ if [[ -n "${DO_T7_MOUNT:-}" ]]; then
             sudo chmod 644 "$CONFIG_DIR/t7-info.conf"
             sudo mkdir -p "$T7_MOUNT/nas-backup/"{_deleted,_logs}
             sudo mkdir -p "$T7_MOUNT/usb-imports" "$T7_MOUNT/pi-config-backups" "$T7_MOUNT/media" "$T7_MOUNT/sync" "$T7_MOUNT/_logs"
+            # T7 — single-user device. Делаем oleg владельцем всего дерева чтобы
+            # можно было создавать папки без sudo. lost+found оставляем root.
+            sudo chown -R "$(whoami):$(whoami)" "$T7_MOUNT"/[!l]* 2>/dev/null || true
+            sudo chown    "$(whoami):$(whoami)" "$T7_MOUNT" 2>/dev/null || true
         ); then
             mark_ok "T7_MOUNT" "$T7_DEV → $T7_MOUNT"
         else

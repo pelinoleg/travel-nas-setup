@@ -603,7 +603,7 @@ def _card(rect, title, title_color=MUTED, bg=PANEL, border=None):
 
 
 def _card_network(rect):
-    """NETWORK card — большой IP и SSID·сигнал справа внизу."""
+    """NETWORK card — большой IP сверху, SSID/сигнал отдельной строкой ниже."""
     inner = _card(rect, "NETWORK")
     ip = c_ip.get()
     wifi = c_wifi.get() or {"ssid": None, "signal": None}
@@ -617,7 +617,8 @@ def _card_network(rect):
         if sig is not None: parts.append(f"{sig} dBm")
         if parts:
             s = F_SMALL.render("  ·  ".join(parts), True, MUTED)
-            screen.blit(s, (inner.x, inner.bottom - 16))
+            # отдельная строка ПОД IP — никакого наезжания
+            screen.blit(s, (inner.x, inner.y + ip_surf.get_height() + 2))
     else:
         screen.blit(F_LARGE.render("offline", True, ERROR), (inner.x, inner.y))
 
@@ -764,14 +765,14 @@ def page_status():
     if p:
         # Активный бэкап — главное, last-backup не показываем (он же сейчас идёт)
         cards = [
-            (_card_ap if in_ap else _card_network,  56),
-            (lambda r: _card_backup_progress(r, p), 88),
-            (_card_storage,                         70),
-            (_card_system,                        118),
+            (_card_ap if in_ap else _card_network,  80 if in_ap else 66),
+            (lambda r: _card_backup_progress(r, p), 84),
+            (_card_storage,                         68),
+            (_card_system,                        110),
         ]
     else:
         cards = [
-            (_card_ap if in_ap else _card_network,  76 if in_ap else 60),
+            (_card_ap if in_ap else _card_network,  82 if in_ap else 68),
             (_card_storage,                         74),
             (_card_system,                        124),
             (_card_last_backup,                     62),

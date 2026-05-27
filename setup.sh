@@ -1193,6 +1193,43 @@ Icon=display
 Terminal=false
 Categories=System;
 EOF
+            # Setup wizard — переустановка/добавление компонентов.
+            # Скачивает свежий setup.sh с GitHub при каждом запуске.
+            cat > "$DESKTOP_DIR/Travel-NAS-Setup.desktop" << EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Travel-NAS Setup
+Comment=Re-run install wizard (fetches latest from GitHub)
+Exec=lxterminal --geometry=100x30 -e bash -c "cd ~ && curl -fsSL https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/main/setup.sh -o setup.sh && bash setup.sh; echo; echo 'Готово. Нажми Enter чтобы закрыть.'; read"
+Icon=system-software-install
+Terminal=false
+Categories=System;
+EOF
+            # File manager на T7
+            cat > "$DESKTOP_DIR/T7-Files.desktop" << EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=T7 Files
+Comment=Open /mnt/t7 in file manager
+Exec=pcmanfm /mnt/t7
+Icon=folder
+Terminal=false
+Categories=System;
+EOF
+            # Редактирование services.conf (oleg-owned, sudo не нужен)
+            cat > "$DESKTOP_DIR/Edit-Services.desktop" << EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Edit Services
+Comment=Edit dashboard services list (/etc/travel-nas/services.conf)
+Exec=lxterminal -e nano /etc/travel-nas/services.conf
+Icon=text-editor
+Terminal=false
+Categories=System;
+EOF
             chmod +x "$DESKTOP_DIR"/*.desktop
         else
             echo "Desktop folder not found"

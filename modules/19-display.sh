@@ -42,6 +42,7 @@ $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/pi-config-backup.sh
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/travel-nas-update
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/power-mode.sh
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/set-led.sh
+$DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/docker-mgr.sh
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/comitup-cli
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/nmcli connection down *
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff

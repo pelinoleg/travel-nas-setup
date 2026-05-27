@@ -587,12 +587,36 @@ def draw_bar(x, y, w, h, pct, color):
         pygame.draw.rect(screen, color, (x, y, fw, h), border_radius=h // 2)
 
 
+def _cpu_max_ghz():
+    """Текущий cap CPU частоты в GHz (например 2.4 / 1.5). None если nope."""
+    try:
+        khz = int(Path("/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq").read_text().strip())
+        return khz / 1_000_000
+    except Exception:
+        return None
+
+
+c_cpu_max = Cached(_cpu_max_ghz, 8)
+
+
+def _power_mode():
+    """normal / saver / unknown — из /var/lib/travel-nas/power-mode.txt."""
+    try:
+        return POWER_MODE_FILE.read_text().strip() if POWER_MODE_FILE.exists() else "unknown"
+    except Exception:
+        return "unknown"
+
+
+c_pmode = Cached(_power_mode, 5)
+
+
 def draw_top_strip(page_label=None):
     """Top-strip:
        ● health-точка (mount/SMART/temp/disk — БЕЗ throttling)
        hostname
        ⚡ только если под-вольтаж ПРЯМО СЕЙЧАС (как PiOS taskbar)
-       <N>W оценка текущего потребления Pi 5 (PMIC ADC)
+       <N>W @<F>G — потребление + текущий CPU max freq.
+         Цвет @<F>G отражает power-mode: зелёный=normal, оранжевый=saver.
        HH:MM справа."""
     pygame.draw.rect(screen, PANEL, (0, 0, SCREEN_W, 22))
     _, color = health_status()
@@ -604,15 +628,27 @@ def draw_top_strip(page_label=None):
     screen.blit(host_surf, (x, 4))
     x += host_surf.get_width() + 6
 
-    # ⚡ — ТОЛЬКО когда под-вольтаж сейчас. Past-флаг не показываем
-    # (висел бы до ребута и захламлял).
+    # ⚡ — ТОЛЬКО когда под-вольтаж сейчас
     th = c_throttle.get()
     if th and th[0] == "NOW":
         bolt = F_SMALL.render("⚡", True, ERROR)
         screen.blit(bolt, (x, 4))
-        x += bolt.get_width() + 6
+        x += bolt.get_width() + 4
 
-    # Текущее потребление в W (PMIC ADC) — справочная цифра, всегда видна
+    # power-mode (словом + цветом) → CPU max freq → W
+    mode = c_pmode.get()
+    mode_color = ACCENT if mode == "normal" else (WARN if mode == "saver" else MUTED)
+    if mode and mode != "unknown":
+        m_surf = F_SMALL.render(mode, True, mode_color)
+        screen.blit(m_surf, (x, 4))
+        x += m_surf.get_width() + 4
+
+    mhz = c_cpu_max.get()
+    if mhz is not None:
+        f_surf = F_SMALL.render(f"{mhz:.1f}G", True, MUTED)
+        screen.blit(f_surf, (x, 4))
+        x += f_surf.get_width() + 4
+
     w = c_watts.get()
     if w is not None:
         w_surf = F_SMALL.render(f"{w}W", True, MUTED)
@@ -640,6 +676,7 @@ PAGE_SERVICES       = "services"
 PAGE_NAS_STATUS     = "nas_status"
 PAGE_DAILY_SUMMARY  = "daily_summary"
 PAGE_CONFIGS        = "configs"
+PAGE_DOCKER         = "docker"
 
 state = {
     "page":        PAGE_STATUS,
@@ -928,7 +965,8 @@ def page_menu():
              "Today",      "open_daily",      INFO)
     row_pair("Logs",       "open_logs",       INFO,
              "Services",   "open_services",   INFO)
-    row_full("Configs",    "open_configs", INFO)
+    row_pair("Configs",    "open_configs",    INFO,
+             "Docker",     "open_docker",     INFO)
 
     # === SYSTEM ===
     section("SYSTEM", WARN)
@@ -1299,6 +1337,78 @@ def page_services():
     draw_button(back); return [back]
 
 
+def _docker_projects():
+    """Список docker-compose проектов через wrapper. None если docker недоступен."""
+    try:
+        out = subprocess.check_output(
+            ["sudo", "-n", "/usr/local/bin/docker-mgr.sh", "list"],
+            timeout=8, stderr=subprocess.DEVNULL,
+        ).decode(errors="replace")
+        return json.loads(out)
+    except Exception:
+        return None
+
+
+c_docker = Cached(_docker_projects, 8)
+
+
+def page_docker():
+    screen.fill(BG)
+    y = draw_top_strip("Docker")
+    y += 6
+    btns = []
+
+    projects = c_docker.get()
+    if projects is None:
+        screen.blit(F_NORMAL.render("docker не доступен", True, ERROR), (10, y))
+        y += 24
+        screen.blit(F_SMALL.render("(нет sudoers или CASAOS не установлен)", True, MUTED), (10, y))
+    elif not projects:
+        screen.blit(F_NORMAL.render("Нет compose-проектов", True, MUTED), (10, y))
+    else:
+        # Заголовок таблицы
+        screen.blit(F_TINY.render("PROJECT", True, MUTED), (10, y))
+        screen.blit(F_TINY.render("STATUS", True, MUTED), (150, y))
+        y += 14
+        pygame.draw.line(screen, BTN_BG, (10, y), (SCREEN_W - 10, y), 1)
+        y += 6
+
+        # Если слишком много — ограничим. У нас редко >5, но защита.
+        for p in projects[:8]:
+            name = p.get("Name", "?")
+            status = p.get("Status", "?")
+            running = "running" in status.lower()
+            dot = ACCENT if running else MUTED
+            pygame.draw.circle(screen, dot, (16, y + 9), 5 if running else 4)
+            # Имя — обрезаем если длинно
+            name_disp = name if len(name) <= 14 else name[:13] + "…"
+            screen.blit(F_NORMAL.render(name_disp, True, FG), (28, y))
+            # Статус — короткий
+            status_short = status if len(status) <= 18 else status[:16] + "…"
+            screen.blit(F_SMALL.render(status_short, True, MUTED), (150, y + 2))
+            # Кнопка: Stop если бежит, Start если стоит
+            btn_label = "Stop" if running else "Start"
+            btn_color = WARN if running else ACCENT
+            btn_rect = pygame.Rect(SCREEN_W - 70, y - 2, 60, 26)
+            pygame.draw.rect(screen, BTN_BG, btn_rect, border_radius=4)
+            pygame.draw.rect(screen, btn_color, btn_rect, 1, border_radius=4)
+            t_surf = F_SMALL.render(btn_label, True, FG)
+            screen.blit(t_surf, t_surf.get_rect(center=btn_rect.center))
+            action = "docker_stop" if running else "docker_start"
+            btns.append(Btn(btn_label, f"{action}:{name}", btn_rect, btn_color))
+            y += 32
+
+    # Bottom: Refresh | Back
+    half_w = (SCREEN_W - 28) // 2
+    refresh = Btn("Refresh", "docker_refresh",
+                  pygame.Rect(8, SCREEN_H - 54, half_w, 46), INFO)
+    back = Btn("Back", "open_menu",
+               pygame.Rect(SCREEN_W - 8 - half_w, SCREEN_H - 54, half_w, 46), MUTED)
+    draw_button(refresh); draw_button(back)
+    btns.extend([refresh, back])
+    return btns
+
+
 def page_configs():
     """Шпаргалка где что лежит — чтоб не забыть перед перепрошивкой."""
     screen.fill(BG)
@@ -1468,6 +1578,7 @@ PAGES = {
     PAGE_NAS_STATUS:     page_nas_status,
     PAGE_DAILY_SUMMARY:  page_daily_summary,
     PAGE_CONFIGS:        page_configs,
+    PAGE_DOCKER:         page_docker,
 }
 
 
@@ -1554,6 +1665,21 @@ def do_action(action):
     elif action == "open_nas_status":   go(PAGE_NAS_STATUS)
     elif action == "open_daily":        go(PAGE_DAILY_SUMMARY)
     elif action == "open_configs":      go(PAGE_CONFIGS)
+    elif action == "open_docker":       go(PAGE_DOCKER)
+    elif action == "docker_refresh":
+        # Сброс кеша → следующий рендер дёрнет actual data
+        c_docker.last = 0
+        toast("Refreshing…", INFO)
+    elif action.startswith("docker_stop:") or action.startswith("docker_start:"):
+        op, name = action.split(":", 1)
+        op = op.replace("docker_", "")
+        subprocess.Popen(
+            ["sudo", "-n", "/usr/local/bin/docker-mgr.sh", op, name],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL, start_new_session=True,
+        )
+        toast(f"docker {op} {name}…", WARN if op == "stop" else ACCENT)
+        c_docker.last = 0  # инвалидируем кеш чтоб через 1-2 рендера видеть новый статус
     elif action == "pi_backup_now":
         subprocess.Popen(
             ["sudo", "-n", "/usr/local/bin/pi-config-backup.sh"],

@@ -77,6 +77,24 @@ def tg_request(token, method, params=None, timeout=35):
     return None
 
 
+def send_kbd(token, chat_id, text, keyboard, parse_mode="Markdown"):
+    """sendMessage с inline-клавиатурой.
+    keyboard: список рядов, каждый ряд — list of (label, callback_data)."""
+    rows = [[{"text": l, "callback_data": d} for l, d in row] for row in keyboard]
+    payload = {
+        "chat_id": chat_id,
+        "text": text[:4000],
+        "parse_mode": parse_mode,
+        "reply_markup": json.dumps({"inline_keyboard": rows}),
+    }
+    res = tg_request(token, "sendMessage", payload)
+    if not res or not res.get("ok"):
+        # Fallback без parse_mode (как у обычного send)
+        payload.pop("parse_mode", None)
+        res = tg_request(token, "sendMessage", payload)
+    return res
+
+
 def send(token, chat_id, text, parse_mode="Markdown"):
     """Отправить сообщение. Если Markdown не парсится — fallback в plain text
     чтобы юзер хотя бы что-то увидел (а не "бот молчит")."""
@@ -103,6 +121,7 @@ def cmd_help(token, chat_id, args):
 📊 *Status*
 `/status` `/today` — snapshot системы
 `/nas` — статус NAS-бэкапов (модули, размеры, last-run)
+`/docker` — список Docker-compose проектов + Stop/Start/Restart кнопки
 `/services` — список сервисов с URL
 `/configs` — какие `/etc/travel-nas/` конфиги существуют + где что лежит
 
@@ -214,29 +233,32 @@ def cmd_power(token, chat_id, args):
             cur = POWER_MODE_FILE.read_text().strip() if POWER_MODE_FILE.exists() else "unknown"
         except Exception:
             cur = "unknown"
-        send(token, chat_id, f"""*Power mode* — защита от просадок питания
+        send(token, chat_id, f"""*Power mode* — защита от просадок питания и перегрева
 
 Текущий: `{cur}`
 
-Зачем: когда работаешь от powerbank'а и Pi не хватает 5V, она
-обычно перезагружается. Этот режим заранее ограничивает максимальную
-частоту CPU чтобы пиковая нагрузка не уронила систему.
-*Сервисы не выключаются — всё работает, просто медленнее.*
+Зачем: когда питание просядет (powerbank) или CPU перегреется,
+Pi сама ограничивает максимальную частоту чтобы не упасть.
+*Никакие сервисы не выключаются — всё работает, просто медленнее.*
 
 Режимы:
-🟢 `normal` — CPU ondemand (по нагрузке, до max частоты).
-   Используется при стабильном питании.
-🟡 `saver` — CPU powersave (зажат на min частоте).
-   Включается автоматически когда детектится under-voltage
-   (`vcgencmd get_throttled & 0x7`).
+🟢 `normal` — CPU ondemand (по нагрузке, до max 2.4 GHz).
+🟡 `saver` — CPU powersave (зажат на min ~1.5 GHz).
+
+Авто-переключение в `saver` когда:
+• `vcgencmd get_throttled & 0x7` — under-voltage сейчас
+• CPU temp ≥ 75°C — горячо, надо охладить
+
+Возврат в `normal` когда:
+• throttle очистился AND CPU temp < 65°C (гистерезис 10°)
 
 Команды:
-`/power auto` — пересчитать сейчас по throttled-биту
+`/power auto` — пересчитать сейчас
 `/power normal` `/power saver` — принудительно
 
-Триггеры авто-переключения:
+Триггеры:
 • NetworkManager dispatcher при connect/disconnect
-• system-monitor когда видит throttling""")
+• system-monitor каждые 5 мин""")
         return
 
     mode = args[0].lower()
@@ -399,6 +421,61 @@ def _ago_short(ts):
     return f"{delta // 86400}d"
 
 
+def cmd_docker(token, chat_id, args):
+    """Список compose-проектов с кнопками Stop/Start/Restart."""
+    try:
+        out = subprocess.check_output(
+            ["sudo", "-n", "/usr/local/bin/docker-mgr.sh", "list"],
+            timeout=10, stderr=subprocess.STDOUT,
+        ).decode(errors="replace")
+        projects = json.loads(out)
+    except Exception as e:
+        send(token, chat_id, f"❌ docker list failed: {e}")
+        return
+    if not projects:
+        send(token, chat_id, "_Нет docker-compose проектов_")
+        return
+    lines = ["*Docker compose projects*"]
+    keyboard = []
+    for p in projects:
+        name = p.get("Name", "?")
+        status = p.get("Status", "?")
+        running = "running" in status.lower()
+        emoji = "🟢" if running else "⚪"
+        lines.append(f"{emoji} *{name}* — `{status}`")
+        if running:
+            keyboard.append([
+                ("⏹ Stop",    f"docker:stop:{name}"),
+                ("🔄 Restart", f"docker:restart:{name}"),
+            ])
+        else:
+            keyboard.append([("▶️ Start", f"docker:start:{name}")])
+    send_kbd(token, chat_id, "\n".join(lines), keyboard)
+
+
+def handle_docker_callback(token, chat_id, data):
+    """data = 'docker:<action>:<name>'"""
+    try:
+        _, action, name = data.split(":", 2)
+    except ValueError:
+        return
+    if action not in ("start", "stop", "restart"):
+        return
+    send(token, chat_id, f"🔄 docker {action} `{name}`…")
+    try:
+        out = subprocess.check_output(
+            ["sudo", "-n", "/usr/local/bin/docker-mgr.sh", action, name],
+            timeout=180, stderr=subprocess.STDOUT,
+        ).decode(errors="replace")
+        tail = "\n".join(out.strip().split("\n")[-10:])
+        send(token, chat_id, f"✅ `{name}` {action}'ed\n```\n{tail or '(no output)'}\n```")
+    except subprocess.CalledProcessError as e:
+        body = e.output.decode(errors="replace")[-1000:]
+        send(token, chat_id, f"❌ {action} `{name}` failed:\n```\n{body}\n```")
+    except subprocess.TimeoutExpired:
+        send(token, chat_id, f"⏱ {action} `{name}` timeout >3 мин")
+
+
 def cmd_nas(token, chat_id, args):
     """NAS backup статус — per-module: status dot, size, last-run age."""
     if not NAS_STATUS_JSON_TG.exists():
@@ -442,6 +519,7 @@ COMMANDS = {
     "/services": cmd_services,
     "/configs":  cmd_configs,
     "/nas":      cmd_nas,
+    "/docker":   cmd_docker,
     "/reboot":   cmd_reboot,
     "/shutdown": cmd_shutdown,
     "/yes":      cmd_yes,
@@ -498,6 +576,23 @@ def main():
                 OFFSET_FILE.write_text(str(offset))
             except Exception:
                 pass
+
+            # Callback от inline-кнопки (например docker stop/start)
+            cb = upd.get("callback_query")
+            if cb:
+                cb_chat = cb.get("message", {}).get("chat", {}).get("id")
+                if cb_chat != chat_id:
+                    continue
+                cb_id = cb.get("id", "")
+                cb_data = cb.get("data", "")
+                # Подтверждаем callback (убираем "крутилку" у юзера)
+                tg_request(token, "answerCallbackQuery", {"callback_query_id": cb_id})
+                if cb_data.startswith("docker:"):
+                    try:
+                        handle_docker_callback(token, chat_id, cb_data)
+                    except Exception as e:
+                        print(f"docker callback error: {e}", file=sys.stderr)
+                continue
 
             msg = upd.get("message") or upd.get("edited_message")
             if not msg: continue

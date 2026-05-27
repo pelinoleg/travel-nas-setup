@@ -50,11 +50,43 @@ throttled_now() {
     return 1
 }
 
+cpu_temp_c() {
+    command -v vcgencmd &>/dev/null || { echo 0; return; }
+    vcgencmd measure_temp 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | cut -d. -f1
+}
+
+# Гистерезисные пороги (CPU °C). 10° gap чтобы не дёргаться туда-сюда.
+TEMP_HOT=75      # ≥75 → переходим в saver
+TEMP_COOL=65     # <65 → возвращаемся в normal
+
 detect_mode() {
+    # Под-вольтаж сейчас — однозначно saver
     if throttled_now; then
         echo "saver"
+        return
+    fi
+
+    local t prev
+    t=$(cpu_temp_c)
+    prev=""
+    [[ -f "$STATE" ]] && prev=$(cat "$STATE")
+
+    # Гистерезис по температуре. Помогает CPU остыть когда жарко (saver
+    # ограничивает max-частоту → меньше тепла → возврат через TEMP_COOL).
+    if [[ "$prev" == "saver" ]]; then
+        # Остаёмся в saver пока не остыли ниже TEMP_COOL
+        if (( t < TEMP_COOL )); then
+            echo "normal"
+        else
+            echo "saver"
+        fi
     else
-        echo "normal"
+        # В normal: переключаемся если жарко
+        if (( t >= TEMP_HOT )); then
+            echo "saver"
+        else
+            echo "normal"
+        fi
     fi
 }
 

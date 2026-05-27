@@ -168,4 +168,10 @@ check_throttling
 check_ram
 check_sd_wear
 
+# Дёргаем power-mode каждый запуск (5 мин) — учитывает и throttle, и
+# температурный гистерезис. Если режим не меняется — это no-op.
+if [[ -x /usr/local/bin/power-mode.sh ]]; then
+    /usr/local/bin/power-mode.sh auto >/dev/null 2>&1 &
+fi
+
 exit 0

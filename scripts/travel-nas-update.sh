@@ -44,6 +44,7 @@ declare -A SCRIPTS=(
     [daily-summary.sh]=/usr/local/bin/daily-summary.sh
     [set-led.sh]=/usr/local/bin/set-led.sh
     [power-mode.sh]=/usr/local/bin/power-mode.sh
+    [docker-mgr.sh]=/usr/local/bin/docker-mgr.sh
     [travel-nas-setup.sh]=/usr/local/bin/travel-nas-setup
     [travel-nas-update.sh]=/usr/local/bin/travel-nas-update
     [travel-nas-display.py]=/usr/local/bin/travel-nas-display.py
@@ -134,6 +135,7 @@ REQUIRED_CMDS=(
     "/usr/local/bin/travel-nas-update"
     "/usr/local/bin/power-mode.sh"
     "/usr/local/bin/set-led.sh"
+    "/usr/local/bin/docker-mgr.sh"
     "/usr/bin/comitup-cli"
     "/usr/bin/nmcli connection down *"
     "/usr/bin/systemctl reboot, /usr/bin/systemctl poweroff"

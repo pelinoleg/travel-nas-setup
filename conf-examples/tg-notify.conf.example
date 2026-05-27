@@ -1,0 +1,12 @@
+# Telegram bot configuration
+# Скопировать в: /etc/travel-nas/tg-notify.conf
+# Права: sudo chmod 600 /etc/travel-nas/tg-notify.conf
+
+# Bot token от @BotFather
+TG_BOT_TOKEN=""
+
+# Твой chat_id (узнать на https://api.telegram.org/botTOKEN/getUpdates)
+TG_CHAT_ID=""
+
+# Префикс в сообщениях
+HOSTNAME_LABEL="Travel-NAS"

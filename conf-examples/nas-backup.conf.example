@@ -1,0 +1,33 @@
+# NAS backup configuration
+# Скопировать в: /etc/travel-nas/nas-backup.conf
+# Права: sudo chmod 600 /etc/travel-nas/nas-backup.conf
+
+NAS_HOST="192.168.1.95"
+NAS_USER="oleg"
+NAS_PASS=""
+
+# Куда сохранять
+DEST="/mnt/t7/nas-backup"
+
+# Модули для бэкапа (формат: "rsync_module|local_folder")
+MODULES=(
+    "home|Personal"
+    "docker|Docker"
+    "Backup|Backup"
+    "PMedia|PMedia"
+    "Music|Music"
+)
+
+# Исключения rsync
+EXCLUDES=(
+    "_gsdata_"
+    ".DS_Store"
+    "Thumbs.db"
+    "@eaDir/"
+    "#recycle/"
+    ".Trash*"
+    "*.tmp"
+    ".cache/"
+    "node_modules/"
+    "__pycache__/"
+)

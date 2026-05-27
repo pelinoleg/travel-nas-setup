@@ -1,0 +1,18 @@
+# Photo backup configuration
+# Скопировать в: /etc/travel-nas/photo-backup.conf
+
+# Целевая папка
+DEST="/mnt/t7/usb-imports"
+
+# Авторазмонтирование SD после бэкапа
+AUTO_UMOUNT=true
+
+# UUID нашего T7 (чтобы НЕ бэкапить сам себя)
+# Получить: sudo blkid /dev/sdX1
+T7_UUID=""
+
+# Минимальный размер файла для копирования (байт)
+MIN_SIZE=1
+
+# Сколько ждать пока CasaOS devmon смонтирует (секунды)
+WAIT_FOR_DEVMON=3

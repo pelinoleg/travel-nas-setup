@@ -1,0 +1,136 @@
+#!/bin/bash
+# =============================================================================
+# system-monitor.sh - Мониторинг Pi (CPU temp, throttling, RAM)
+# =============================================================================
+# Запускается через systemd timer раз в 5 минут.
+# Алертит только при проблемах.
+# =============================================================================
+
+set -u
+
+TG_NOTIFY="/usr/local/bin/tg-notify.sh"
+LOG="/mnt/t7/_logs/system-monitor.log"
+STATE_DIR="/var/lib/travel-nas"
+STATE_FILE="$STATE_DIR/system-monitor-state.txt"
+
+CPU_TEMP_WARN=70      # °C
+CPU_TEMP_CRITICAL=80  # °C
+RAM_WARN=85           # % used
+
+mkdir -p "$STATE_DIR" "$(dirname "$LOG")" 2>/dev/null
+touch "$STATE_FILE"
+
+log_msg() {
+    echo "[$(date '+%d-%m-%Y %H:%M:%S')] $*" >> "$LOG"
+}
+
+tg_notify() {
+    local level="$1"
+    local title="$2"
+    local msg="$3"
+    if [[ -x "$TG_NOTIFY" ]]; then
+        "$TG_NOTIFY" -l "$level" "$title" "$msg" 2>/dev/null || true
+    fi
+}
+
+can_alert() {
+    local key="$1"
+    local last
+    last=$(grep "^${key}:" "$STATE_FILE" 2>/dev/null | tail -1 | cut -d: -f2)
+    if [[ -z "$last" ]]; then
+        return 0
+    fi
+    local now=$(date +%s)
+    local diff=$((now - last))
+    [[ "$diff" -gt 3600 ]] && return 0
+    return 1
+}
+
+set_state() {
+    local key="$1"
+    grep -v "^${key}:" "$STATE_FILE" > "${STATE_FILE}.tmp"
+    echo "${key}:$(date +%s)" >> "${STATE_FILE}.tmp"
+    mv "${STATE_FILE}.tmp" "$STATE_FILE"
+}
+
+# === CPU temp ===
+check_cpu_temp() {
+    if ! command -v vcgencmd &>/dev/null; then
+        return 0
+    fi
+    local temp
+    temp=$(vcgencmd measure_temp 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | cut -d. -f1)
+    if [[ -z "$temp" ]]; then
+        return 0
+    fi
+
+    if [[ "$temp" -ge "$CPU_TEMP_CRITICAL" ]]; then
+        if can_alert "cpu_temp_critical"; then
+            tg_notify critical "Pi CPU CRITICAL temp" "Current: ${temp}°C
+Throttling will kick in.
+Check ventilation."
+            set_state "cpu_temp_critical"
+        fi
+    elif [[ "$temp" -ge "$CPU_TEMP_WARN" ]]; then
+        if can_alert "cpu_temp_warn"; then
+            tg_notify warning "Pi CPU temp high" "Current: ${temp}°C
+Above ${CPU_TEMP_WARN}°C threshold."
+            set_state "cpu_temp_warn"
+        fi
+    fi
+}
+
+# === Throttling ===
+check_throttling() {
+    if ! command -v vcgencmd &>/dev/null; then
+        return 0
+    fi
+    local throttled
+    throttled=$(vcgencmd get_throttled 2>/dev/null | grep -oE '0x[0-9a-fA-F]+')
+
+    if [[ -z "$throttled" || "$throttled" == "0x0" ]]; then
+        return 0
+    fi
+
+    # Декодируем биты
+    local val=$((throttled))
+    local issues=()
+
+    [[ $((val & 0x1)) -ne 0 ]]     && issues+=("Under-voltage now")
+    [[ $((val & 0x2)) -ne 0 ]]     && issues+=("ARM freq capped now")
+    [[ $((val & 0x4)) -ne 0 ]]     && issues+=("CPU throttled now")
+    [[ $((val & 0x8)) -ne 0 ]]     && issues+=("Soft temp limit now")
+    [[ $((val & 0x10000)) -ne 0 ]] && issues+=("Under-voltage occurred")
+    [[ $((val & 0x40000)) -ne 0 ]] && issues+=("Throttling occurred")
+
+    # Алертим только если что-то "now" (текущая проблема)
+    if [[ $((val & 0xF)) -ne 0 ]]; then
+        if can_alert "throttling"; then
+            tg_notify warning "Pi power/throttle issue" "$(printf '%s\n' "${issues[@]}")
+Check power supply (5V/5A required)."
+            set_state "throttling"
+        fi
+    fi
+}
+
+# === RAM ===
+check_ram() {
+    local mem_total mem_avail mem_used_pct
+    mem_total=$(free -m | awk 'NR==2 {print $2}')
+    mem_avail=$(free -m | awk 'NR==2 {print $7}')
+    mem_used_pct=$(( (mem_total - mem_avail) * 100 / mem_total ))
+
+    if [[ "$mem_used_pct" -ge "$RAM_WARN" ]]; then
+        if can_alert "ram_high"; then
+            tg_notify warning "Pi RAM high" "Used: ${mem_used_pct}%
+Available: ${mem_avail} MB / ${mem_total} MB"
+            set_state "ram_high"
+        fi
+    fi
+}
+
+check_cpu_temp
+check_throttling
+check_ram
+
+exit 0

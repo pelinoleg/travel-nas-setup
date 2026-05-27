@@ -1,0 +1,106 @@
+#!/bin/bash
+# =============================================================================
+# travel-nas-update — быстрое обновление наших скриптов из GitHub
+# =============================================================================
+# Что делает:
+#   - Cкачивает свежие .sh/.py из main-ветки в /usr/local/bin/
+#   - Перезапускает tg-listener.service если бежит
+#   - Перезапускает dashboard если бежит
+#
+# Что НЕ делает (для этого — `travel-nas-setup`):
+#   - Не трогает /etc/travel-nas/ конфиги
+#   - Не пересоздаёт systemd units
+#   - Не лезет в sudoers / tmpfiles.d / NetworkManager
+#   - Не ставит apt-пакеты
+#   - Не трогает Docker
+#
+# Использование:
+#   travel-nas-update
+# =============================================================================
+
+set -u
+
+REPO_RAW="https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/main"
+
+# Пары: src-имя-в-репо  →  target-путь на устройстве
+declare -A SCRIPTS=(
+    [tg-notify.sh]=/usr/local/bin/tg-notify.sh
+    [photo-backup.sh]=/usr/local/bin/photo-backup.sh
+    [nas-backup.sh]=/usr/local/bin/nas-backup.sh
+    [pi-config-backup.sh]=/usr/local/bin/pi-config-backup.sh
+    [disk-watchdog.sh]=/usr/local/bin/disk-watchdog.sh
+    [system-monitor.sh]=/usr/local/bin/system-monitor.sh
+    [daily-summary.sh]=/usr/local/bin/daily-summary.sh
+    [set-led.sh]=/usr/local/bin/set-led.sh
+    [power-mode.sh]=/usr/local/bin/power-mode.sh
+    [travel-nas-setup.sh]=/usr/local/bin/travel-nas-setup
+    [travel-nas-update.sh]=/usr/local/bin/travel-nas-update
+    [travel-nas-display.py]=/usr/local/bin/travel-nas-display.py
+    [nas-backup-status.py]=/usr/local/bin/nas-backup-status.py
+    [tg-listener.py]=/usr/local/bin/tg-listener.py
+    [backup-progress-writer.py]=/usr/local/bin/backup-progress-writer.py
+)
+
+# Cache-buster на случай если CDN отдаёт стейл
+TS=$(date +%s)
+OK=0; FAIL=0
+
+echo "→ Fetching latest from $REPO_RAW (timestamp=$TS)..."
+echo ""
+
+for name in "${!SCRIPTS[@]}"; do
+    target="${SCRIPTS[$name]}"
+    tmp="${target}.tmp.$$"
+    if sudo curl -fsSL "$REPO_RAW/scripts/${name}?${TS}" -o "$tmp"; then
+        sudo mv "$tmp" "$target"
+        sudo chmod +x "$target"
+        echo "  ✓ $target"
+        OK=$((OK + 1))
+    else
+        sudo rm -f "$tmp" 2>/dev/null
+        echo "  ✗ $name — fetch failed"
+        FAIL=$((FAIL + 1))
+    fi
+done
+
+echo ""
+echo "Fetched: $OK ok, $FAIL failed"
+
+# Перезапуск running сервисов чтоб подхватили новый код
+RESTARTED=()
+echo ""
+echo "→ Restarting active services..."
+for svc in tg-listener.service; do
+    if systemctl is-active --quiet "$svc"; then
+        if sudo systemctl restart "$svc"; then
+            RESTARTED+=("$svc")
+            echo "  ✓ $svc"
+        else
+            echo "  ✗ $svc — restart failed"
+        fi
+    fi
+done
+
+# Dashboard — перезапуск только если бежит и есть X-сессия
+if pgrep -f /usr/local/bin/travel-nas-display.py >/dev/null; then
+    pkill -f /usr/local/bin/travel-nas-display.py 2>/dev/null || true
+    sleep 1
+    # Запуск под текущим X-сервером пользователя
+    USER_HOME="/home/$(whoami)"
+    if [[ -e "$USER_HOME/.Xauthority" ]]; then
+        DISPLAY=:0 XAUTHORITY="$USER_HOME/.Xauthority" \
+            nohup /usr/bin/python3 /usr/local/bin/travel-nas-display.py \
+            >/tmp/travel-nas-display.out 2>&1 &
+        disown 2>/dev/null || true
+        RESTARTED+=("dashboard")
+        echo "  ✓ dashboard"
+    else
+        echo "  ⚠ X-сессия не найдена — dashboard перезапустится при следующем логине"
+    fi
+fi
+
+echo ""
+echo "Done. Configs in /etc/travel-nas/ untouched."
+if [[ ${#RESTARTED[@]} -gt 0 ]]; then
+    echo "Restarted: ${RESTARTED[*]}"
+fi

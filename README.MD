@@ -2,24 +2,38 @@
 
 Infrastructure-as-Code для travel-NAS на Raspberry Pi 5 + USB SSD (Samsung T7 Shield по умолчанию). Whiptail-меню с компонентами, поддержка повторного запуска. Всё переустанавливается одной командой.
 
-## Установка одной командой
+## Быстрый старт
 
-После того как:
-1. Прошил microSD через **Raspberry Pi Imager** (PiOS Desktop Trixie 64-bit)
-2. В Imager → Advanced settings: задал hostname, SSH on, WiFi, пользователь
-3. Загрузился, SSH'нулся → `ssh oleg@travel-nas.local`
-
-Запусти:
+### Свежая установка (на чистой PiOS)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/main/setup.sh -o setup.sh && bash setup.sh
 ```
 
-Откроется whiptail-меню — отметь компоненты, нажми Enter. После установки доступна команда:
+Откроется whiptail-меню → отметь компоненты → Enter. После завершения доступны команды:
+
+| Команда | Когда использовать |
+|---|---|
+| `travel-nas-setup` | Перезапустить wizard (добавить компонент, переустановить, поменять конфиг). Скачивает свежий `setup.sh`, бежит whiptail, спрашивает что делать. |
+| **`travel-nas-update`** | **Только обновить скрипты после правок в репо.** Молча тянет все `.sh`/`.py` из GitHub в `/usr/local/bin/`, перезапускает `tg-listener` и dashboard. Конфиги, systemd-units, Docker, sudoers — НЕ трогает. |
+
+### Обновление после правок (когда поменял что-то в репо и хочешь применить на Pi)
 
 ```bash
-travel-nas-setup       # один в один то же что выше — re-fetch и launch wizard
+travel-nas-update
 ```
+
+Или одной строкой если команды ещё нет (бутстрап):
+
+```bash
+sudo curl -fsSL "https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/main/scripts/travel-nas-update.sh?$(date +%s)" -o /usr/local/bin/travel-nas-update && sudo chmod +x /usr/local/bin/travel-nas-update && travel-nas-update
+```
+
+### Предусловия для установки
+
+1. Прошил microSD через **Raspberry Pi Imager** (PiOS Desktop Trixie 64-bit)
+2. В Imager → Advanced settings: задал hostname, SSH on, WiFi, пользователь
+3. Загрузился, SSH'нулся → `ssh oleg@travel-nas.local`
 
 ## Компоненты
 

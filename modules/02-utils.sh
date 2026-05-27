@@ -13,11 +13,13 @@ if (
         wmctrl \
         avahi-daemon
 ); then
-    # `travel-nas-setup` shortcut — пользователь сможет в любой момент
-    # перезапустить визард командой без curl-paste.
-    fetch_script "travel-nas-setup.sh" "$SCRIPT_DIR/travel-nas-setup"
+    # `travel-nas-setup` — перезапуск wizard'а без curl-paste
+    fetch_script "travel-nas-setup.sh"  "$SCRIPT_DIR/travel-nas-setup"
+    # `travel-nas-update` — быстро обновить только скрипты в /usr/local/bin
+    # без переустановки сервисов (для повседневного итерирования)
+    fetch_script "travel-nas-update.sh" "$SCRIPT_DIR/travel-nas-update"
     # set-led — управление встроенным power-LED Pi из других скриптов
-    fetch_script "set-led.sh"          "$SCRIPT_DIR/set-led.sh"
+    fetch_script "set-led.sh"           "$SCRIPT_DIR/set-led.sh"
 
     # /etc/motd — что увидит юзер при ssh-логине
     sudo tee /etc/motd >/dev/null << 'EOF'

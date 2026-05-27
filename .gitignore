@@ -3,6 +3,9 @@
 *.swp
 *~
 .DS_Store
+__pycache__/
+.idea/
+CONTEXT.md
 
 # Логи установки
 *.log

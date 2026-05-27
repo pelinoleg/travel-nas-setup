@@ -812,6 +812,33 @@ EOF
         if [[ -f "$AUTOSTART_FILE" ]]; then
             sed -i '/^@xset -dpms$/d' "$AUTOSTART_FILE"
         fi
+
+        # Отключаем PCManFM popup при подключении USB/SD — он перехватывает
+        # фокус с dashboard и юзеру приходится кликать "OK" перед каждым бэкапом.
+        for PCMANFM_DIR in "$USER_HOME/.config/pcmanfm/LXDE-pi" "$USER_HOME/.config/pcmanfm/default"; do
+            mkdir -p "$PCMANFM_DIR"
+            PCMANFM_CONF="$PCMANFM_DIR/pcmanfm.conf"
+            if [[ ! -f "$PCMANFM_CONF" ]]; then
+                cat > "$PCMANFM_CONF" << 'EOF'
+[volume]
+mount_on_startup=0
+mount_removable=0
+autorun=0
+EOF
+            else
+                # Идемпотентно: обновляем секцию [volume] или дописываем.
+                if grep -q '^\[volume\]' "$PCMANFM_CONF"; then
+                    sed -i '/^\[volume\]/,/^\[/{
+                        s/^mount_on_startup=.*/mount_on_startup=0/
+                        s/^mount_removable=.*/mount_removable=0/
+                        s/^autorun=.*/autorun=0/
+                    }' "$PCMANFM_CONF"
+                else
+                    printf '\n[volume]\nmount_on_startup=0\nmount_removable=0\nautorun=0\n' \
+                        >> "$PCMANFM_CONF"
+                fi
+            fi
+        done
     ); then
         mark_ok "DISPLAY_DASHBOARD" "autostart + sudoers готовы"
     else

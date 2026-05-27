@@ -86,35 +86,61 @@ def main():
                   "size_done": "0B", "speed": "?", "eta": "?",
                   "updated": int(time.time())})
 
-    try:
-        for raw in sys.stdin:
-            sys.stdout.write(raw)
-            sys.stdout.flush()
-            line = raw.rstrip("\r\n")
-            m = PROGRESS_RE.search(line)
-            if not m:
-                continue
-            now = time.time()
-            if now - last_write < WRITE_INTERVAL:
-                continue
-            last_write = now
+    def process_line(line):
+        nonlocal last_write, last_data
+        m = PROGRESS_RE.search(line)
+        if not m:
+            return
+        now = time.time()
+        if now - last_write < WRITE_INTERVAL:
+            return
+        last_write = now
+        try:
+            bd = int(m.group("bytes").replace(",", ""))
+            size_done = human_bytes(bd)
+        except ValueError:
+            size_done = "?"
+        last_data = {
+            **base,
+            "percent":    int(m.group("pct")),
+            "files_done": int(m.group("xfr") or 0),
+            "size_done":  size_done,
+            "speed":      m.group("speed"),
+            "eta":        m.group("eta"),
+            "updated":    int(now),
+        }
+        atomic_write(last_data)
 
+    # rsync --info=progress2 обновляет процент через \r (без \n) —
+    # text-mode `for line in sys.stdin` буферится и отдаёт только финальную
+    # строку. Читаем сырые байты и сами режем по \r или \n.
+    stdin_fd  = sys.stdin.buffer
+    stdout_fd = sys.stdout.buffer
+    buf = bytearray()
+    try:
+        while True:
+            chunk = stdin_fd.read(1)
+            if not chunk:
+                break
+            stdout_fd.write(chunk)
+            if chunk in (b"\r", b"\n"):
+                stdout_fd.flush()
+                if buf:
+                    try:
+                        process_line(bytes(buf).decode("utf-8", errors="replace"))
+                    except Exception:
+                        pass
+                    buf.clear()
+            else:
+                buf += chunk
+        if buf:
             try:
-                bd = int(m.group("bytes").replace(",", ""))
-                size_done = human_bytes(bd)
-            except ValueError:
-                size_done = "?"
-            last_data = {
-                **base,
-                "percent":    int(m.group("pct")),
-                "files_done": int(m.group("xfr") or 0),
-                "size_done":  size_done,
-                "speed":      m.group("speed"),
-                "eta":        m.group("eta"),
-                "updated":    int(now),
-            }
-            atomic_write(last_data)
+                process_line(bytes(buf).decode("utf-8", errors="replace"))
+            except Exception:
+                pass
     finally:
+        try: stdout_fd.flush()
+        except Exception: pass
         # Финальный кадр: 100% done — dashboard покажет ~8 секунд и спрячет
         final = dict(last_data) if last_data else dict(base)
         final["percent"] = 100

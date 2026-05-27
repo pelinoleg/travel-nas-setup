@@ -33,7 +33,7 @@ SLEEP_AFTER_SEC = 300          # 5 минут до auto-sleep
 TOAST_DURATION = 2.0
 TOUCH_FLASH_DURATION = 0.25
 TOUCH_DEDUP_WINDOW = 0.12      # игнорируем дубль touch+mouse в одно касание
-FORCE_ABOVE_INTERVAL = 30      # cheap re-assert, если кто-то перехватил Z-order
+FORCE_ABOVE_INTERVAL = 3       # cheap re-assert: ловит pcmanfm/udev попапы быстро
 
 STATE_DIR = Path("/var/run/travel-nas")
 PROGRESS_FILE = STATE_DIR / "backup-progress.json"
@@ -534,133 +534,206 @@ def toast(text, color=FG):
 # =============================================================================
 # Pages
 # =============================================================================
+def _card(rect, title, title_color=MUTED):
+    """Рисует фон карточки + маленький заголовок-капс. Возвращает inner rect."""
+    pygame.draw.rect(screen, PANEL, rect, border_radius=8)
+    screen.blit(F_TINY.render(title, True, title_color), (rect.x + 10, rect.y + 5))
+    return pygame.Rect(rect.x + 10, rect.y + 20, rect.w - 20, rect.h - 24)
+
+
+def _card_network(rect):
+    """NETWORK card — большой IP и SSID·сигнал справа внизу."""
+    inner = _card(rect, "NETWORK")
+    ip = c_ip.get()
+    wifi = c_wifi.get() or {"ssid": None, "signal": None}
+    if ip:
+        ip_surf = F_LARGE.render(ip, True, FG)
+        screen.blit(ip_surf, (inner.x, inner.y))
+        ssid = wifi.get("ssid")
+        sig = wifi.get("signal")
+        parts = []
+        if ssid: parts.append(ssid)
+        if sig is not None: parts.append(f"{sig} dBm")
+        if parts:
+            s = F_SMALL.render("  ·  ".join(parts), True, MUTED)
+            screen.blit(s, (inner.x, inner.bottom - 16))
+    else:
+        screen.blit(F_LARGE.render("offline", True, ERROR), (inner.x, inner.y))
+
+
+def _card_ap(rect):
+    """AP MODE card — заменяет network когда мы в AP-режиме."""
+    inner = _card(rect, "AP MODE — connect to setup WiFi", WARN)
+    ap_name = f"travel-nas-{socket.gethostname()[-4:]}"
+    screen.blit(F_MED.render(ap_name, True, FG), (inner.x, inner.y))
+    screen.blit(F_SMALL.render("open network · no password", True, MUTED), (inner.x, inner.y + 24))
+    screen.blit(F_SMALL.render("then open: http://10.41.0.1", True, INFO), (inner.x, inner.y + 42))
+
+
+def _card_storage(rect):
+    inner = _card(rect, "STORAGE  T7")
+    disk = c_disk.get()
+    t7t = c_t7_temp.get()
+    if not disk:
+        screen.blit(F_MED.render("not mounted", True, ERROR), (inner.x, inner.y))
+        return
+    col = ACCENT if disk["pct"] < 80 else (WARN if disk["pct"] < 90 else ERROR)
+
+    # Главная строка: used / total | t°C
+    main = F_MED.render(f"{disk['used']} / {disk['total']}", True, FG)
+    screen.blit(main, (inner.x, inner.y))
+    right_parts = []
+    if t7t: right_parts.append(f"{t7t}°C")
+    right_parts.append(f"{disk['avail']} free")
+    rt = F_SMALL.render(" · ".join(right_parts), True, MUTED)
+    screen.blit(rt, (inner.right - rt.get_width(), inner.y + 4))
+
+    # Бар + % внутри
+    bar_y = inner.bottom - 14
+    draw_bar(inner.x, bar_y, inner.w, 12, disk["pct"], col)
+    pct = F_TINY.render(f"{disk['pct']}%", True, BG if disk['pct'] > 12 else FG)
+    screen.blit(pct, (inner.x + 6, bar_y))
+
+
+def _card_system(rect):
+    """CPU + RAM с барами + строка статуса (load, swap, zram, throttle)."""
+    inner = _card(rect, "SYSTEM")
+    y = inner.y
+
+    # CPU temp + load %
+    cpu_t = c_cpu_temp.get()
+    cpu_p = c_cpu_pct.get()
+    cpu_c = ACCENT if (cpu_t or 0) < 65 else (WARN if (cpu_t or 0) < 75 else ERROR)
+    label = F_NORMAL.render(f"CPU  {cpu_t or '?'}°C", True, cpu_c)
+    screen.blit(label, (inner.x, y))
+    if cpu_p is not None:
+        v = F_SMALL.render(f"{cpu_p}% load", True, MUTED)
+        screen.blit(v, (inner.right - v.get_width(), y + 3))
+    y += 19
+    if cpu_p is not None:
+        bar_c = ACCENT if cpu_p < 70 else (WARN if cpu_p < 90 else ERROR)
+        draw_bar(inner.x, y, inner.w, 8, cpu_p, bar_c)
+    y += 14
+
+    # RAM bytes + pct
+    ram = c_ram.get()
+    if ram:
+        col = ACCENT if ram["pct"] < 70 else (WARN if ram["pct"] < 90 else ERROR)
+        screen.blit(F_NORMAL.render(
+            f"RAM  {human_bytes(ram['used'])} / {human_bytes(ram['total'])}", True, FG), (inner.x, y))
+        v = F_SMALL.render(f"{ram['pct']}%", True, MUTED)
+        screen.blit(v, (inner.right - v.get_width(), y + 3))
+        y += 19
+        draw_bar(inner.x, y, inner.w, 8, ram["pct"], col)
+        y += 14
+
+    # Footer статуса
+    bits = []
+    load = c_load.get()
+    sw = c_swap.get()
+    zr = c_zram.get()
+    if load is not None: bits.append(f"load {load:.2f}")
+    if sw and sw['pct'] > 0: bits.append(f"swap {sw['pct']}%")
+    if zr: bits.append(f"zram {zr:.1f}×")
+    if bits:
+        screen.blit(F_SMALL.render("  ·  ".join(bits), True, MUTED), (inner.x, y))
+    # Throttle справа с цветом
+    th = c_throttle.get()
+    if th:
+        tcol = th[1]
+        ts = F_SMALL.render(f"throttle {th[0]}", True, tcol)
+        screen.blit(ts, (inner.right - ts.get_width(), y))
+
+
+def _card_backup_progress(rect, p):
+    """Активный бэкап — карточка с пульсирующим прогресс-баром."""
+    src = (p.get("source") or "backup").upper()
+    inner = _card(rect, f"{src} BACKUP IN PROGRESS", ACCENT)
+    pct = int(p.get("percent", 0))
+    lbl = p.get("label") or p.get("device") or ""
+    if len(lbl) > 26: lbl = lbl[:24] + "…"
+    screen.blit(F_NORMAL.render(lbl, True, FG), (inner.x, inner.y))
+    pct_t = F_MED.render(f"{pct}%", True, ACCENT)
+    screen.blit(pct_t, (inner.right - pct_t.get_width(), inner.y - 2))
+
+    bar_y = inner.y + 22
+    draw_bar(inner.x, bar_y, inner.w, 12, pct, ACCENT)
+
+    speed = p.get("speed") or "?"
+    eta = p.get("eta") or "?"
+    size_done = p.get("size_done") or "?"
+    foot = f"{size_done}  ·  {speed}  ·  ETA {eta}"
+    screen.blit(F_SMALL.render(foot, True, MUTED), (inner.x, inner.bottom - 16))
+
+
+def _card_last_backup(rect):
+    inner = _card(rect, "LAST PHOTO BACKUP")
+    last = c_last.get()
+    if not last:
+        screen.blit(F_NORMAL.render("none yet", True, MUTED), (inner.x, inner.y))
+        return
+    date_s = F_NORMAL.render(last['date'], True, FG)
+    screen.blit(date_s, (inner.x, inner.y))
+    fc = F_SMALL.render(f"{last['files']} files", True, FG)
+    screen.blit(fc, (inner.right - fc.get_width(), inner.y + 4))
+    nm = last['name']
+    if len(nm) > 32: nm = nm[:30] + "…"
+    screen.blit(F_SMALL.render(nm, True, MUTED), (inner.x, inner.y + 22))
+
+
 def page_status():
     screen.fill(BG)
     y = draw_top_strip()
     y += 4
     btns = []
+    margin = 6
+    card_w = SCREEN_W - margin * 2
+    gap = 5
 
-    # --- Network ---
-    ip = c_ip.get()
-    wifi = c_wifi.get() or {"ssid": None, "signal": None}
-    if ip and ip.startswith("10.41."):
-        net, net_c = f"AP {ip}", WARN
-    elif ip:
-        ssid = wifi.get("ssid") or "ethernet"
-        sg = wifi.get("signal")
-        net = f"{ssid}  {sg}dBm" if sg is not None else ssid
-        net_c = ACCENT
-    else:
-        net, net_c = "no network", ERROR
-    screen.blit(F_NORMAL.render(net, True, net_c), (8, y))
-    if ip and not ip.startswith("10.41."):
-        right = F_SMALL.render(ip, True, MUTED)
-        screen.blit(right, (SCREEN_W - right.get_width() - 8, y + 2))
-    y += 19
-    gw = c_gateway.get()
-    smb = c_smb.get() or 0
-    parts = []
-    if gw:        parts.append(f"gw {gw}")
-    if smb > 0:   parts.append(f"smb {smb}")
-    if parts:
-        screen.blit(F_SMALL.render("  ·  ".join(parts), True, MUTED), (8, y))
-    y += 18
+    # Доступная высота под карточки: всё от y до ботом-баттонс
+    bottom_btn_y = SCREEN_H - 54
+    available = bottom_btn_y - 6 - y
 
-    # --- Disk T7 ---
-    disk = c_disk.get()
-    t7t = c_t7_temp.get()
-    if disk:
-        col = ACCENT if disk["pct"] < 80 else (WARN if disk["pct"] < 90 else ERROR)
-        screen.blit(F_NORMAL.render(f"T7  {disk['used']} / {disk['total']}", True, col), (8, y))
-        right_parts = [f"{disk['avail']} free"]
-        if t7t:
-            right_parts.append(f"{t7t}°C")
-        right = F_SMALL.render("  ".join(right_parts), True, MUTED)
-        screen.blit(right, (SCREEN_W - right.get_width() - 8, y + 2))
-        y += 19
-        draw_bar(8, y, SCREEN_W - 16, 8, disk["pct"], col)
-        y += 14
-    else:
-        screen.blit(F_NORMAL.render("T7  not mounted", True, ERROR), (8, y))
-        y += 22
-
-    # --- RAM ---
-    ram = c_ram.get()
-    if ram:
-        col = ACCENT if ram["pct"] < 70 else (WARN if ram["pct"] < 90 else ERROR)
-        screen.blit(F_NORMAL.render(
-            f"RAM  {human_bytes(ram['used'])} / {human_bytes(ram['total'])}", True, col), (8, y))
-        right = F_SMALL.render(f"{ram['pct']}%", True, MUTED)
-        screen.blit(right, (SCREEN_W - right.get_width() - 8, y + 2))
-        y += 19
-        draw_bar(8, y, SCREEN_W - 16, 8, ram["pct"], col)
-        y += 14
-    sw = c_swap.get()
-    zr = c_zram.get()
-    extras = []
-    if sw: extras.append(f"swap {sw['pct']}%")
-    if zr: extras.append(f"zram {zr:.1f}×")
-    if extras:
-        screen.blit(F_SMALL.render("  ·  ".join(extras), True, MUTED), (8, y))
-        y += 16
-
-    # --- CPU ---
-    cpu_t = c_cpu_temp.get()
-    cpu_p = c_cpu_pct.get()
-    load1 = c_load.get()
-    cpu_c = ACCENT if (cpu_t or 0) < 65 else (WARN if (cpu_t or 0) < 75 else ERROR)
-    cpu_str = f"CPU  {cpu_t or '?'}°C"
-    if cpu_p is not None:
-        cpu_str += f"  {cpu_p}%"
-    screen.blit(F_NORMAL.render(cpu_str, True, cpu_c), (8, y))
-    if load1 is not None:
-        right = F_SMALL.render(f"load {load1:.2f}", True, MUTED)
-        screen.blit(right, (SCREEN_W - right.get_width() - 8, y + 2))
-    y += 19
-    th = c_throttle.get() or ("?", MUTED)
-    up = c_uptime.get() or "?"
-    line = f"throttle {th[0]}  ·  up {up}"
-    screen.blit(F_SMALL.render(line, True, MUTED), (8, y))
-    y += 18
-
-    # --- Last photo backup ---
-    pygame.draw.line(screen, BTN_BG, (8, y), (SCREEN_W - 8, y), 1)
-    y += 6
-    last = c_last.get()
-    if last:
-        screen.blit(F_SMALL.render("Last photo backup", True, INFO), (8, y))
-        y += 15
-        nm = last['name']
-        if len(nm) > 30: nm = nm[:28] + "…"
-        screen.blit(F_SMALL.render(f"{last['date']}  {nm}", True, FG), (8, y))
-        y += 15
-        screen.blit(F_SMALL.render(f"{last['files']} files", True, MUTED), (8, y))
-    else:
-        screen.blit(F_SMALL.render("No photo backups yet", True, MUTED), (8, y))
-
-    # --- Progress strip (если активно) ---
+    # Состав карточек зависит от того есть ли активный бэкап и AP-режим
     p = get_progress()
-    if p:
-        strip_h = 38
-        strip_y = SCREEN_H - 60 - strip_h - 6
-        strip_rect = pygame.Rect(8, strip_y, SCREEN_W - 16, strip_h)
-        pygame.draw.rect(screen, PANEL, strip_rect, border_radius=6)
-        pygame.draw.rect(screen, ACCENT, strip_rect, 1, border_radius=6)
-        pct = int(p.get("percent", 0))
-        draw_bar(strip_rect.x + 6, strip_rect.y + 22, strip_rect.w - 12, 8, pct, ACCENT)
-        src = p.get("source", "backup")
-        lbl = (p.get("label") or p.get("device") or "")
-        if len(lbl) > 20: lbl = lbl[:18] + "…"
-        screen.blit(F_SMALL.render(f"{src}: {lbl}", True, FG), (strip_rect.x + 6, strip_rect.y + 4))
-        pct_txt = F_SMALL.render(f"{pct}%", True, ACCENT)
-        screen.blit(pct_txt, (strip_rect.right - pct_txt.get_width() - 6, strip_rect.y + 4))
-        btns.append(Btn("", "progress_open", strip_rect, ACCENT))
+    in_ap = is_ap_mode()
 
-    # --- Bottom buttons ---
-    btn_y = SCREEN_H - 54
+    if p:
+        # Активный бэкап — главное, last-backup не показываем (он же сейчас идёт)
+        cards = [
+            (_card_ap if in_ap else _card_network,  56),
+            (lambda r: _card_backup_progress(r, p), 88),
+            (_card_storage,                         70),
+            (_card_system,                        118),
+        ]
+    else:
+        cards = [
+            (_card_ap if in_ap else _card_network,  76 if in_ap else 60),
+            (_card_storage,                         74),
+            (_card_system,                        124),
+            (_card_last_backup,                     62),
+        ]
+
+    # Распределяем gap'ы — оставляем мелкие зазоры, без растягивания
+    for draw_fn, h in cards:
+        rect = pygame.Rect(margin, y, card_w, h)
+        draw_fn(rect)
+        # Если progress-карточка — кликается → открывает детали
+        if draw_fn.__name__ == "<lambda>":
+            btns.append(Btn("", "progress_open", rect, ACCENT))
+        y += h + gap
+
+    # Footer: SMB-клиенты + uptime + clock — не основная информация, мелко
+    smb = c_smb.get() or 0
+    up = c_uptime.get() or "?"
+    foot = [f"up {up}"]
+    if smb > 0: foot.append(f"{smb} smb")
+    screen.blit(F_TINY.render("  ·  ".join(foot), True, MUTED), (margin + 4, bottom_btn_y - 14))
+
+    # Bottom buttons
     half_w = (SCREEN_W - 24) // 2
-    menu = Btn("Menu",    "open_menu",    pygame.Rect(8, btn_y, half_w, 46),                ACCENT, primary=True)
-    ap   = Btn("AP info", "open_ap_info", pygame.Rect(8 + half_w + 8, btn_y, half_w, 46),   INFO)
+    menu = Btn("Menu",    "open_menu",    pygame.Rect(8, bottom_btn_y, half_w, 46),                ACCENT, primary=True)
+    ap   = Btn("AP info", "open_ap_info", pygame.Rect(8 + half_w + 8, bottom_btn_y, half_w, 46),   INFO)
     draw_button(menu); draw_button(ap)
     btns += [menu, ap]
     return btns

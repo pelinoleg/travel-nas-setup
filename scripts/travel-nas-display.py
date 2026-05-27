@@ -588,9 +588,14 @@ def draw_bar(x, y, w, h, pct, color):
 
 
 def _cpu_max_ghz():
-    """Текущий cap CPU частоты в GHz (например 2.4 / 1.5). None если nope."""
+    """Эффективный CPU-cap в GHz по текущему governor:
+       powersave → scaling_min_freq (зажат на нижней),
+       остальные (ondemand/performance/...) → scaling_max_freq."""
+    base = "/sys/devices/system/cpu/cpu0/cpufreq"
     try:
-        khz = int(Path("/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq").read_text().strip())
+        gov = Path(f"{base}/scaling_governor").read_text().strip()
+        key = "scaling_min_freq" if gov == "powersave" else "scaling_max_freq"
+        khz = int(Path(f"{base}/{key}").read_text().strip())
         return khz / 1_000_000
     except Exception:
         return None

@@ -87,17 +87,31 @@ def send(token, chat_id, text, parse_mode="Markdown"):
 # === Command handlers ============================================================
 
 def cmd_help(token, chat_id, args):
-    send(token, chat_id, """*Travel-NAS bot commands*
+    send(token, chat_id, """*Travel-NAS bot* — что умеет:
 
-`/status` — system snapshot
-`/backup` — run NAS backup
+📊 *Status*
+`/status` `/today` — snapshot системы
+`/nas` — статус NAS-бэкапов (модули, размеры, last-run)
+`/services` — список сервисов с URL
+`/configs` — какие /etc/travel-nas/*.conf существуют + где что лежит
+
+🔄 *Actions*
+`/backup` — запустить NAS backup
 `/backup dry` — dry-run
-`/logs [N]` — last N lines of logs (default 30)
-`/power [home|field|emergency|auto]`
-`/reboot` — reboot Pi (asks confirmation)
-`/shutdown` — power off Pi (asks confirmation)
-`/yes` — confirm pending action
-`/help` — this message""")
+`/backup diff` — diff
+`/update` — обновить скрипты из GitHub
+`/logs [N]` — хвост всех логов (default 30 строк)
+
+🔌 *Power*
+`/power` — текущий режим
+`/power home` / `field` / `emergency` / `auto`
+
+⚙️ *System*
+`/reboot` — ребут (нужно /yes для подтверждения)
+`/shutdown` — выключение (нужно /yes)
+`/yes` — подтвердить pending action
+
+`/help` `/start` — это сообщение""")
 
 
 def cmd_status(token, chat_id, args):
@@ -228,13 +242,145 @@ def cmd_yes(token, chat_id, args):
             stdin=subprocess.DEVNULL, start_new_session=True)
 
 
+def cmd_update(token, chat_id, args):
+    """Запускает travel-nas-update — pull всех скриптов из GitHub."""
+    send(token, chat_id, "🔄 Updating scripts from GitHub…")
+    try:
+        out = subprocess.check_output(
+            ["sudo", "-n", "/usr/local/bin/travel-nas-update"],
+            timeout=180, stderr=subprocess.STDOUT,
+        ).decode(errors="replace")
+    except subprocess.TimeoutExpired:
+        send(token, chat_id, "⏱ Timeout >3 мин — посмотри на устройстве")
+        return
+    except subprocess.CalledProcessError as e:
+        body = e.output.decode(errors="replace")[-2000:]
+        send(token, chat_id, f"❌ Update failed:\n```\n{body}\n```")
+        return
+    tail = "\n".join(out.strip().split("\n")[-20:])
+    send(token, chat_id, f"✅ Update complete:\n```\n{tail}\n```")
+
+
+def _resolve_host_ip():
+    host = f"{socket.gethostname()}.local"
+    try:
+        ip = subprocess.check_output(["hostname", "-I"], timeout=2).decode().split()[0]
+    except Exception:
+        ip = "?"
+    return host, ip
+
+
+SERVICES_CONF_PATH = Path("/etc/travel-nas/services.conf")
+
+
+def cmd_services(token, chat_id, args):
+    """Список сервисов из services.conf с подстановкой {host}/{ip}."""
+    if not SERVICES_CONF_PATH.exists():
+        send(token, chat_id, "_services.conf не найден — запусти travel-nas-setup_")
+        return
+    host, ip = _resolve_host_ip()
+    lines = ["*Services*", ""]
+    try:
+        for raw in SERVICES_CONF_PATH.read_text().splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            name, url = line.split("=", 1)
+            url = url.strip().replace("{host}", host).replace("{ip}", ip)
+            lines.append(f"• *{name.strip()}* — `{url}`")
+    except Exception as e:
+        lines.append(f"(read error: {e})")
+    send(token, chat_id, "\n".join(lines))
+
+
+def cmd_configs(token, chat_id, args):
+    """Список /etc/travel-nas/*.conf — что есть, что нет, плюс шпаргалка путей."""
+    confs = [
+        ("/etc/travel-nas/tg-notify.conf",     "Telegram bot token + chat_id"),
+        ("/etc/travel-nas/nas-backup.conf",    "NAS host/user/password"),
+        ("/etc/travel-nas/services.conf",      "Dashboard URLs"),
+        ("/etc/travel-nas/power-mode.conf",    "Home WiFi SSIDs"),
+        ("/etc/travel-nas/photo-backup.conf",  "USB backup settings"),
+        ("/etc/travel-nas/t7-info.conf",       "T7 UUID (auto-generated)"),
+    ]
+    lines = ["*Configs* `/etc/travel-nas/`", ""]
+    for path, desc in confs:
+        mark = "✅" if Path(path).exists() else "❌"
+        name = path.split("/")[-1]
+        lines.append(f"{mark} `{name}` — {desc}")
+    lines += [
+        "",
+        "*Where things live*",
+        "• Scripts — `/usr/local/bin/*.{sh,py}`",
+        "• Configs — `/etc/travel-nas/`",
+        "• Systemd — `/etc/systemd/system/`",
+        "• Sudoers — `/etc/sudoers.d/travel-nas-dashboard`",
+        "• Runtime state — `/var/lib/travel-nas/`",
+        "• Logs — `/mnt/t7/_logs/`",
+        "• Pi-config backups — `/mnt/t7/pi-config-backups/`",
+        "",
+        "*Save before re-flash*",
+        "`sudo cp -r /etc/travel-nas /mnt/t7/_etc-backup`",
+    ]
+    send(token, chat_id, "\n".join(lines))
+
+
+NAS_STATUS_JSON_TG = Path("/var/lib/travel-nas/nas-backup-status.json")
+
+
+def _ago_short(ts):
+    if not ts:
+        return "—"
+    delta = int(time.time() - ts)
+    if delta < 60:    return f"{delta}s"
+    if delta < 3600:  return f"{delta // 60}m"
+    if delta < 86400: return f"{delta // 3600}h"
+    return f"{delta // 86400}d"
+
+
+def cmd_nas(token, chat_id, args):
+    """NAS backup статус — per-module: status dot, size, last-run age."""
+    if not NAS_STATUS_JSON_TG.exists():
+        send(token, chat_id, "_nas-backup-status.json не найден — запусти /update или подожди hourly timer_")
+        return
+    try:
+        d = json.loads(NAS_STATUS_JSON_TG.read_text())
+    except Exception as e:
+        send(token, chat_id, f"json error: {e}")
+        return
+    lines = ["*NAS backup status*"]
+    di = d.get("disk") or {}
+    if di:
+        lines.append(f"💾 T7: `{di.get('used','?')} / {di.get('total','?')}` ({di.get('pct','?')}%, {di.get('avail','?')} free)")
+    upd = d.get("updated")
+    if upd:
+        lines.append(f"_updated {_ago_short(upd)} ago_")
+    lines.append("")
+    emoji = {"ok": "🟢", "warn": "🟡", "fail": "🔴", None: "⚪"}
+    for m in d.get("modules", []):
+        name = m.get("name", "?")
+        if not m.get("exists"):
+            lines.append(f"⚪ *{name}* — absent")
+            continue
+        st = m.get("status")
+        size = m.get("size", "?")
+        lr = m.get("last_run")
+        lines.append(f"{emoji.get(st,'⚪')} *{name}* — `{size}` — {_ago_short(lr)} ago" if lr else f"{emoji.get(st,'⚪')} *{name}* — `{size}` — never")
+    send(token, chat_id, "\n".join(lines))
+
+
 COMMANDS = {
     "/help":     cmd_help,
     "/start":    cmd_help,
     "/status":   cmd_status,
+    "/today":    cmd_status,        # alias — Today page показывает то же
     "/backup":   cmd_backup,
+    "/update":   cmd_update,
     "/logs":     cmd_logs,
     "/power":    cmd_power,
+    "/services": cmd_services,
+    "/configs":  cmd_configs,
+    "/nas":      cmd_nas,
     "/reboot":   cmd_reboot,
     "/shutdown": cmd_shutdown,
     "/yes":      cmd_yes,

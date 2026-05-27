@@ -39,6 +39,7 @@ $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/nas-backup.sh
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/nas-backup-status.py
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/daily-summary.sh
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/pi-config-backup.sh
+$DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/travel-nas-update
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/power-mode.sh
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/set-led.sh
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/comitup-cli

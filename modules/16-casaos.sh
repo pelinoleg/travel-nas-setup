@@ -23,7 +23,7 @@ else
         wait_for_apt
         curl -fsSL https://get.casaos.io | sudo bash
     ); then
-        mark_ok "CASAOS" "http://travel-nas.local"
+        mark_ok "CASAOS" "http://pi.local"
     else
         mark_fail "CASAOS" "install script failed"
     fi

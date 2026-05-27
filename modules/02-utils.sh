@@ -27,8 +27,9 @@ if (
   ╔══════════════════════════════════════════════════════════╗
   ║                      Travel-NAS                          ║
   ║                                                          ║
-  ║   Dashboard:  http://travel-nas.local                    ║
+  ║   Dashboard:  http://pi.local                            ║
   ║   Re-config:  travel-nas-setup                           ║
+  ║   Update:     travel-nas-update                          ║
   ║   Logs:       tail -F /mnt/t7/_logs/*.log                ║
   ║   Backups:    /mnt/t7/{usb-imports,nas-backup}           ║
   ╚══════════════════════════════════════════════════════════╝

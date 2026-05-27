@@ -136,7 +136,7 @@ Usage:
 Components:
   UPDATE         apt update + upgrade
   UTILS          htop, ncdu, tmux, git, smartmontools, exiftool, etc + travel-nas-setup shortcut
-  HOSTNAME       Переименовать Pi в "travel-nas"
+  HOSTNAME       Переименовать Pi в "pi" (pi.local)
   T7_MOUNT       Mount внешнего диска в /mnt/t7 (wizard для форматирования)
   TG_NOTIFY      Telegram уведомления (helper)
   SAMBA          SMB share /mnt/t7
@@ -163,7 +163,7 @@ else
         --checklist "Что устанавливать? (Space — выбор, Enter — OK)" 30 80 24 \
         "UPDATE"       "apt update + upgrade"                              ON \
         "UTILS"        "Утилиты + travel-nas-setup команда + LED helper"  ON \
-        "HOSTNAME"     "Переименовать в travel-nas"                       ON \
+        "HOSTNAME"     "Переименовать в pi (доступ pi.local)"             ON \
         "T7_MOUNT"     "Внешний диск → /mnt/t7 (wizard форматирования)"   ON \
         "TG_NOTIFY"    "Telegram уведомления"                             ON \
         "SAMBA"        "Samba шара /mnt/t7"                               ON \

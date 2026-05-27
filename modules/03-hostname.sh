@@ -2,7 +2,7 @@
 
 # Желаемое имя устройства. Меняется только здесь — везде остальное должно
 # подцепиться через mDNS (avahi-daemon) автоматически.
-DESIRED_HOST="travel-nas"
+DESIRED_HOST="pi"
 
 info "=== Hostname ==="
 if (
@@ -47,6 +47,18 @@ if (
             /etc/hosts
     else
         echo -e "127.0.1.1\t$DESIRED_HOST" | sudo tee -a /etc/hosts >/dev/null
+    fi
+
+    # PiOS Imager пишет /boot/firmware/firstrun.sh с первичной настройкой
+    # (hostname/wifi/user). Он должен сам удалиться после первого запуска,
+    # но на всякий случай чистим — чтобы при будущих ребутах не вернул
+    # raspberry-X имя.
+    if [[ -f /boot/firmware/firstrun.sh ]]; then
+        sudo rm -f /boot/firmware/firstrun.sh
+        # И из cmdline.txt убираем systemd.run-указатель на него
+        if grep -qE 'systemd\.run' /boot/firmware/cmdline.txt 2>/dev/null; then
+            sudo sed -i -E 's| systemd\.run[^ ]*||g; s| systemd\.run_success_action[^ ]*||g; s| systemd\.unit[^ ]*||g' /boot/firmware/cmdline.txt
+        fi
     fi
 ); then
     mark_ok "HOSTNAME" "$DESIRED_HOST"

@@ -646,7 +646,9 @@ def _card_ap(rect):
     """AP MODE card — заменяет network когда мы в AP-режиме."""
     inner = _card(rect, "AP MODE — connect to setup WiFi", WARN,
                   bg=PANEL_WARN, border=WARN)
-    ap_name = f"travel-nas-{socket.gethostname()[-4:]}"
+    # comitup создаёт AP с именем <hostname>-XXXX (где XXXX = первые 4
+    # символа hash или MAC, зависит от версии). Берём текущий hostname.
+    ap_name = f"{socket.gethostname()}-XXXX"
     screen.blit(F_MED.render(ap_name, True, FG), (inner.x, inner.y))
     screen.blit(F_SMALL.render("open network · no password", True, MUTED), (inner.x, inner.y + 24))
     screen.blit(F_SMALL.render("then open: http://10.41.0.1", True, INFO), (inner.x, inner.y + 42))
@@ -1315,7 +1317,9 @@ def page_ap_info():
         col = ACCENT if cs.upper() in ("CONNECTED", "CONNECTING") else WARN
         screen.blit(F_SMALL.render(f"comitup: {cs}", True, col), (8, y)); y += 18
 
-    ap_name = f"travel-nas-{socket.gethostname()[-4:]}"
+    # comitup создаёт AP с именем <hostname>-XXXX (где XXXX = первые 4
+    # символа hash или MAC, зависит от версии). Берём текущий hostname.
+    ap_name = f"{socket.gethostname()}-XXXX"
     screen.blit(F_SMALL.render("WiFi network:", True, MUTED), (8, y)); y += 16
     screen.blit(F_MED.render(ap_name, True, FG), (8, y)); y += 30
 
@@ -1362,7 +1366,7 @@ def page_ap_confirm():
             "WiFi password will be",
             "forgotten — re-enter via",
             "captive portal:",
-            "  travel-nas-XXXX",
+            f"  {socket.gethostname()}-XXXX",
             "  http://10.41.0.1",
         ],
         "do_force_ap", "Force AP", WARN,

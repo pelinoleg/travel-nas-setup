@@ -115,6 +115,61 @@ if pgrep -f /usr/local/bin/travel-nas-display.py >/dev/null; then
     fi
 fi
 
+# =============================================================================
+# Sync sudoers — каноничный список NOPASSWD-команд для dashboard/tg-listener
+# =============================================================================
+# Хранится здесь, в модуле 19-display и пересоздаётся при travel-nas-setup.
+# travel-nas-update тоже проверяет каждую строку и доливает недостающие —
+# иначе при добавлении новой возможности (новый скрипт) надо перезапускать
+# setup wizard'а, что неудобно.
+SUDOERS_FILE="/etc/sudoers.d/travel-nas-dashboard"
+USER_NAME="${SUDO_USER:-$(logname 2>/dev/null || echo "")}"
+[[ -z "$USER_NAME" ]] && USER_NAME="oleg"
+
+REQUIRED_CMDS=(
+    "/usr/local/bin/nas-backup.sh"
+    "/usr/local/bin/nas-backup-status.py"
+    "/usr/local/bin/daily-summary.sh"
+    "/usr/local/bin/pi-config-backup.sh"
+    "/usr/local/bin/travel-nas-update"
+    "/usr/local/bin/power-mode.sh"
+    "/usr/local/bin/set-led.sh"
+    "/usr/bin/comitup-cli"
+    "/usr/bin/nmcli connection down *"
+    "/usr/bin/systemctl reboot, /usr/bin/systemctl poweroff"
+    "/usr/bin/systemctl restart comitup"
+    "/usr/sbin/smartctl"
+    "/usr/bin/smbstatus"
+)
+
+if [[ -f "$SUDOERS_FILE" ]]; then
+    echo ""
+    echo "→ Syncing sudoers ($SUDOERS_FILE)..."
+    BACKUP="${SUDOERS_FILE}.bak.$$"
+    cp "$SUDOERS_FILE" "$BACKUP"
+    ADDED=0
+    for cmd in "${REQUIRED_CMDS[@]}"; do
+        # Сравниваем по полному "NOPASSWD: $cmd" чтобы не путать с похожими
+        if ! grep -qF "NOPASSWD: $cmd" "$SUDOERS_FILE"; then
+            echo "$USER_NAME ALL=(root) NOPASSWD: $cmd" >> "$SUDOERS_FILE"
+            echo "  + $cmd"
+            ADDED=$((ADDED + 1))
+        fi
+    done
+    if (( ADDED > 0 )); then
+        if visudo -c -f "$SUDOERS_FILE" >/dev/null 2>&1; then
+            echo "  ✓ added $ADDED entries, syntax OK"
+            rm -f "$BACKUP"
+        else
+            echo "  ✗ sudoers invalid после правки — откатываюсь"
+            mv "$BACKUP" "$SUDOERS_FILE"
+        fi
+    else
+        echo "  ✓ already in sync"
+        rm -f "$BACKUP"
+    fi
+fi
+
 echo ""
 echo "Done. Configs in /etc/travel-nas/ untouched."
 if [[ ${#RESTARTED[@]} -gt 0 ]]; then

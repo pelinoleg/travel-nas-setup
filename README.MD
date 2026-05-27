@@ -33,7 +33,7 @@ sudo curl -fsSL "https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/ma
 
 1. Прошил microSD через **Raspberry Pi Imager** (PiOS Desktop Trixie 64-bit)
 2. В Imager → Advanced settings: задал hostname, SSH on, WiFi, пользователь
-3. Загрузился, SSH'нулся → `ssh oleg@travel-nas.local`
+3. Загрузился, SSH'нулся → `ssh oleg@pi.local`
 
 ## Компоненты
 
@@ -41,10 +41,10 @@ sudo curl -fsSL "https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/ma
 |---|---|
 | 📦 **UPDATE** | `apt update && upgrade` (на свежем PiOS долго — ~5-10 мин) |
 | 🛠 **UTILS** | htop, ncdu, smartmontools, exiftool, wmctrl и т.д. |
-| 🏷 **HOSTNAME** | Переименовать в `travel-nas` |
+| 🏷 **HOSTNAME** | Переименовать в `pi` (доступ — `pi.local`) |
 | 💾 **T7_MOUNT** | Интерактивный wizard: выбор внешнего диска + форматирование в ext4 + fstab |
 | 📱 **TG_NOTIFY** | Telegram-уведомления (helper script) |
-| 📁 **SAMBA** | SMB-шара `smb://travel-nas.local/travel-nas` (open guest) |
+| 📁 **SAMBA** | SMB-шара `smb://pi.local/travel-nas` (open guest) |
 | 📷 **PHOTO_BACKUP** | udev + rsync — автокопирование USB/SD при подключении |
 | 🏠 **NAS_BACKUP** | Ручной бэкап с домашнего NAS через rsync daemon |
 | 🐕 **WATCHDOG** | Мониторинг T7 (mount/SMART/temp/space) каждые 5 мин |
@@ -154,11 +154,11 @@ Auto-sleep через 5 минут неактивности (xset dpms + sysfs b
 
 ## Доступ
 
-- **Samba**: `smb://travel-nas.local/travel-nas` (Cmd+K в Finder)
-- **CasaOS**: `http://travel-nas.local`
-- **Photoview**: `http://travel-nas.local:8000` (в UI указывай путь `/t7/usb-imports` или `/t7/media`)
-- **YT-Archiver**: `http://travel-nas.local:8081`
-- **SSH**: `ssh oleg@travel-nas.local`
+- **Samba**: `smb://pi.local/travel-nas` (Cmd+K в Finder)
+- **CasaOS**: `http://pi.local`
+- **Photoview**: `http://pi.local:8000` (в UI указывай путь `/t7/usb-imports` или `/t7/media`)
+- **YT-Archiver**: `http://pi.local:8081`
+- **SSH**: `ssh oleg@pi.local`
 
 > ⚠️ **Photoview** UI принимает только пути ВНУТРИ контейнера. Мы монтируем `/mnt/t7` как `/t7:ro`. То есть в Photoview указывай `/t7/usb-imports`, а **не** `/mnt/t7/usb-imports`. Иначе получишь "Server error: internal system error at initialSetupWizard".
 

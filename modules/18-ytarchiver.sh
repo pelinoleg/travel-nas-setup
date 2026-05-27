@@ -121,7 +121,7 @@ EOF
     sudo docker compose pull
     sudo docker compose up -d
 ); then
-    mark_ok "YTARCHIVER" "http://travel-nas.local:8081"
+    mark_ok "YTARCHIVER" "http://pi.local:8081"
 else
     mark_fail "YTARCHIVER" "docker compose failed"
 fi

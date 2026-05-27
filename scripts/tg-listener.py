@@ -77,10 +77,20 @@ def tg_request(token, method, params=None, timeout=35):
 
 
 def send(token, chat_id, text, parse_mode="Markdown"):
+    """Отправить сообщение. Если Markdown не парсится — fallback в plain text
+    чтобы юзер хотя бы что-то увидел (а не "бот молчит")."""
+    text = text[:4000]
+    res = tg_request(token, "sendMessage", {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": parse_mode,
+    })
+    if res and res.get("ok"):
+        return res
+    # Fallback — без parse_mode
     return tg_request(token, "sendMessage", {
         "chat_id": chat_id,
-        "text": text[:4000],
-        "parse_mode": parse_mode,
+        "text": text,
     })
 
 
@@ -93,7 +103,7 @@ def cmd_help(token, chat_id, args):
 `/status` `/today` — snapshot системы
 `/nas` — статус NAS-бэкапов (модули, размеры, last-run)
 `/services` — список сервисов с URL
-`/configs` — какие /etc/travel-nas/*.conf существуют + где что лежит
+`/configs` — какие `/etc/travel-nas/` конфиги существуют + где что лежит
 
 🔄 *Actions*
 `/backup` — запустить NAS backup
@@ -225,7 +235,8 @@ def cmd_power(token, chat_id, args):
 • NetworkManager dispatcher при connect/disconnect
 • system-monitor когда видит throttling
 
-Конфиг: `/etc/travel-nas/power-mode.conf` (HOME_SSIDS, HEAVY_DOCKER_APPS)""")
+Конфиг: `/etc/travel-nas/power-mode.conf`
+В нём: `HOME_SSIDS` и `HEAVY_DOCKER_APPS`""")
         return
 
     mode = args[0].lower()

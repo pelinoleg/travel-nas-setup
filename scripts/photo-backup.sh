@@ -106,24 +106,34 @@ if ! flock -n 200; then
     exit 0
 fi
 
-# Ждём пока devmon смонтирует
-sleep "$WAIT_FOR_DEVMON"
+# Ждём пока devmon смонтирует — он может опаздывать на пару секунд,
+# поэтому опрашиваем findmnt N раз вместо одного фиксированного sleep.
+MOUNT_SRC=""
+for _ in 1 2 3 4 5 6 7 8; do
+    MOUNT_SRC=$(findmnt -n -o TARGET "$DEVICE" 2>/dev/null | head -1)
+    [[ -n "$MOUNT_SRC" ]] && break
+    sleep 1
+done
 
-# Где смонтирован диск?
-MOUNT_SRC=$(findmnt -n -o TARGET "$DEVICE" 2>/dev/null | head -1)
 TEMP_MOUNT=""
-
 if [[ -z "$MOUNT_SRC" ]]; then
     # devmon не смонтировал — монтируем сами read-only
     TEMP_MOUNT=$(mktemp -d /tmp/photo-backup-XXXXXX)
     if mount -o ro "$DEVICE" "$TEMP_MOUNT" 2>/dev/null; then
         MOUNT_SRC="$TEMP_MOUNT"
-        log_msg "Mounted $DEVICE at $TEMP_MOUNT (read-only)"
+        log_msg "Self-mounted $DEVICE at $TEMP_MOUNT (read-only)"
     else
-        log_msg "ERROR: cannot mount $DEVICE"
+        # mount failed, проверим /proc/mounts напрямую — иногда findmnt не видит
+        # ext-mount'ы которые udisks делает через D-Bus
+        MOUNT_SRC=$(awk -v d="$DEVICE" '$1==d {print $2; exit}' /proc/mounts)
         rmdir "$TEMP_MOUNT" 2>/dev/null
-        tg_notify error "Backup failed" "Cannot mount \`$DEVICE\`"
-        exit 1
+        TEMP_MOUNT=""
+        if [[ -z "$MOUNT_SRC" ]]; then
+            log_msg "ERROR: cannot mount $DEVICE (not in /proc/mounts either)"
+            tg_notify error "Backup failed" "Cannot mount \`$DEVICE\`"
+            exit 1
+        fi
+        log_msg "Using already-mounted $DEVICE at $MOUNT_SRC"
     fi
 fi
 
@@ -133,11 +143,13 @@ log_msg "Source mounted at: $MOUNT_SRC"
 LABEL=$(lsblk -no LABEL "$DEVICE" 2>/dev/null | head -1 | tr ' /' '_-' | tr -cd '[:alnum:]_-')
 UUID_SHORT=$(echo "$DEVICE_UUID" | cut -c1-8)
 [[ -z "$LABEL" ]] && LABEL="USB"
-[[ -z "$UUID_SHORT" ]] && UUID_SHORT="nouuid"
+# Без UUID — используем имя устройства чтобы две карты не слились в одну папку
+[[ -z "$UUID_SHORT" ]] && UUID_SHORT="dev-$(basename "$DEVICE")"
 
-# Структура: usb-imports/DD-MM-YYYY/HH-MM_<label>_<uuid>/
+# Структура: usb-imports/DD-MM-YYYY/HH-MM-SS_<label>_<uuid>/
+# SS в префиксе чтобы быстрые re-plug не сливались в одну папку.
 DATE_DIR=$(date '+%d-%m-%Y')
-TIME_PREFIX=$(date '+%H-%M')
+TIME_PREFIX=$(date '+%H-%M-%S')
 BACKUP_NAME="${TIME_PREFIX}_${LABEL}_${UUID_SHORT}"
 TARGET_DIR="${DEST}/${DATE_DIR}/${BACKUP_NAME}"
 mkdir -p "$TARGET_DIR"

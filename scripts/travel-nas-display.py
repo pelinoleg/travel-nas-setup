@@ -50,16 +50,18 @@ LOG_OPTIONS = [
 ]
 
 # Colors (Material Design dark)
-BG       = (18, 18, 18)
-PANEL    = (28, 28, 28)
-FG       = (235, 235, 235)
-ACCENT   = (76, 175, 80)    # green
-WARN     = (255, 152, 0)    # orange
-ERROR    = (244, 67, 54)    # red
-INFO     = (33, 150, 243)   # blue
-MUTED    = (110, 110, 110)
-BTN_BG   = (42, 42, 42)
-BAR_BG   = (40, 40, 40)
+BG            = (18, 18, 18)
+PANEL         = (28, 28, 28)
+PANEL_ACCENT  = (20, 42, 22)    # подложка для активного бэкапа (зелёный тинт)
+PANEL_WARN    = (44, 32, 14)    # подложка для AP режима (оранжевый тинт)
+FG            = (235, 235, 235)
+ACCENT        = (76, 175, 80)   # green
+WARN          = (255, 152, 0)   # orange
+ERROR         = (244, 67, 54)   # red
+INFO          = (33, 150, 243)  # blue
+MUTED         = (110, 110, 110)
+BTN_BG        = (42, 42, 42)
+BAR_BG        = (40, 40, 40)
 
 FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
@@ -397,12 +399,16 @@ def get_progress():
     except Exception:
         return None
     age = time.time() - data.get("updated", 0)
-    if age > 60:
-        try: PROGRESS_FILE.unlink()
-        except Exception: pass
-        return None
-    # Если уже done — показываем ещё 8 секунд для радости и пропадает
-    if data.get("done") and age > 8:
+    # Done — показываем ещё 8 секунд и убираем
+    if data.get("done"):
+        if age > 8:
+            try: PROGRESS_FILE.unlink()
+            except Exception: pass
+            return None
+        return data
+    # Не done — rsync может сканировать большую карту минутами без обновлений.
+    # Считаем "застрявшим" только после 5 минут тишины.
+    if age > 300:
         try: PROGRESS_FILE.unlink()
         except Exception: pass
         return None
@@ -442,17 +448,33 @@ def health_status():
 # Backlight (xset dpms)
 # =============================================================================
 def set_backlight(on):
+    """Пытаемся реально выключить подсветку. На MHS35 (fb_ili9486) BL прибит
+    к 5V напрямую — программно выключить нельзя без модификации железа.
+    Тогда хотя бы заливаем экран чёрным (это делает main loop)."""
     global display_on
     if on == display_on:
         return
+    val_off = "4"   # FB_BLANK_POWERDOWN
+    val_on  = "0"   # FB_BLANK_UNBLANK
+    # 1. Стандартный sysfs backlight (HDMI, DSI и нек. SPI)
+    try:
+        for p in Path("/sys/class/backlight").glob("*/bl_power"):
+            try:
+                p.write_text(val_on if on else val_off)
+            except Exception:
+                pass
+    except Exception:
+        pass
+    # 2. X11 DPMS — для HDMI/DSI работает; для SPI-fbdev обычно no-op,
+    #    но и не вредит. Параллельно делает framebuffer screensaver.
     try:
         subprocess.run(
             ["xset", "dpms", "force", "on" if on else "off"],
             timeout=2, capture_output=True,
         )
-        display_on = on
     except Exception:
         pass
+    display_on = on
 
 
 # =============================================================================
@@ -534,9 +556,12 @@ def toast(text, color=FG):
 # =============================================================================
 # Pages
 # =============================================================================
-def _card(rect, title, title_color=MUTED):
-    """Рисует фон карточки + маленький заголовок-капс. Возвращает inner rect."""
-    pygame.draw.rect(screen, PANEL, rect, border_radius=8)
+def _card(rect, title, title_color=MUTED, bg=PANEL, border=None):
+    """Рисует фон карточки (опционально цветную подложку + бордер)
+    + маленький заголовок-капс. Возвращает inner rect для контента."""
+    pygame.draw.rect(screen, bg, rect, border_radius=8)
+    if border is not None:
+        pygame.draw.rect(screen, border, rect, 2, border_radius=8)
     screen.blit(F_TINY.render(title, True, title_color), (rect.x + 10, rect.y + 5))
     return pygame.Rect(rect.x + 10, rect.y + 20, rect.w - 20, rect.h - 24)
 
@@ -563,7 +588,8 @@ def _card_network(rect):
 
 def _card_ap(rect):
     """AP MODE card — заменяет network когда мы в AP-режиме."""
-    inner = _card(rect, "AP MODE — connect to setup WiFi", WARN)
+    inner = _card(rect, "AP MODE — connect to setup WiFi", WARN,
+                  bg=PANEL_WARN, border=WARN)
     ap_name = f"travel-nas-{socket.gethostname()[-4:]}"
     screen.blit(F_MED.render(ap_name, True, FG), (inner.x, inner.y))
     screen.blit(F_SMALL.render("open network · no password", True, MUTED), (inner.x, inner.y + 24))
@@ -646,9 +672,10 @@ def _card_system(rect):
 
 
 def _card_backup_progress(rect, p):
-    """Активный бэкап — карточка с пульсирующим прогресс-баром."""
+    """Активный бэкап — карточка с зелёной подложкой чтоб глаз цеплялся."""
     src = (p.get("source") or "backup").upper()
-    inner = _card(rect, f"{src} BACKUP IN PROGRESS", ACCENT)
+    inner = _card(rect, f"{src} BACKUP IN PROGRESS", ACCENT,
+                  bg=PANEL_ACCENT, border=ACCENT)
     pct = int(p.get("percent", 0))
     lbl = p.get("label") or p.get("device") or ""
     if len(lbl) > 26: lbl = lbl[:24] + "…"
@@ -742,45 +769,47 @@ def page_status():
 def page_menu():
     screen.fill(BG)
     y = draw_top_strip("Menu")
-    y += 8
+    y += 12
     btns = []
     full_w = SCREEN_W - 16
-    half_w = (SCREEN_W - 24) // 2
-    btn_h = 40
+    half_w = (SCREEN_W - 28) // 2
+    btn_h = 52       # больше под палец
+    gap   = 12       # больше воздуха между кнопками
 
-    # NAS backup (primary, big)
+    # NAS backup (primary, full width)
     r = pygame.Rect(8, y, full_w, btn_h)
     btns.append(Btn("NAS backup — run", "nas_run", r, ACCENT, primary=True))
-    draw_button(btns[-1]); y += btn_h + 6
+    draw_button(btns[-1]); y += btn_h + gap
 
     # dry-run | diff
     r1 = pygame.Rect(8, y, half_w, btn_h)
-    r2 = pygame.Rect(8 + half_w + 8, y, half_w, btn_h)
+    r2 = pygame.Rect(SCREEN_W - 8 - half_w, y, half_w, btn_h)
     btns.append(Btn("Dry-run", "nas_dry",  r1, INFO))
     btns.append(Btn("Diff",    "nas_diff", r2, INFO))
-    draw_button(btns[-2]); draw_button(btns[-1]); y += btn_h + 6
+    draw_button(btns[-2]); draw_button(btns[-1]); y += btn_h + gap
 
     # View logs (full)
     r = pygame.Rect(8, y, full_w, btn_h)
     btns.append(Btn("View logs", "open_logs", r, INFO))
-    draw_button(btns[-1]); y += btn_h + 6
+    draw_button(btns[-1]); y += btn_h + gap
 
     # AP info | Force AP
     r1 = pygame.Rect(8, y, half_w, btn_h)
-    r2 = pygame.Rect(8 + half_w + 8, y, half_w, btn_h)
-    btns.append(Btn("AP info",  "open_ap_info",   r1, INFO))
+    r2 = pygame.Rect(SCREEN_W - 8 - half_w, y, half_w, btn_h)
+    btns.append(Btn("AP info",  "open_ap_info",    r1, INFO))
     btns.append(Btn("Force AP", "open_ap_confirm", r2, WARN))
-    draw_button(btns[-2]); draw_button(btns[-1]); y += btn_h + 6
+    draw_button(btns[-2]); draw_button(btns[-1]); y += btn_h + gap
 
     # Reboot | Shutdown
     r1 = pygame.Rect(8, y, half_w, btn_h)
-    r2 = pygame.Rect(8 + half_w + 8, y, half_w, btn_h)
+    r2 = pygame.Rect(SCREEN_W - 8 - half_w, y, half_w, btn_h)
     btns.append(Btn("Reboot",   "open_reboot", r1, WARN))
     btns.append(Btn("Shutdown", "open_off",    r2, ERROR))
-    draw_button(btns[-2]); draw_button(btns[-1]); y += btn_h + 6
+    draw_button(btns[-2]); draw_button(btns[-1])
 
-    # Back
-    back = Btn("Back", "back_to_status", pygame.Rect(8, SCREEN_H - 54, full_w, 46), MUTED)
+    # Back — фикс в самом низу
+    back = Btn("Back", "back_to_status",
+               pygame.Rect(8, SCREEN_H - btn_h - 8, full_w, btn_h), MUTED)
     draw_button(back); btns.append(back)
     return btns
 

@@ -30,10 +30,12 @@ STATE_DIR = Path("/var/run/travel-nas")
 PROGRESS_FILE = STATE_DIR / "backup-progress.json"
 TMP_FILE = STATE_DIR / "backup-progress.json.tmp"
 
-# rsync --info=progress2 output example:
-#      234,567,890   34%   12.34MB/s    0:01:23 (xfr#42, to-chk=10/100)
+# rsync --info=progress2 output форматы (зависит от -h/--human-readable):
+#   без -h: "      234,567,890   34%   12.34MB/s    0:01:23 (xfr#42, to-chk=10/100)"
+#   с  -h:  "        603.60M    8%   54.03MB/s    0:00:08 (xfr#30, to-chk=395/425)"
+# Поэтому байты — это либо [0-9,]+ либо [0-9.]+ с опциональным KMGT суффиксом.
 PROGRESS_RE = re.compile(
-    r"(?P<bytes>[\d,]+)\s+(?P<pct>\d+)%\s+(?P<speed>\S+)\s+(?P<eta>\d+:\d+:\d+)"
+    r"(?P<bytes>[\d.,]+[KMGT]?)\s+(?P<pct>\d+)%\s+(?P<speed>\S+)\s+(?P<eta>\d+:\d+:\d+)"
     r"(?:.*?xfr#(?P<xfr>\d+))?"
 )
 
@@ -112,11 +114,17 @@ def main():
             debug(f"THROTTLE: {line.strip()}")
             return
         last_write = now
-        try:
-            bd = int(m.group("bytes").replace(",", ""))
-            size_done = human_bytes(bd)
-        except ValueError:
-            size_done = "?"
+        raw_bytes = m.group("bytes")
+        # Если уже human (32.77K / 603.60M / 1.2G) — оставляем как есть.
+        # Иначе пробуем парсить как чистые байты с запятыми и форматируем сами.
+        if raw_bytes and raw_bytes[-1] in "KMGT":
+            size_done = raw_bytes
+        else:
+            try:
+                bd = int(raw_bytes.replace(",", "").rstrip("."))
+                size_done = human_bytes(bd)
+            except ValueError:
+                size_done = raw_bytes
         last_data = {
             **base,
             "percent":    int(m.group("pct")),

@@ -392,6 +392,22 @@ c_last     = Cached(_last_photo_backup, 15)
 c_uptime   = Cached(_uptime,          5)
 
 
+def _system_busy():
+    """True если в системе бежит rsync/docker-build/etc — экран не гасим."""
+    # pgrep вернёт >0 exit code если процессов нет → False
+    try:
+        subprocess.check_output(
+            ["pgrep", "-x", "rsync"], timeout=2, stderr=subprocess.DEVNULL,
+        )
+        return True
+    except Exception:
+        pass
+    return False
+
+
+c_busy     = Cached(_system_busy,     4)
+
+
 def human_bytes(n):
     if n is None: return "?"
     n = float(n)
@@ -1577,7 +1593,13 @@ def main():
                         break
 
         # Auto-sleep (не во время бэкапа)
-        if display_on and (now - last_activity) > SLEEP_AFTER_SEC and get_progress() is None:
+        # Не гасим экран если:
+        #  - идёт backup (progress JSON активный)
+        #  - или просто rsync бежит (даже без нашего writer'а)
+        if (display_on
+                and (now - last_activity) > SLEEP_AFTER_SEC
+                and get_progress() is None
+                and not c_busy.get()):
             set_backlight(False)
             screen.fill((0, 0, 0))
             pygame.display.flip()

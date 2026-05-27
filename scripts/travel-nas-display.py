@@ -1262,16 +1262,11 @@ def page_configs():
     y += 6
 
     # Backup команда
-    screen.blit(F_TINY.render("BACKUP TO T7 before re-flash:", True, INFO), (10, y))
+    screen.blit(F_TINY.render("Pi-config-backup runs Sun 03:00.", True, INFO), (10, y))
     y += 14
-    for line in [
-        "sudo cp -r /etc/travel-nas \\",
-        "  /mnt/t7/_etc-backup",
-    ]:
-        screen.blit(F_MONO.render(line, True, FG), (12, y))
-        y += 13
+    screen.blit(F_TINY.render("Saved to /mnt/t7/pi-config-backups/", True, MUTED), (10, y))
+    y += 16
 
-    y += 8
     screen.blit(F_TINY.render("T7 SURVIVES microSD wipe:", True, ACCENT), (10, y))
     y += 14
     for line in [
@@ -1282,9 +1277,14 @@ def page_configs():
         screen.blit(F_TINY.render(line, True, MUTED), (10, y))
         y += 13
 
+    # Bottom: Backup now | Back
+    half_w = (SCREEN_W - 28) // 2
+    backup_btn = Btn("Backup now", "pi_backup_now",
+                     pygame.Rect(8, SCREEN_H - 54, half_w, 46), ACCENT)
     back = Btn("Back", "open_menu",
-               pygame.Rect(8, SCREEN_H - 54, SCREEN_W - 16, 46), MUTED)
-    draw_button(back); return [back]
+               pygame.Rect(SCREEN_W - 8 - half_w, SCREEN_H - 54, half_w, 46), MUTED)
+    draw_button(backup_btn); draw_button(back)
+    return [backup_btn, back]
 
 
 def page_ap_info():
@@ -1479,6 +1479,13 @@ def do_action(action):
     elif action == "open_nas_status":   go(PAGE_NAS_STATUS)
     elif action == "open_daily":        go(PAGE_DAILY_SUMMARY)
     elif action == "open_configs":      go(PAGE_CONFIGS)
+    elif action == "pi_backup_now":
+        subprocess.Popen(
+            ["sudo", "-n", "/usr/local/bin/pi-config-backup.sh"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL, start_new_session=True,
+        )
+        toast("Pi-config backup started…", ACCENT)
     elif action == "nas_status_refresh":
         subprocess.Popen(
             ["sudo", "-n", "/usr/local/bin/nas-backup-status.py"],

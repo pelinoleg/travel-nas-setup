@@ -95,12 +95,21 @@ else
     FULL_MSG="${ICON} ${TITLE}${MESSAGE}"
 fi
 
-# Отправка
+# Отправка с Markdown. Если парсер Telegram не принял (часто из-за
+# несбалансированных `_` или `*` в техн. именах) — повтор без parse_mode.
 RESPONSE=$(curl -s --max-time 10 \
     -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
     -d chat_id="${TG_CHAT_ID}" \
     -d parse_mode="Markdown" \
     --data-urlencode text="${FULL_MSG}")
+
+if ! echo "$RESPONSE" | grep -q '"ok":true'; then
+    # Fallback — plain text, гарантированно дойдёт
+    RESPONSE=$(curl -s --max-time 10 \
+        -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+        -d chat_id="${TG_CHAT_ID}" \
+        --data-urlencode text="${FULL_MSG}")
+fi
 
 # Для critical — запоминаем чтобы повторить через час если проблема не исчезнет
 if [[ "$LEVEL" == "critical" ]]; then

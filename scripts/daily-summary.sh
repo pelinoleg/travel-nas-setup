@@ -214,8 +214,15 @@ $(date '+%d-%m-%Y %H:%M')
 *System*
 ⏱  Uptime: \`${UPTIME}\`
 🌡  CPU: \`${CPU_TEMP}°C\`
-🌡  T7: \`${T7_TEMP:-?}°C\`
-📡 IP: \`${IP_ADDR}\` ${SSID:+(${SSID})}${THROTTLE_LINE}
+📡 IP: \`${IP_ADDR}\` ${SSID:+(${SSID})}${THROTTLE_LINE}"
+
+# T7 temp на USB-bridge почти всегда unavailable → не показываем "?°C"
+if [[ -n "$T7_TEMP" ]]; then
+    MSG+="
+🌡  T7: \`${T7_TEMP}°C\`"
+fi
+
+MSG+="
 
 *Storage*
 💾 T7: \`${T7_USED} / ${T7_TOTAL} (${T7_PCT}%)\`"
@@ -252,13 +259,38 @@ Check: \`/mnt/t7/usb-imports/\`"
 fi
 
 if [[ -f "$SUMMARY_QUEUE" && -s "$SUMMARY_QUEUE" ]]; then
-    MSG+="
+    # Группируем повторяющиеся "Installed: X" события в одну строку.
+    # Если их много (>3) — даём свёрнутый summary вместо 15 одинаковых строк.
+    INSTALLED_LIST=$(grep -E "Installed: " "$SUMMARY_QUEUE" 2>/dev/null \
+        | sed -E 's/.*Installed: ([A-Z_]+).*/\1/' | sort -u | tr '\n' ',' \
+        | sed 's/,$//; s/,/, /g')
+    INSTALLED_COUNT=$(echo "$INSTALLED_LIST" | tr ',' '\n' | grep -c .)
+
+    # Остальные события — то что НЕ "Installed:"
+    OTHER_EVENTS=$(grep -vE "Installed: " "$SUMMARY_QUEUE" 2>/dev/null || true)
+
+    if [[ "$INSTALLED_COUNT" -gt 0 ]] || [[ -n "$OTHER_EVENTS" ]]; then
+        MSG+="
 
 *Today's events*"
-    while IFS= read -r line; do
+    fi
+    if [[ "$INSTALLED_COUNT" -gt 3 ]]; then
         MSG+="
+🛠 Setup: $INSTALLED_COUNT components installed
+\`$INSTALLED_LIST\`"
+    elif [[ "$INSTALLED_COUNT" -gt 0 ]]; then
+        # Мало — выводим каждое отдельно
+        while IFS= read -r line; do
+            [[ -n "$line" ]] && MSG+="
 ${line}"
-    done < "$SUMMARY_QUEUE"
+        done < <(grep -E "Installed: " "$SUMMARY_QUEUE")
+    fi
+    # Прочие события (бэкапы, ошибки, throttle и т.п.) — всегда показываем
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && MSG+="
+${line}"
+    done <<< "$OTHER_EVENTS"
+
     > "$SUMMARY_QUEUE"
 fi
 

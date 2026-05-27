@@ -621,22 +621,23 @@ def _card(rect, title, title_color=MUTED, bg=PANEL, border=None):
 
 
 def _card_network(rect):
-    """NETWORK card — большой IP сверху, SSID/сигнал отдельной строкой ниже."""
+    """NETWORK card — большой hostname.local, мелкая строка с IP+SSID+сигналом."""
     inner = _card(rect, "NETWORK")
     ip = c_ip.get()
     wifi = c_wifi.get() or {"ssid": None, "signal": None}
+    host = f"{socket.gethostname()}.local"
     if ip:
-        ip_surf = F_LARGE.render(ip, True, FG)
-        screen.blit(ip_surf, (inner.x, inner.y))
+        # Большое: hostname.local — это то что юзер в браузер тычет
+        host_surf = F_LARGE.render(host, True, FG)
+        screen.blit(host_surf, (inner.x, inner.y))
+        # Малое: IP · SSID · signal — справочная информация
+        parts = [ip]
         ssid = wifi.get("ssid")
         sig = wifi.get("signal")
-        parts = []
         if ssid: parts.append(ssid)
         if sig is not None: parts.append(f"{sig} dBm")
-        if parts:
-            s = F_SMALL.render("  ·  ".join(parts), True, MUTED)
-            # отдельная строка ПОД IP — никакого наезжания
-            screen.blit(s, (inner.x, inner.y + ip_surf.get_height() + 2))
+        s = F_SMALL.render("  ·  ".join(parts), True, MUTED)
+        screen.blit(s, (inner.x, inner.y + host_surf.get_height() + 2))
     else:
         screen.blit(F_LARGE.render("offline", True, ERROR), (inner.x, inner.y))
 

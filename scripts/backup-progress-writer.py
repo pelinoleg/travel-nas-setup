@@ -39,6 +39,21 @@ PROGRESS_RE = re.compile(
 
 WRITE_INTERVAL = 1.0  # секунд между записями JSON
 
+# Debug log — позволяет понять что приходит от rsync и почему JSON не движется.
+# Если установлена env BACKUP_WRITER_DEBUG=1 — пишем каждую распарсенную строку.
+DEBUG_LOG = Path("/tmp/backup-progress-writer.debug.log")
+DEBUG = bool(os.environ.get("BACKUP_WRITER_DEBUG"))
+
+
+def debug(msg):
+    if not DEBUG:
+        return
+    try:
+        with open(DEBUG_LOG, "a") as f:
+            f.write(f"[{time.strftime('%H:%M:%S')}] {msg}\n")
+    except Exception:
+        pass
+
 
 def human_bytes(n):
     n = float(n)
@@ -90,9 +105,11 @@ def main():
         nonlocal last_write, last_data
         m = PROGRESS_RE.search(line)
         if not m:
+            debug(f"NO_MATCH: {line!r}")
             return
         now = time.time()
         if now - last_write < WRITE_INTERVAL:
+            debug(f"THROTTLE: {line.strip()}")
             return
         last_write = now
         try:
@@ -110,6 +127,7 @@ def main():
             "updated":    int(now),
         }
         atomic_write(last_data)
+        debug(f"WROTE: pct={last_data['percent']} size_done={size_done}")
 
     # rsync --info=progress2 обновляет процент через \r (без \n) —
     # text-mode `for line in sys.stdin` буферится и отдаёт только финальную
@@ -117,22 +135,31 @@ def main():
     stdin_fd  = sys.stdin.buffer
     stdout_fd = sys.stdout.buffer
     buf = bytearray()
+    bytes_seen = 0
+    last_heartbeat = time.time()
+    debug(f"writer started: source={args.source} device={args.device}")
     try:
         while True:
             chunk = stdin_fd.read(1)
             if not chunk:
                 break
             stdout_fd.write(chunk)
+            bytes_seen += 1
             if chunk in (b"\r", b"\n"):
                 stdout_fd.flush()
                 if buf:
                     try:
                         process_line(bytes(buf).decode("utf-8", errors="replace"))
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        debug(f"EXC: {e}")
                     buf.clear()
             else:
                 buf += chunk
+            # Heartbeat в debug каждые 3 сек — показать что writer жив и сколько байт прочитано
+            now = time.time()
+            if now - last_heartbeat > 3:
+                debug(f"alive: bytes_seen={bytes_seen} buf_len={len(buf)} last_pct={(last_data or {}).get('percent','?')}")
+                last_heartbeat = now
         if buf:
             try:
                 process_line(bytes(buf).decode("utf-8", errors="replace"))

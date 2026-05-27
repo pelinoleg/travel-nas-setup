@@ -201,7 +201,11 @@ START_TIME=$(date +%s)
 # --no-inc-recursive нужен чтобы PROGRESS2 считал глобальный процент.
 PROGRESS_WRITER="/usr/local/bin/backup-progress-writer.py"
 if [[ -x "$PROGRESS_WRITER" ]]; then
-    rsync -avh \
+    # stdbuf -o0: ОС-уровень unbuffered stdout у rsync. progress2 использует \r
+    # (без \n), поэтому line-buffering (-oL) не подходит — нужен byte-by-byte
+    # flush. --outbuf=N — rsync setvbuf(_IONBF) изнутри; stdbuf — гарант через
+    # LD_PRELOAD на случай если опция не сработает.
+    stdbuf -o0 rsync -avh \
         --info=progress2 --no-inc-recursive --outbuf=N \
         --stats \
         --no-owner --no-group --no-perms --chown=oleg:oleg \
@@ -214,7 +218,7 @@ if [[ -x "$PROGRESS_WRITER" ]]; then
         --exclude='System Volume Information' \
         --exclude='._*' \
         "$MOUNT_SRC/" "$TARGET_DIR/" 2>&1 \
-    | "$PROGRESS_WRITER" \
+    | BACKUP_WRITER_DEBUG=1 "$PROGRESS_WRITER" \
         --source photo \
         --device "$DEVICE" \
         --label "$LABEL" \

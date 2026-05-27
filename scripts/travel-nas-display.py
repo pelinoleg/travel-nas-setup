@@ -41,6 +41,15 @@ ERROR_LOG = Path("/tmp/travel-nas-display.error.log")
 
 T7_MOUNT = "/mnt/t7"
 
+SERVICES_CONF = Path("/etc/travel-nas/services.conf")
+SERVICES_DEFAULTS = [
+    ("CasaOS",      "http://{host}"),
+    ("Photoview",   "http://{host}:8000"),
+    ("yt-archiver", "http://{host}:8081"),
+    ("Samba",       "smb://{host}/travel-nas"),
+    ("SSH",         "ssh oleg@{host}"),
+]
+
 LOG_OPTIONS = [
     ("Photo backup",   "/mnt/t7/_logs/photo-backup.log"),
     ("NAS backup",     "__nas_latest__"),
@@ -420,6 +429,28 @@ def is_ap_mode():
     return bool(ip and ip.startswith("10.41."))
 
 
+def load_services():
+    """Возвращает [(name, url)] — из /etc/travel-nas/services.conf или дефолты.
+    {host}/{ip} в URL подставляются текущими значениями."""
+    items = SERVICES_DEFAULTS
+    if SERVICES_CONF.exists():
+        try:
+            parsed = []
+            for line in SERVICES_CONF.read_text().splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                parsed.append((k.strip(), v.strip()))
+            if parsed:
+                items = parsed
+        except Exception:
+            pass
+    ip = c_ip.get() or "?"
+    host = f"{socket.gethostname()}.local"
+    return [(n, u.replace("{host}", host).replace("{ip}", ip)) for n, u in items]
+
+
 def health_status():
     """Аггрегат: ('OK'|'WARN'|'ERR', color)."""
     bad, warn = False, False
@@ -532,6 +563,7 @@ PAGE_AP_INFO        = "ap_info"
 PAGE_AP_CONFIRM     = "ap_confirm"
 PAGE_REBOOT_CONFIRM = "reboot_confirm"
 PAGE_OFF_CONFIRM    = "off_confirm"
+PAGE_SERVICES       = "services"
 
 state = {
     "page":        PAGE_STATUS,
@@ -788,10 +820,12 @@ def page_menu():
     btns.append(Btn("Diff",    "nas_diff", r2, INFO))
     draw_button(btns[-2]); draw_button(btns[-1]); y += btn_h + gap
 
-    # View logs (full)
-    r = pygame.Rect(8, y, full_w, btn_h)
-    btns.append(Btn("View logs", "open_logs", r, INFO))
-    draw_button(btns[-1]); y += btn_h + gap
+    # View logs | Services
+    r1 = pygame.Rect(8, y, half_w, btn_h)
+    r2 = pygame.Rect(SCREEN_W - 8 - half_w, y, half_w, btn_h)
+    btns.append(Btn("View logs", "open_logs",     r1, INFO))
+    btns.append(Btn("Services",  "open_services", r2, INFO))
+    draw_button(btns[-2]); draw_button(btns[-1]); y += btn_h + gap
 
     # AP info | Force AP
     r1 = pygame.Rect(8, y, half_w, btn_h)
@@ -931,6 +965,45 @@ def page_log_view():
     return [pause, back]
 
 
+def page_services():
+    screen.fill(BG)
+    y = draw_top_strip("Services")
+    y += 8
+
+    items = load_services()
+    ip = c_ip.get()
+
+    # Header — host + IP
+    host = f"{socket.gethostname()}.local"
+    screen.blit(F_MED.render(host, True, FG), (10, y))
+    if ip:
+        ip_s = F_SMALL.render(ip, True, MUTED)
+        screen.blit(ip_s, (SCREEN_W - ip_s.get_width() - 10, y + 5))
+    y += 28
+    pygame.draw.line(screen, BTN_BG, (10, y), (SCREEN_W - 10, y), 1)
+    y += 8
+
+    # Compute per-row height so list fills available space evenly
+    bottom_btn_y = SCREEN_H - 60
+    available = bottom_btn_y - y - 8
+    n = max(1, len(items))
+    # Минимум 44px на запись (заголовок 18 + url 16 + воздух)
+    row_h = max(44, min(60, available // n))
+
+    for name, url in items:
+        # Имя сервиса
+        screen.blit(F_NORMAL.render(name, True, INFO), (10, y))
+        # URL под именем (или обрезка если очень длинный)
+        u = url
+        if len(u) > 38: u = u[:36] + "…"
+        screen.blit(F_SMALL.render(u, True, FG), (18, y + 20))
+        y += row_h
+
+    back = Btn("Back", "open_menu",
+               pygame.Rect(8, SCREEN_H - 54, SCREEN_W - 16, 46), MUTED)
+    draw_button(back); return [back]
+
+
 def page_ap_info():
     screen.fill(BG)
     y = draw_top_strip("AP info")
@@ -1032,6 +1105,7 @@ PAGES = {
     PAGE_AP_CONFIRM:     page_ap_confirm,
     PAGE_REBOOT_CONFIRM: page_reboot_confirm,
     PAGE_OFF_CONFIRM:    page_off_confirm,
+    PAGE_SERVICES:       page_services,
 }
 
 
@@ -1109,6 +1183,7 @@ def do_action(action):
     elif action == "toggle_log_pause":
         state["log_paused"] = not state.get("log_paused", False)
     elif action == "open_ap_info":      go(PAGE_AP_INFO)
+    elif action == "open_services":     go(PAGE_SERVICES)
     elif action == "open_ap_confirm":   go(PAGE_AP_CONFIRM)
     elif action == "open_reboot":       go(PAGE_REBOOT_CONFIRM)
     elif action == "open_off":          go(PAGE_OFF_CONFIRM)

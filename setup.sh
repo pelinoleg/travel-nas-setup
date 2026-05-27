@@ -752,6 +752,14 @@ if [[ -n "${DO_DISPLAY:-}" ]]; then
         # Helper для прогресса — парсит rsync, пишет JSON в /var/run/travel-nas/
         fetch_script "backup-progress-writer.py"    "$SCRIPT_DIR/backup-progress-writer.py"
 
+        # services.conf — список URL для страницы Services в дашборде.
+        # Не перезаписываем, если у юзера уже есть кастомный.
+        sudo mkdir -p /etc/travel-nas
+        if [[ ! -f /etc/travel-nas/services.conf ]]; then
+            fetch_conf_example "services.conf.example" /etc/travel-nas/services.conf
+            sudo chmod 0644 /etc/travel-nas/services.conf
+        fi
+
         DASHBOARD_USER="$(whoami)"
 
         # Runtime state directory: пишут и dashboard (oleg), и udev-скрипты (root).

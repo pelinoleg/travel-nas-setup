@@ -617,51 +617,46 @@ c_pmode = Cached(_power_mode, 5)
 
 def draw_top_strip(page_label=None):
     """Top-strip:
-       ● health-точка (mount/SMART/temp/disk — БЕЗ throttling)
-       hostname
-       ⚡ только если под-вольтаж ПРЯМО СЕЙЧАС (как PiOS taskbar)
-       <N>W @<F>G — потребление + текущий CPU max freq.
-         Цвет @<F>G отражает power-mode: зелёный=normal, оранжевый=saver.
-       HH:MM справа."""
+       Слева:    ● health-точка + hostname
+       Центр:    [⚡] power: <mode> <freq>GHz <W>W
+       Справа:   HH:MM"""
     pygame.draw.rect(screen, PANEL, (0, 0, SCREEN_W, 22))
     _, color = health_status()
     pygame.draw.circle(screen, color, (12, 11), 5)
 
-    x = 24
     host_text = page_label or socket.gethostname()
     host_surf = F_SMALL.render(host_text, True, FG)
-    screen.blit(host_surf, (x, 4))
-    x += host_surf.get_width() + 6
+    screen.blit(host_surf, (24, 4))
 
-    # ⚡ — ТОЛЬКО когда под-вольтаж сейчас
+    now_str = datetime.now().strftime("%H:%M")
+    t_surf = F_SMALL.render(now_str, True, MUTED)
+    screen.blit(t_surf, (SCREEN_W - t_surf.get_width() - 8, 4))
+
+    # === Центрированный блок «power: ...» ===
     th = c_throttle.get()
-    if th and th[0] == "NOW":
-        bolt = F_SMALL.render("⚡", True, ERROR)
-        screen.blit(bolt, (x, 4))
-        x += bolt.get_width() + 4
-
-    # power-mode (словом + цветом) → CPU max freq → W
     mode = c_pmode.get()
     mode_color = ACCENT if mode == "normal" else (WARN if mode == "saver" else MUTED)
-    if mode and mode != "unknown":
-        m_surf = F_SMALL.render(mode, True, mode_color)
-        screen.blit(m_surf, (x, 4))
-        x += m_surf.get_width() + 4
-
     mhz = c_cpu_max.get()
-    if mhz is not None:
-        f_surf = F_SMALL.render(f"{mhz:.1f}G", True, MUTED)
-        screen.blit(f_surf, (x, 4))
-        x += f_surf.get_width() + 4
-
     w = c_watts.get()
-    if w is not None:
-        w_surf = F_SMALL.render(f"{w}W", True, MUTED)
-        screen.blit(w_surf, (x, 4))
 
-    now = datetime.now().strftime("%H:%M")
-    t = F_SMALL.render(now, True, MUTED)
-    screen.blit(t, (SCREEN_W - t.get_width() - 8, 4))
+    pieces = []
+    if th and th[0] == "NOW":
+        pieces.append(F_SMALL.render("⚡", True, ERROR))
+    pieces.append(F_SMALL.render("power:", True, MUTED))
+    if mode and mode != "unknown":
+        pieces.append(F_SMALL.render(mode, True, mode_color))
+    if mhz is not None:
+        pieces.append(F_SMALL.render(f"{mhz:.1f}GHz", True, MUTED))
+    if w is not None:
+        pieces.append(F_SMALL.render(f"{w}W", True, MUTED))
+
+    GAP = 5
+    total_w = sum(p.get_width() for p in pieces) + GAP * (len(pieces) - 1)
+    bx = (SCREEN_W - total_w) // 2
+    for p in pieces:
+        screen.blit(p, (bx, 4))
+        bx += p.get_width() + GAP
+
     return 26
 
 

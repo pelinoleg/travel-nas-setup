@@ -802,58 +802,66 @@ def page_status():
 
 
 def page_menu():
+    """Меню разбито на 3 секции (NAS / INFO / SYSTEM) с заголовками-капсами
+    и цветной полоской — чтобы понятно было что к чему относится."""
     screen.fill(BG)
     y = draw_top_strip("Menu")
-    y += 12
+    y += 6
     btns = []
-    full_w = SCREEN_W - 16
-    half_w = (SCREEN_W - 28) // 2
-    btn_h = 52       # больше под палец
-    gap   = 12       # больше воздуха между кнопками
 
-    # NAS backup (primary, full width)
-    r = pygame.Rect(8, y, full_w, btn_h)
-    btns.append(Btn("NAS backup — run", "nas_run", r, ACCENT, primary=True))
-    draw_button(btns[-1]); y += btn_h + gap
+    margin   = 8
+    full_w   = SCREEN_W - margin * 2
+    half_w   = (SCREEN_W - margin * 2 - 10) // 2
+    btn_h    = 46
+    gap_row  = 8
+    sect_h   = 18
 
-    # dry-run | diff
-    r1 = pygame.Rect(8, y, half_w, btn_h)
-    r2 = pygame.Rect(SCREEN_W - 8 - half_w, y, half_w, btn_h)
-    btns.append(Btn("Dry-run", "nas_dry",  r1, INFO))
-    btns.append(Btn("Diff",    "nas_diff", r2, INFO))
-    draw_button(btns[-2]); draw_button(btns[-1]); y += btn_h + gap
+    def section(title, color):
+        nonlocal y
+        screen.blit(F_SMALL.render(title, True, color), (margin, y))
+        pygame.draw.line(screen, color,
+                         (margin, y + 14), (SCREEN_W - margin, y + 14), 1)
+        y += sect_h
 
-    # NAS status | Today (info-страницы со статистикой)
-    r1 = pygame.Rect(8, y, half_w, btn_h)
-    r2 = pygame.Rect(SCREEN_W - 8 - half_w, y, half_w, btn_h)
-    btns.append(Btn("NAS status", "open_nas_status", r1, INFO))
-    btns.append(Btn("Today",      "open_daily",      r2, INFO))
-    draw_button(btns[-2]); draw_button(btns[-1]); y += btn_h + gap
+    def row_full(label, action, color, primary=False):
+        nonlocal y
+        r = pygame.Rect(margin, y, full_w, btn_h)
+        b = Btn(label, action, r, color, primary=primary)
+        btns.append(b); draw_button(b)
+        y += btn_h + gap_row
 
-    # View logs | Services
-    r1 = pygame.Rect(8, y, half_w, btn_h)
-    r2 = pygame.Rect(SCREEN_W - 8 - half_w, y, half_w, btn_h)
-    btns.append(Btn("View logs", "open_logs",     r1, INFO))
-    btns.append(Btn("Services",  "open_services", r2, INFO))
-    draw_button(btns[-2]); draw_button(btns[-1]); y += btn_h + gap
+    def row_pair(l1, a1, c1, l2, a2, c2):
+        nonlocal y
+        r1 = pygame.Rect(margin, y, half_w, btn_h)
+        r2 = pygame.Rect(SCREEN_W - margin - half_w, y, half_w, btn_h)
+        b1 = Btn(l1, a1, r1, c1); b2 = Btn(l2, a2, r2, c2)
+        btns.extend([b1, b2])
+        draw_button(b1); draw_button(b2)
+        y += btn_h + gap_row
 
-    # AP info | Force AP
-    r1 = pygame.Rect(8, y, half_w, btn_h)
-    r2 = pygame.Rect(SCREEN_W - 8 - half_w, y, half_w, btn_h)
-    btns.append(Btn("AP info",  "open_ap_info",    r1, INFO))
-    btns.append(Btn("Force AP", "open_ap_confirm", r2, WARN))
-    draw_button(btns[-2]); draw_button(btns[-1]); y += btn_h + gap
+    # === NAS BACKUP ===
+    section("NAS BACKUP", ACCENT)
+    row_full("Run", "nas_run", ACCENT, primary=True)
+    row_pair("Dry-run", "nas_dry",  INFO,
+             "Diff",    "nas_diff", INFO)
 
-    # Reboot | Shutdown
-    r1 = pygame.Rect(8, y, half_w, btn_h)
-    r2 = pygame.Rect(SCREEN_W - 8 - half_w, y, half_w, btn_h)
-    btns.append(Btn("Reboot",   "open_reboot", r1, WARN))
-    btns.append(Btn("Shutdown", "open_off",    r2, ERROR))
-    draw_button(btns[-2]); draw_button(btns[-1])
+    # === INFO & STATUS ===
+    section("INFO & STATUS", INFO)
+    row_pair("NAS status", "open_nas_status", INFO,
+             "Today",      "open_daily",      INFO)
+    row_pair("Logs",       "open_logs",       INFO,
+             "Services",   "open_services",   INFO)
 
-    # Back — фикс в самом низу
+    # === SYSTEM ===
+    section("SYSTEM", WARN)
+    row_pair("AP info",    "open_ap_info",    INFO,
+             "Force AP",   "open_ap_confirm", WARN)
+    row_pair("Reboot",     "open_reboot",     WARN,
+             "Shutdown",   "open_off",        ERROR)
+
+    # Back — фиксирован внизу
     back = Btn("Back", "back_to_status",
-               pygame.Rect(8, SCREEN_H - btn_h - 8, full_w, btn_h), MUTED)
+               pygame.Rect(margin, SCREEN_H - btn_h - 8, full_w, btn_h), MUTED)
     draw_button(back); btns.append(back)
     return btns
 
@@ -1116,9 +1124,6 @@ def page_daily_summary():
         kv("CPU temp", f"{ct}°C" if ct else "?",
            ACCENT if (ct or 0) < 65 else (WARN if (ct or 0) < 75 else ERROR))
         t7 = data.get("t7") or {}
-        tt = t7.get("temp")
-        kv("T7 temp",  f"{tt}°C" if tt else "?",
-           ACCENT if (tt or 0) < 55 else (WARN if (tt or 0) < 65 else ERROR))
         ip = data.get("ip")
         ssid = data.get("ssid")
         kv("Network",  f"{ip or '?'}" + (f" ({ssid})" if ssid else ""))

@@ -126,7 +126,7 @@ fetch_conf_example() {
 # =============================================================================
 
 if [[ "${1:-}" == "--all" ]]; then
-    SELECTED="UPDATE UTILS HOSTNAME T7_MOUNT TG_NOTIFY SAMBA PI_BACKUP PHOTO_BACKUP NAS_BACKUP WATCHDOG SYS_MONITOR DAILY_SUM LOG2RAM ZRAM COMITUP CASAOS PHOTOVIEW DISPLAY DESKTOP"
+    SELECTED="UPDATE UTILS HOSTNAME T7_MOUNT TG_NOTIFY SAMBA PI_BACKUP PHOTO_BACKUP NAS_BACKUP WATCHDOG SYS_MONITOR DAILY_SUM LOG2RAM ZRAM COMITUP CASAOS PHOTOVIEW YTARCHIVER DISPLAY DESKTOP"
 elif [[ "${1:-}" == "--help" ]]; then
     cat << EOF
 Travel-NAS Setup v2
@@ -153,6 +153,7 @@ Components:
   COMITUP        Field WiFi AP mode
   CASAOS         For Photoview/Syncthing/etc
   PHOTOVIEW      Photo gallery via Docker (после CASAOS, путь /t7/* в UI)
+  YTARCHIVER     YouTube archiver via Docker (после CASAOS, UI на :8081)
   DISPLAY        MHS35 3.5" + Python dashboard
   DESKTOP        Desktop shortcuts (Pi Desktop)
 EOF
@@ -177,6 +178,7 @@ else
         "COMITUP"      "Полевой WiFi AP-режим"                            ON \
         "CASAOS"       "CasaOS (для Photoview/Syncthing)"                 ON \
         "PHOTOVIEW"    "Photoview (нужен CASAOS, путь /t7/* в UI)"        ON \
+        "YTARCHIVER"   "YT-Archiver (нужен CASAOS, UI на :8081)"          ON \
         "DISPLAY"      "MHS35 3.5\" + Python dashboard"                  ON \
         "DESKTOP"      "Ярлыки на десктоп Pi"                             ON \
         3>&1 1>&2 2>&3) || exit 0
@@ -800,7 +802,138 @@ EOF
 fi
 
 # =============================================================================
-# 18. DISPLAY (MHS35 + Python dashboard в X-kiosk режиме)
+# 18. YTARCHIVER — self-hosted YouTube archiver, появляется в CasaOS UI
+# =============================================================================
+# Compose-файл кладётся в /var/lib/casaos/apps/ytarchiver/ — CasaOS подхватывает
+# его автоматически благодаря x-casaos метаданным (icon, port_map, title).
+# Замечание: backend в исходном compose публикует порт 8000 (как Photoview).
+# Это вызвало бы конфликт → выкинули из ports. Frontend (8081) ходит к backend
+# через docker network ytarchiver_net и видит его по имени `backend`.
+if [[ -n "${DO_YTARCHIVER:-}" ]]; then
+    info "=== YT-Archiver ==="
+    if ! command -v docker &>/dev/null; then
+        mark_fail "YTARCHIVER" "Docker не установлен (сначала CASAOS)"
+    elif (
+        set -e
+        # Папки данных на T7 — bind mount внутрь контейнера. Владелец oleg
+        # чтобы yt-dlp процессы внутри могли писать.
+        sudo install -d -o "$(whoami)" -g "$(whoami)" /mnt/t7/media/YT-Archiver/data
+        sudo install -d -o "$(whoami)" -g "$(whoami)" /mnt/t7/media/YT-Archiver/video
+
+        APP_DIR=/var/lib/casaos/apps/ytarchiver
+        sudo mkdir -p "$APP_DIR"
+        sudo tee "$APP_DIR/docker-compose.yml" >/dev/null << 'EOF'
+name: ytarchiver
+services:
+  backend:
+    image: ghcr.io/pelinoleg/ytarchiver-backend:latest
+    container_name: ytarchiver-backend
+    hostname: ytarchiver-backend
+    restart: unless-stopped
+    cpu_shares: 90
+    deploy:
+      resources:
+        limits:
+          memory: "8453619712"
+    environment:
+      BETWEEN_DOWNLOADS_MAX_SECONDS: "15"
+      BETWEEN_DOWNLOADS_MIN_SECONDS: "5"
+      CORS_ORIGINS: "[*]"
+      DATA_DIR: /data
+      DB_PATH: /data/ytarchiver.db
+      DEFAULT_PLAYBACK_RATE: "1.0"
+      DEFAULT_QUALITY: "1080"
+      DEFAULT_RETENTION_DAYS: "0"
+      DELETE_AFTER_WATCHED_PERCENT: "0"
+      DOWNLOAD_DIR: /downloads
+      INITIAL_BACKFILL_HARD_CAP: "500"
+      LOG_LEVEL: INFO
+      MAX_VIDEOS_PER_CHANNEL_SCAN: "50"
+      MINI_PLAYER_ENABLED: "true"
+      MUSIC_PLAYBACK_RATE: "1.0"
+      MUSIC_QUEUE_PANEL_SIZE: "100"
+      PREVIEW_CRF: "27"
+      PREVIEW_SEGMENTS: "12"
+      PREVIEW_WIDTH: "480"
+      SPONSORBLOCK_API: https://sponsor.ajay.app
+      SPONSORBLOCK_REFRESH_DAYS: "7"
+      SYNC_INTERVAL_MINUTES: "240"
+      SYNC_JITTER_MINUTES: "60"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - ytarchiver_net
+    labels:
+      icon: https://upload.wikimedia.org/wikipedia/commons/0/09/YouTube_full-color_icon_%282017%29.svg
+    volumes:
+      - type: bind
+        source: /mnt/t7/media/YT-Archiver/data
+        target: /data
+      - type: bind
+        source: /mnt/t7/media/YT-Archiver/video
+        target: /downloads
+  frontend:
+    image: ghcr.io/pelinoleg/ytarchiver-frontend:latest
+    container_name: ytarchiver-frontend
+    hostname: ytarchiver-frontend
+    restart: unless-stopped
+    cpu_shares: 90
+    deploy:
+      resources:
+        limits:
+          memory: "8453619712"
+    depends_on:
+      backend:
+        condition: service_started
+        required: true
+    networks:
+      - ytarchiver_net
+    ports:
+      - target: 80
+        published: "8081"
+        protocol: tcp
+    labels:
+      icon: https://raw.githubusercontent.com/pelinoleg/ytarchiver/main/icon.png
+
+networks:
+  ytarchiver_net:
+    name: ytarchiver_ytarchiver_net
+    driver: bridge
+
+x-casaos:
+  architectures: [amd64, arm64]
+  author: pelinoleg
+  category: Media
+  description:
+    en_us: Self-hosted YouTube video archiver (yt-dlp + FastAPI + React)
+  developer: pelinoleg
+  icon: https://raw.githubusercontent.com/pelinoleg/ytarchiver/main/icon.png
+  index: /
+  main: frontend
+  port_map: "8081"
+  scheme: http
+  store_app_id: ytarchiver
+  tagline:
+    en_us: YouTube Archiver
+  title:
+    en_us: YT Archiver
+EOF
+        cd "$APP_DIR"
+        sudo docker compose pull
+        sudo docker compose up -d
+    ); then
+        mark_ok "YTARCHIVER" "http://travel-nas.local:8081"
+    else
+        mark_fail "YTARCHIVER" "docker compose failed"
+    fi
+fi
+
+# =============================================================================
+# 19. DISPLAY (MHS35 + Python dashboard в X-kiosk режиме)
 # =============================================================================
 if [[ -n "${DO_DISPLAY:-}" ]]; then
     info "=== MHS35 + Display dashboard (X11 kiosk) ==="
@@ -820,12 +953,14 @@ if [[ -n "${DO_DISPLAY:-}" ]]; then
         fetch_script "backup-progress-writer.py"    "$SCRIPT_DIR/backup-progress-writer.py"
 
         # services.conf — список URL для страницы Services в дашборде.
-        # Не перезаписываем, если у юзера уже есть кастомный.
+        # Не перезаписываем если уже есть. Делаем oleg-owned чтобы редактировать
+        # без sudo (там нет секретов).
         sudo mkdir -p /etc/travel-nas
         if [[ ! -f /etc/travel-nas/services.conf ]]; then
             fetch_conf_example "services.conf.example" /etc/travel-nas/services.conf
-            sudo chmod 0644 /etc/travel-nas/services.conf
         fi
+        sudo chown "$(whoami):$(whoami)" /etc/travel-nas/services.conf
+        sudo chmod 0644 /etc/travel-nas/services.conf
 
         DASHBOARD_USER="$(whoami)"
 

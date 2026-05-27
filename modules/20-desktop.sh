@@ -1,6 +1,12 @@
 [[ -n "${DO_DESKTOP:-}" ]] || return 0
 
 info "=== Desktop shortcuts ==="
+# На MHS35 320×480 пиктограммы LXDE дефолтного размера почти не помещаются
+# в один экран. Кладём только две самых нужных:
+#  - Travel-NAS Dashboard — вернуться в kiosk после Exit to desktop
+#  - Travel-NAS Update    — pull свежих скриптов из GitHub
+# Остальное (NAS backup, logs, files, edit services) доступно через
+# Menu внутри dashboard.
 if (
     set -e
     USER_HOME="/home/$(whoami)"
@@ -9,79 +15,63 @@ if (
         echo "Desktop folder not found"
         exit 1
     fi
-    cat > "$DESKTOP_DIR/NAS-Backup.desktop" << 'EOF'
-[Desktop Entry]
-Version=1.0
-Type=Application
-Name=NAS Backup
-Comment=Backup files from home UGREEN NAS to T7
-Exec=lxterminal -e "sudo /usr/local/bin/nas-backup.sh"
-Icon=drive-harddisk
-Terminal=false
-Categories=System;
-EOF
-    cat > "$DESKTOP_DIR/View-Logs.desktop" << 'EOF'
-[Desktop Entry]
-Version=1.0
-Type=Application
-Name=Travel-NAS Logs
-Comment=View all logs
-Exec=lxterminal -e "tail -F /mnt/t7/_logs/*.log"
-Icon=utilities-log-viewer
-Terminal=false
-Categories=System;
-EOF
-    # Запуск/возврат dashboard'а после "Exit to desktop"
+
     cat > "$DESKTOP_DIR/Travel-NAS-Dashboard.desktop" << 'EOF'
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Travel-NAS Dashboard
+Name=Dashboard
 Comment=Re-open the kiosk dashboard
 Exec=/usr/bin/python3 /usr/local/bin/travel-nas-display.py
 Icon=display
 Terminal=false
 Categories=System;
 EOF
-    # Setup wizard — re-fetch и launch
-    cat > "$DESKTOP_DIR/Travel-NAS-Setup.desktop" << 'EOF'
+
+    cat > "$DESKTOP_DIR/Travel-NAS-Update.desktop" << 'EOF'
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Travel-NAS Setup
-Comment=Re-run install wizard (fetches latest from GitHub)
-Exec=lxterminal --geometry=100x30 -e bash -c "cd ~ && travel-nas-setup; echo; echo 'Готово. Нажми Enter чтобы закрыть.'; read"
-Icon=system-software-install
+Name=Update
+Comment=Pull latest scripts from GitHub
+Exec=lxterminal --geometry=100x30 -e bash -c "travel-nas-update; echo; echo 'Готово. Нажми Enter чтобы закрыть.'; read"
+Icon=system-software-update
 Terminal=false
 Categories=System;
 EOF
-    # File manager на T7
-    cat > "$DESKTOP_DIR/T7-Files.desktop" << 'EOF'
-[Desktop Entry]
-Version=1.0
-Type=Application
-Name=T7 Files
-Comment=Open /mnt/t7 in file manager
-Exec=pcmanfm /mnt/t7
-Icon=folder
-Terminal=false
-Categories=System;
-EOF
-    # Редактирование services.conf (oleg-owned, sudo не нужен)
-    cat > "$DESKTOP_DIR/Edit-Services.desktop" << 'EOF'
-[Desktop Entry]
-Version=1.0
-Type=Application
-Name=Edit Services
-Comment=Edit dashboard services list (/etc/travel-nas/services.conf)
-Exec=lxterminal -e nano /etc/travel-nas/services.conf
-Icon=text-editor
-Terminal=false
-Categories=System;
-EOF
+
     chmod +x "$DESKTOP_DIR"/*.desktop
+    # Удаляем устаревшие ярлыки (если остались с прошлых установок)
+    rm -f "$DESKTOP_DIR/NAS-Backup.desktop" \
+          "$DESKTOP_DIR/View-Logs.desktop" \
+          "$DESKTOP_DIR/Travel-NAS-Logs.desktop" \
+          "$DESKTOP_DIR/Travel-NAS-Setup.desktop" \
+          "$DESKTOP_DIR/T7-Files.desktop" \
+          "$DESKTOP_DIR/Edit-Services.desktop" 2>/dev/null
+
+    # Уменьшаем размер иконок в pcmanfm-desktop (320×480 → дефолтные ~80px не лезут)
+    DCFG="$USER_HOME/.config/pcmanfm/LXDE-pi/desktop-items-0.conf"
+    mkdir -p "$(dirname "$DCFG")"
+    if [[ ! -f "$DCFG" ]]; then
+        cat > "$DCFG" << 'EOF'
+[*]
+wallpaper_mode=color
+desktop_bg=#000000
+desktop_fg=#ffffff
+desktop_font=Sans 8
+show_wm_menu=0
+show_documents=0
+show_trash=0
+show_mounts=0
+desktop_icon_size=36
+EOF
+    elif grep -q '^desktop_icon_size=' "$DCFG"; then
+        sed -i 's/^desktop_icon_size=.*/desktop_icon_size=36/' "$DCFG"
+    else
+        echo "desktop_icon_size=36" >> "$DCFG"
+    fi
 ); then
-    mark_ok "DESKTOP" "ярлыки на десктопе"
+    mark_ok "DESKTOP" "2 ярлыка, icon size 36"
 else
     mark_fail "DESKTOP" "Desktop folder не найден (не Desktop PiOS?)"
 fi

@@ -1433,10 +1433,41 @@ def do_action(action):
     elif action == "progress_open":     go(PAGE_PROGRESS)
 
     elif action == "do_force_ap":
-        subprocess.Popen(["sudo", "-n", "comitup-cli", "a"],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                         stdin=subprocess.DEVNULL, start_new_session=True)
-        toast("Switching to AP…", WARN); go(PAGE_STATUS)
+        # `comitup-cli a` не существует. Правильный путь:
+        # 1) выключить активные wifi-connection'ы через nmcli
+        # 2) рестартанyть comitup — он увидит что сети нет → стартует AP
+        try:
+            out = subprocess.check_output(
+                ["nmcli", "-t", "-f", "NAME,TYPE", "connection", "show", "--active"],
+                timeout=5,
+            ).decode()
+        except Exception:
+            out = ""
+        wifi_names = []
+        for line in out.splitlines():
+            parts = line.split(":")
+            if len(parts) >= 2 and "wireless" in parts[1]:
+                wifi_names.append(parts[0])
+
+        any_spawned = False
+        for n in wifi_names:
+            subprocess.Popen(
+                ["sudo", "-n", "/usr/bin/nmcli", "connection", "down", n],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL, start_new_session=True,
+            )
+            any_spawned = True
+        # Restart comitup — он переключится в AP если сети нет
+        subprocess.Popen(
+            ["sudo", "-n", "/usr/bin/systemctl", "restart", "comitup"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL, start_new_session=True,
+        )
+        if any_spawned:
+            toast("Switching to AP… (5-15 сек)", WARN)
+        else:
+            toast("No active wifi to drop", WARN)
+        go(PAGE_STATUS)
     elif action == "do_reboot":
         subprocess.Popen(["sudo", "-n", "/usr/bin/systemctl", "reboot"],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,

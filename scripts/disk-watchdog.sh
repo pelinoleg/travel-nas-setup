@@ -123,6 +123,8 @@ Likely need fsck."
 }
 
 # === Проверка 3: SMART здоровье ===
+# Для USB SSD пробуем разные device-types. Если ни один не сработал — пропускаем.
+# Тип "успешного" обнаружения SMART кешируется в /var/lib/travel-nas/smart-type.txt
 check_smart() {
     local device
     device=$(findmnt -n -o SOURCE "$T7_MOUNT" 2>/dev/null | sed 's/[0-9]*$//')
@@ -134,18 +136,54 @@ check_smart() {
         return 0
     fi
 
-    # USB SSD через USB-bridge — нужна опция -d sat
-    local smart_out
-    smart_out=$(sudo smartctl -a -d sat "$device" 2>/dev/null || sudo smartctl -a "$device" 2>/dev/null || echo "")
+    local cache_file="$STATE_DIR/smart-type.txt"
+    local smart_type=""
 
+    # Из кеша
+    if [[ -f "$cache_file" ]]; then
+        smart_type=$(cat "$cache_file")
+    fi
+
+    # Если кеша нет — пробуем подобрать
+    if [[ -z "$smart_type" ]]; then
+        local types_to_try=("sat" "scsi" "sntjmicron" "usbjmicron" "usbsunplus" "usbcypress" "sat,12" "sat,16")
+        for t in "${types_to_try[@]}"; do
+            local probe
+            probe=$(sudo smartctl -H -d "$t" "$device" 2>/dev/null || echo "")
+            # Любой из паттернов означает что SMART работает:
+            #   "result: PASSED" (sat/ata)
+            #   "Health Status: OK" (scsi)
+            if echo "$probe" | grep -qE "result:[[:space:]]+PASSED|Health Status:[[:space:]]+OK"; then
+                smart_type="$t"
+                echo "$smart_type" > "$cache_file"
+                log_msg "Detected working SMART type: -d $smart_type"
+                break
+            fi
+        done
+    fi
+
+    # Если ни один тип не работает — этот диск SMART не отдаёт. Тихо выходим.
+    if [[ -z "$smart_type" ]]; then
+        # Один раз пишем в лог что SMART недоступен, но не алертим
+        if [[ ! -f "$cache_file.unsupported" ]]; then
+            log_msg "SMART not available for $device (USB-bridge limitation). Skipping SMART checks."
+            touch "$cache_file.unsupported"
+        fi
+        return 0
+    fi
+
+    # Получаем SMART data
+    local smart_out
+    smart_out=$(sudo smartctl -a -d "$smart_type" "$device" 2>/dev/null || echo "")
     if [[ -z "$smart_out" ]]; then
         return 0
     fi
 
     # Температура
+    # Игнорируем temp=0 (некоторые USB-bridge не дают температуру — Samsung T7 в scsi-mode)
     local temp
-    temp=$(echo "$smart_out" | grep -iE "Temperature_Celsius|Current Drive Temperature|Temperature:" | head -1 | grep -oE '[0-9]+' | head -1)
-    if [[ -n "$temp" ]]; then
+    temp=$(echo "$smart_out" | grep -iE "Temperature_Celsius|Current Drive Temperature|^Temperature:" | head -1 | grep -oE '[0-9]+' | head -1)
+    if [[ -n "$temp" && "$temp" -gt 10 && "$temp" -lt 100 ]]; then
         if [[ "$temp" -ge "$TEMP_CRITICAL" ]]; then
             if can_alert "temp_critical"; then
                 tg_notify critical "T7 CRITICAL temperature" "Current: ${temp}°C (>${TEMP_CRITICAL}°C)
@@ -158,12 +196,16 @@ Stop heavy writes immediately."
         fi
     fi
 
-    # Проверка SMART health
-    if echo "$smart_out" | grep -qiE "FAILED|FAILING_NOW"; then
+    # Проверка SMART health — поддержка двух форматов:
+    # "result: PASSED|FAILED" (sat/ata)  и  "Health Status: OK|FAILED" (scsi)
+    local health_out
+    health_out=$(sudo smartctl -H -d "$smart_type" "$device" 2>/dev/null || echo "")
+
+    if echo "$health_out" | grep -qE "result:[[:space:]]+FAILED|Health Status:[[:space:]]+FAILED"; then
         if can_alert "smart_failed"; then
             tg_notify critical "T7 SMART FAILED" "Disk reports failure!
 Backup important data NOW.
-Run: \`sudo smartctl -a $device\`"
+Run: \`sudo smartctl -a -d $smart_type $device\`"
         fi
     fi
 }

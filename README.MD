@@ -126,7 +126,7 @@ Auto-sleep через 5 минут неактивности (xset dpms + sysfs b
 | `/backup` | Запустить NAS backup |
 | `/backup dry` | Dry-run |
 | `/logs [N]` | Хвосты всех логов (default 30 строк) |
-| `/power [home/field/emergency/auto]` | Переключить power-mode |
+| `/power [normal/saver/auto]` | Переключить power-mode (legacy `home/field/emergency` тоже принимаются) |
 | `/reboot` `/shutdown` | С подтверждением `/yes` в течение 30 секунд |
 | `/help` | Список команд |
 
@@ -134,17 +134,16 @@ Auto-sleep через 5 минут неактивности (xset dpms + sysfs b
 
 ## Power mode
 
-Авто-переключает CPU governor + Docker apps:
+Защита от просадок 5V когда работаешь от powerbank'а. Не выключает сервисы — только опускает планку CPU чтобы пиковый ток был ниже.
 
 | Режим | Когда | Что делает |
 |---|---|---|
-| `home` | Подключён к SSID из `HOME_SSIDS` | `ondemand` governor, все Docker apps запущены |
-| `field` | Любой другой WiFi или AP | `ondemand`, Docker не трогает |
-| `emergency` | Прямо сейчас под-вольтаж (`vcgencmd get_throttled & 0x7`) | `powersave` + остановить `HEAVY_DOCKER_APPS` |
+| `normal` | Питание нормальное (нет throttled бит) | `ondemand` governor — CPU поднимается до max по нагрузке |
+| `saver` | Под-вольтаж сейчас (`vcgencmd get_throttled & 0x7` ≠ 0) | `powersave` governor — CPU зажат на min частоте. **Всё остаётся работать, просто медленнее.** |
 
-Триггеры: NetworkManager dispatcher на connect/disconnect + system-monitor когда видит throttling.
+Триггеры авто-переключения: NetworkManager dispatcher на connect/disconnect + system-monitor когда видит throttling.
 
-Ручной override: `power-mode.sh home|field|emergency|auto|status`.
+Ручной: `power-mode.sh normal|saver|auto|status`. Legacy команды `home/field/emergency` тоже принимаются (map'ятся в `normal/normal/saver` соответственно).
 
 ## photo-backup надёжность
 
@@ -263,7 +262,7 @@ sudo journalctl -u disk-watchdog.service -f
 
 # Power mode
 power-mode.sh status
-sudo power-mode.sh home            # принудительно
+sudo power-mode.sh saver           # принудительно зажать CPU
 
 # Логи
 tail -F /mnt/t7/_logs/*.log

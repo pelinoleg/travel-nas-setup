@@ -1,32 +1,36 @@
 #!/bin/bash
 # =============================================================================
-# power-mode.sh — переключает CPU governor + heavy Docker apps под условия питания
+# power-mode.sh — переключает CPU governor под условия питания
 # =============================================================================
-# Режимы:
-#   home       — на домашнем Wi-Fi: ondemand, все Docker apps запущены
-#   field      — в поездке от хорошего питания: ondemand, как обычно
-#   emergency  — детектнули under-voltage прямо сейчас: powersave +
-#                остановить тяжёлые Docker apps (yt-archiver, photoview)
+# Принцип: ВСЁ должно работать. Когда от powerbank'а просядет питание —
+# вместо вырубания сервисов просто опускаем планку CPU так, чтобы Pi
+# не дёргала пиковые токи. Всё остаётся доступно, просто медленнее.
 #
-# Запуск:
-#   power-mode.sh              — авто-детект и применить
-#   power-mode.sh home|field|emergency  — принудительно
-#   power-mode.sh status       — показать текущий режим
+# Два режима:
+#   normal — ondemand governor (CPU поднимается до max когда нужно).
+#            Используется когда питания достаточно (нормальный БП / powerbank
+#            хорошо держит 5V).
+#   saver  — powersave governor (CPU зажат на min частоте).
+#            Используется когда vcgencmd сообщил под-вольтаж — пик потребления
+#            ниже, шанс что Pi устоит больше. Никакие сервисы НЕ выключаются.
 #
-# Авто-детект:
-#  - Если vcgencmd get_throttled & 0x7 (under-voltage сейчас) → emergency
-#  - Иначе если SSID в HOME_SSIDS → home
-#  - Иначе → field
+# Команды:
+#   power-mode.sh              — auto: smart выбор по throttled-биту
+#   power-mode.sh auto         — то же что без аргументов
+#   power-mode.sh normal       — принудительно normal
+#   power-mode.sh saver        — принудительно saver
+#   power-mode.sh status       — показать текущий
 #
-# Триггеры:
-#  - NetworkManager dispatcher при connect/disconnect
-#  - system-monitor.sh при детекте throttling
-#  - manually via dashboard / shell
+# Триггеры авто-переключения:
+#   • NetworkManager dispatcher при connect/disconnect (network up = новый
+#     БП был воткнут?)
+#   • system-monitor когда детектит throttling прямо сейчас
+#
+# Конфиг: /etc/travel-nas/power-mode.conf (HOME_SSIDS — legacy, не используется)
 # =============================================================================
 
 set -u
 
-CONFIG="/etc/travel-nas/power-mode.conf"
 STATE="/var/lib/travel-nas/power-mode.txt"
 LOG="/mnt/t7/_logs/power-mode.log"
 
@@ -36,93 +40,46 @@ log_msg() {
     echo "[$(date '+%d-%m-%Y %H:%M:%S')] $*" >> "$LOG"
 }
 
-# Дефолты на случай если config не существует
-HOME_SSIDS=()
-HEAVY_DOCKER_APPS=("ytarchiver" "photoview")
-
-if [[ -f "$CONFIG" ]]; then
-    # shellcheck source=/dev/null
-    source "$CONFIG"
-fi
-
-current_ssid() {
-    iw dev wlan0 link 2>/dev/null \
-        | awk -F: '/^\s*SSID:/ {sub(/^ /,"",$2); print $2; exit}'
-}
-
 throttled_now() {
     command -v vcgencmd &>/dev/null || return 1
     local v
     v=$(vcgencmd get_throttled 2>/dev/null | sed 's/throttled=//')
     [[ -z "$v" ]] && return 1
+    # Бит 0x1 = под-вольтаж СЕЙЧАС. Бит 0x4 = throttling СЕЙЧАС. 0x2 = freq cap.
     (( $((v)) & 0x7 )) && return 0
     return 1
 }
 
 detect_mode() {
     if throttled_now; then
-        echo "emergency"; return
+        echo "saver"
+    else
+        echo "normal"
     fi
-    local ssid; ssid=$(current_ssid)
-    if [[ -n "$ssid" && ${#HOME_SSIDS[@]} -gt 0 ]]; then
-        for h in "${HOME_SSIDS[@]}"; do
-            if [[ "$ssid" == "$h" ]]; then
-                echo "home"; return
-            fi
-        done
-    fi
-    echo "field"
 }
 
 apply_governor() {
     local gov="$1"
+    local count=0
     for f in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
-        echo "$gov" | sudo tee "$f" >/dev/null 2>&1 || true
-    done
-}
-
-heavy_apps_start() {
-    for app in "${HEAVY_DOCKER_APPS[@]}"; do
-        local compose=""
-        if   [[ -f "/var/lib/casaos/apps/$app/docker-compose.yml" ]]; then
-            compose="/var/lib/casaos/apps/$app/docker-compose.yml"
-        elif [[ -f "/opt/$app/docker-compose.yml" ]]; then
-            compose="/opt/$app/docker-compose.yml"
+        if echo "$gov" | sudo tee "$f" >/dev/null 2>&1; then
+            count=$((count + 1))
         fi
-        [[ -z "$compose" ]] && continue
-        sudo docker compose -f "$compose" up -d 2>/dev/null \
-            && log_msg "started: $app"
     done
-}
-
-heavy_apps_stop() {
-    for app in "${HEAVY_DOCKER_APPS[@]}"; do
-        local compose=""
-        if   [[ -f "/var/lib/casaos/apps/$app/docker-compose.yml" ]]; then
-            compose="/var/lib/casaos/apps/$app/docker-compose.yml"
-        elif [[ -f "/opt/$app/docker-compose.yml" ]]; then
-            compose="/opt/$app/docker-compose.yml"
-        fi
-        [[ -z "$compose" ]] && continue
-        sudo docker compose -f "$compose" stop 2>/dev/null \
-            && log_msg "stopped: $app"
-    done
+    echo "  governor=$gov applied to $count CPUs"
 }
 
 apply_mode() {
     local mode="$1"
     case "$mode" in
-        home)
+        normal)
+            echo "→ NORMAL mode (ondemand governor)"
             apply_governor ondemand
-            heavy_apps_start
             ;;
-        field)
-            apply_governor ondemand
-            # field не стартует и не стопит Docker — оставляет как было
-            ;;
-        emergency)
+        saver)
+            echo "→ SAVER mode (powersave governor — CPU зажат на min частоте)"
+            echo "  Все сервисы работают, просто медленнее."
             apply_governor powersave
-            heavy_apps_stop
             ;;
         *)
             echo "Unknown mode: $mode" >&2
@@ -133,21 +90,27 @@ apply_mode() {
     log_msg "mode applied: $mode"
 }
 
+# legacy: home/field/emergency → mapping на новые
+map_legacy() {
+    case "$1" in
+        home|field) echo "normal" ;;
+        emergency)  echo "saver" ;;
+        *)          echo "$1" ;;
+    esac
+}
+
 action="${1:-auto}"
+action=$(map_legacy "$action")
+
 case "$action" in
-    home|field|emergency)
+    normal|saver)
         apply_mode "$action"
         ;;
     status)
-        if [[ -f "$STATE" ]]; then
-            cat "$STATE"
-        else
-            echo "unknown"
-        fi
+        if [[ -f "$STATE" ]]; then cat "$STATE"; else echo "unknown"; fi
         ;;
     auto|"")
         m=$(detect_mode)
-        # Не перезаписываем если режим тот же — экономит docker calls
         prev=""
         [[ -f "$STATE" ]] && prev=$(cat "$STATE")
         if [[ "$m" != "$prev" ]]; then
@@ -156,7 +119,7 @@ case "$action" in
         echo "$m"
         ;;
     *)
-        echo "Usage: $0 [auto|home|field|emergency|status]" >&2
+        echo "Usage: $0 [auto|normal|saver|status]" >&2
         exit 1
         ;;
 esac

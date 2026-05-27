@@ -214,35 +214,35 @@ def cmd_power(token, chat_id, args):
             cur = POWER_MODE_FILE.read_text().strip() if POWER_MODE_FILE.exists() else "unknown"
         except Exception:
             cur = "unknown"
-        send(token, chat_id, f"""*Power mode* — авто-профили питания
+        send(token, chat_id, f"""*Power mode* — защита от просадок питания
 
-Текущий режим: `{cur}`
+Текущий: `{cur}`
 
-Что какой режим делает:
-🟢 `home` — на домашнем Wi-Fi (из списка `HOME_SSIDS`).
-   CPU governor = ondemand, все Docker apps запущены.
-🔵 `field` — в дороге, питание ок.
-   CPU governor = ondemand, ничего не трогаем.
-🟠 `emergency` — детект under-voltage сейчас.
-   governor = powersave, тяжёлые Docker apps (yt-archiver,
-   Photoview) останавливаются — спасаем питание.
-⚪ `auto` — пересчитать режим по текущему SSID/throttle.
+Зачем: когда работаешь от powerbank'а и Pi не хватает 5V, она
+обычно перезагружается. Этот режим заранее ограничивает максимальную
+частоту CPU чтобы пиковая нагрузка не уронила систему.
+*Сервисы не выключаются — всё работает, просто медленнее.*
+
+Режимы:
+🟢 `normal` — CPU ondemand (по нагрузке, до max частоты).
+   Используется при стабильном питании.
+🟡 `saver` — CPU powersave (зажат на min частоте).
+   Включается автоматически когда детектится under-voltage
+   (`vcgencmd get_throttled & 0x7`).
 
 Команды:
-`/power auto` — пересчитать сейчас
-`/power home` `/power field` `/power emergency` — форсировать
+`/power auto` — пересчитать сейчас по throttled-биту
+`/power normal` `/power saver` — принудительно
 
 Триггеры авто-переключения:
 • NetworkManager dispatcher при connect/disconnect
-• system-monitor когда видит throttling
-
-Конфиг: `/etc/travel-nas/power-mode.conf`
-В нём: `HOME_SSIDS` и `HEAVY_DOCKER_APPS`""")
+• system-monitor когда видит throttling""")
         return
 
     mode = args[0].lower()
-    if mode not in ("home", "field", "emergency", "auto", "status"):
-        send(token, chat_id, "Usage: `/power [home|field|emergency|auto|status]`\nБез аргумента → справка")
+    if mode not in ("normal", "saver", "auto", "status",
+                    "home", "field", "emergency"):  # legacy aliases
+        send(token, chat_id, "Usage: `/power [normal|saver|auto|status]`\nБез аргумента → справка")
         return
     try:
         out = subprocess.check_output(

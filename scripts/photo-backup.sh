@@ -202,7 +202,7 @@ START_TIME=$(date +%s)
 PROGRESS_WRITER="/usr/local/bin/backup-progress-writer.py"
 if [[ -x "$PROGRESS_WRITER" ]]; then
     rsync -avh \
-        --info=progress2 --no-inc-recursive \
+        --info=progress2 --no-inc-recursive --outbuf=N \
         --stats \
         --no-owner --no-group --no-perms --chown=oleg:oleg \
         --min-size="${MIN_SIZE}" \
@@ -224,7 +224,7 @@ if [[ -x "$PROGRESS_WRITER" ]]; then
     RSYNC_EXIT=${PIPESTATUS[0]}
 else
     rsync -avh \
-        --info=progress2 --no-inc-recursive \
+        --info=progress2 --no-inc-recursive --outbuf=N \
         --stats \
         --no-owner --no-group --no-perms --chown=oleg:oleg \
         --min-size="${MIN_SIZE}" \

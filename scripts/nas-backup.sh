@@ -119,11 +119,11 @@ run_module() {
     info "📦 $dest_folder ← NAS::$module"
     echo "   → $dest_path"
 
-    # --info=progress2 --no-inc-recursive нужен для глобального % и парсинга
+    # --info=progress2 --no-inc-recursive --outbuf=N нужен для глобального % и парсинга
     # writer-скриптом (вместо просто -P).
     local rsync_args=(
         -rltD
-        --info=progress2 --no-inc-recursive
+        --info=progress2 --no-inc-recursive --outbuf=N
         --no-owner --no-group --no-perms --chown=oleg:oleg
         --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r
         --omit-dir-times

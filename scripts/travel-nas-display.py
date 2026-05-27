@@ -22,7 +22,7 @@ from pathlib import Path
 from datetime import datetime
 
 # === Configuration ===
-SCREEN_W, SCREEN_H = 480, 320
+SCREEN_W, SCREEN_H = 320, 480  # вертикальный MHS35 (rotation 90)
 FPS = 10  # обновление UI
 
 STATE_DIR = Path("/var/run/travel-nas")
@@ -48,9 +48,8 @@ FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 
 # === Setup ===
-os.environ.setdefault("SDL_FBDEV", "/dev/fb0")
-os.environ.setdefault("SDL_VIDEODRIVER", "fbcon")
-os.environ.setdefault("SDL_NOMOUSE", "0")
+# Запускается внутри X-сессии PiOS, поэтому НЕ задаём SDL_FBDEV/SDL_VIDEODRIVER —
+# pygame сам подхватит X11 через переменные DISPLAY/XAUTHORITY.
 
 pygame.init()
 pygame.mouse.set_visible(False)
@@ -219,15 +218,15 @@ def get_progress():
 # === Backlight control ===
 
 def set_backlight(on: bool):
-    """Включает/выключает подсветку через vcgencmd."""
+    """Включает/выключает экран через DPMS (стандарт X11)."""
     global display_on
     if on == display_on:
         return
     try:
-        subprocess.run(
-            ["vcgencmd", "display_power", "1" if on else "0"],
-            timeout=2, capture_output=True
-        )
+        if on:
+            subprocess.run(["xset", "dpms", "force", "on"], timeout=2, capture_output=True)
+        else:
+            subprocess.run(["xset", "dpms", "force", "off"], timeout=2, capture_output=True)
         display_on = on
     except Exception:
         pass
@@ -238,88 +237,120 @@ def set_backlight(on: bool):
 def draw_status_screen():
     screen.fill(BG)
 
-    # Header
-    pygame.draw.rect(screen, (30, 30, 30), (0, 0, SCREEN_W, 36))
+    # Header (40px высотой)
+    pygame.draw.rect(screen, (30, 30, 30), (0, 0, SCREEN_W, 40))
     title = F_MED.render("🎒 Travel-NAS", True, FG)
-    screen.blit(title, (12, 6))
+    screen.blit(title, (10, 10))
 
     # Time
     now = datetime.now().strftime("%H:%M")
     t_surf = F_MED.render(now, True, FG)
-    screen.blit(t_surf, (SCREEN_W - t_surf.get_width() - 12, 6))
+    screen.blit(t_surf, (SCREEN_W - t_surf.get_width() - 10, 10))
+
+    y = 56
 
     # Network
-    y = 50
     ip = get_ip()
     ssid = get_ssid()
     if ip:
         net_color = ACCENT
         if ip.startswith("10.41."):
-            net_text = f"📡 AP MODE  ·  {ip}"
+            net_text = f"📡 AP: {ip}"
             net_color = WARN
         else:
-            net_text = f"📡 {ssid or 'eth'}  ·  {ip}"
+            net_text = f"📡 {ssid or 'eth'}"
     else:
         net_text = "📡 No network"
         net_color = ERROR
     surf = F_NORMAL.render(net_text, True, net_color)
-    screen.blit(surf, (12, y))
-    y += 28
+    screen.blit(surf, (10, y))
+    if ip and not ip.startswith("10.41."):
+        ip_surf = F_SMALL.render(ip, True, MUTED)
+        screen.blit(ip_surf, (10, y + 22))
+        y += 18
+    y += 30
 
     # Disk
     disk = get_disk_info()
     if disk:
         disk_pct = int(disk["pct"])
         disk_color = ACCENT if disk_pct < 80 else (WARN if disk_pct < 90 else ERROR)
-        text = f"💾 T7: {disk['used']} / {disk['total']}  ({disk['pct']}%)"
+        text_main = f"💾 T7: {disk['used']} / {disk['total']}"
+        text_sub = f"{disk['pct']}% used"
     else:
-        text = "💾 T7: not mounted"
+        text_main = "💾 T7: not mounted"
+        text_sub = ""
         disk_color = ERROR
         disk_pct = 0
-    surf = F_NORMAL.render(text, True, disk_color)
-    screen.blit(surf, (12, y))
+    surf = F_NORMAL.render(text_main, True, disk_color)
+    screen.blit(surf, (10, y))
     y += 22
+    if text_sub:
+        sub = F_SMALL.render(text_sub, True, MUTED)
+        screen.blit(sub, (10, y))
+        y += 18
     # Progress bar
-    bar_x, bar_w = 12, SCREEN_W - 24
+    bar_x, bar_w = 10, SCREEN_W - 20
     pygame.draw.rect(screen, BTN_BG, (bar_x, y, bar_w, 8), border_radius=4)
     fill_w = int(bar_w * disk_pct / 100)
     pygame.draw.rect(screen, disk_color, (bar_x, y, fill_w, 8), border_radius=4)
     y += 24
 
-    # Temperatures
+    # Temperatures и Uptime — в две строки чтоб влезли
     cpu_t = get_cpu_temp()
     t7_t = get_t7_temp()
-    cpu_color = ACCENT if (cpu_t or 0) < 65 else (WARN if cpu_t < 75 else ERROR)
+    cpu_color = ACCENT if (cpu_t or 0) < 65 else (WARN if (cpu_t or 0) < 75 else ERROR)
     t7_color = ACCENT if (t7_t or 0) < 55 else (WARN if (t7_t or 0) < 65 else ERROR)
-    cpu_text = F_NORMAL.render(f"🌡  Pi: {cpu_t or '?'}°C", True, cpu_color)
-    t7_text = F_NORMAL.render(f"T7: {t7_t or '?'}°C", True, t7_color)
-    screen.blit(cpu_text, (12, y))
-    screen.blit(t7_text, (160, y))
-    uptime_text = F_NORMAL.render(f"⏱  {get_uptime()}", True, FG)
-    screen.blit(uptime_text, (320, y))
-    y += 28
+
+    # Строка с температурами
+    cpu_text = F_NORMAL.render(f"🌡 Pi: {cpu_t or '?'}°C", True, cpu_color)
+    screen.blit(cpu_text, (10, y))
+    if t7_t:
+        t7_text = F_NORMAL.render(f"T7: {t7_t}°C", True, t7_color)
+        screen.blit(t7_text, (160, y))
+    y += 24
+
+    # Uptime
+    uptime_text = F_NORMAL.render(f"⏱ Uptime: {get_uptime()}", True, FG)
+    screen.blit(uptime_text, (10, y))
+    y += 30
+
+    # Разделитель
+    pygame.draw.line(screen, BTN_BG, (10, y), (SCREEN_W - 10, y), 1)
+    y += 12
 
     # Last photo backup
     last = get_last_photo_backup()
     if last:
-        text = F_NORMAL.render("📷 Last photo backup:", True, INFO)
-        screen.blit(text, (12, y))
-        y += 20
-        sub = F_SMALL.render(f"   {last['date']}  ·  {last['name']}", True, FG)
-        screen.blit(sub, (12, y))
+        text = F_NORMAL.render("📷 Last backup:", True, INFO)
+        screen.blit(text, (10, y))
+        y += 22
+        sub = F_SMALL.render(last['date'], True, FG)
+        screen.blit(sub, (10, y))
         y += 16
-        files = F_SMALL.render(f"   {last['files']} files", True, MUTED)
-        screen.blit(files, (12, y))
+        # Имя бэкапа — может быть длинным, обрезаем
+        name = last['name']
+        if len(name) > 32:
+            name = name[:30] + "…"
+        sub2 = F_SMALL.render(name, True, MUTED)
+        screen.blit(sub2, (10, y))
+        y += 16
+        files = F_SMALL.render(f"{last['files']} files", True, MUTED)
+        screen.blit(files, (10, y))
         y += 20
     else:
         text = F_NORMAL.render("📷 No backups yet", True, MUTED)
-        screen.blit(text, (12, y))
+        screen.blit(text, (10, y))
         y += 28
 
-    # Buttons (bottom)
-    btn_y = SCREEN_H - 50
-    btn_w = (SCREEN_W - 40) // 3
-    btn_h = 40
+    # Buttons — три кнопки вертикально внизу
+    btn_w = SCREEN_W - 20
+    btn_h = 44
+    btn_gap = 8
+    btn_count = 3
+    total_btn_h = btn_count * btn_h + (btn_count - 1) * btn_gap
+    btn_start_y = SCREEN_H - total_btn_h - 10
+
     btns = [
         ("NAS backup", "nas_backup", ACCENT),
         ("Logs", "logs", INFO),
@@ -327,10 +358,11 @@ def draw_status_screen():
     ]
     button_rects = {}
     for i, (label, action, color) in enumerate(btns):
-        x = 10 + i * (btn_w + 10)
-        rect = pygame.Rect(x, btn_y, btn_w, btn_h)
-        pygame.draw.rect(screen, BTN_BG, rect, border_radius=6)
-        pygame.draw.rect(screen, color, rect, 2, border_radius=6)
+        bx = 10
+        by = btn_start_y + i * (btn_h + btn_gap)
+        rect = pygame.Rect(bx, by, btn_w, btn_h)
+        pygame.draw.rect(screen, BTN_BG, rect, border_radius=8)
+        pygame.draw.rect(screen, color, rect, 2, border_radius=8)
         text = F_NORMAL.render(label, True, FG)
         text_rect = text.get_rect(center=rect.center)
         screen.blit(text, text_rect)
@@ -343,23 +375,26 @@ def draw_progress_screen(progress):
     screen.fill(BG)
 
     # Header
-    title = F_LARGE.render("📷 Backing up...", True, ACCENT)
-    screen.blit(title, (12, 12))
+    title = F_LARGE.render("📷 Backing up", True, ACCENT)
+    screen.blit(title, (10, 12))
 
     # Device info
-    y = 60
+    y = 56
     device = progress.get("device", "?")
     label = progress.get("label", "")
-    surf = F_MED.render(f"{label or device}", True, FG)
-    screen.blit(surf, (12, y))
-    y += 32
+    name = label or device
+    if len(name) > 26:
+        name = name[:24] + "…"
+    surf = F_MED.render(name, True, FG)
+    screen.blit(surf, (10, y))
+    y += 38
 
     # Progress bar (big)
     pct = progress.get("percent", 0)
-    bar_x = 12
+    bar_x = 10
     bar_y = y
-    bar_w = SCREEN_W - 24
-    bar_h = 32
+    bar_w = SCREEN_W - 20
+    bar_h = 36
     pygame.draw.rect(screen, BTN_BG, (bar_x, bar_y, bar_w, bar_h), border_radius=8)
     fill_w = int(bar_w * pct / 100)
     pygame.draw.rect(screen, ACCENT, (bar_x, bar_y, fill_w, bar_h), border_radius=8)
@@ -368,7 +403,7 @@ def draw_progress_screen(progress):
     pct_rect = pct_text.get_rect(center=(SCREEN_W // 2, bar_y + bar_h // 2))
     screen.blit(pct_text, pct_rect)
 
-    y += 50
+    y += bar_h + 24
 
     # Stats
     files_done = progress.get("files_done", 0)
@@ -379,53 +414,66 @@ def draw_progress_screen(progress):
     size_total = progress.get("size_total", "?")
 
     stats = [
-        f"Files: {files_done} / {files_total}",
-        f"Size:  {size_done} / {size_total}",
-        f"Speed: {speed}",
-        f"ETA:   {eta}",
+        ("Files", f"{files_done} / {files_total}"),
+        ("Size",  f"{size_done} / {size_total}"),
+        ("Speed", speed),
+        ("ETA",   eta),
     ]
-    for line in stats:
-        surf = F_NORMAL.render(line, True, FG)
-        screen.blit(surf, (12, y))
-        y += 22
+    for label_, value in stats:
+        l = F_NORMAL.render(f"{label_}:", True, MUTED)
+        v = F_NORMAL.render(str(value), True, FG)
+        screen.blit(l, (10, y))
+        screen.blit(v, (110, y))
+        y += 26
 
-    # Target path
-    y = SCREEN_H - 30
+    # Target path внизу
     target = progress.get("target", "")
     if target:
+        if len(target) > 38:
+            target = "…" + target[-36:]
         surf = F_TINY.render(target, True, MUTED)
-        screen.blit(surf, (12, y))
+        screen.blit(surf, (10, SCREEN_H - 24))
 
 
 def draw_ap_screen():
     screen.fill(BG)
 
+    # Header
     title = F_LARGE.render("📡 AP Mode", True, WARN)
-    screen.blit(title, (12, 12))
+    screen.blit(title, (10, 12))
 
     sub = F_NORMAL.render("WiFi setup required", True, MUTED)
-    screen.blit(sub, (12, 50))
+    screen.blit(sub, (10, 50))
 
-    # Try to get Comitup info
-    try:
-        out = subprocess.check_output(["comitup-cli", "i"], timeout=3).decode()
-        # Парсим примитивно
-        lines = out.split("\n")
-    except Exception:
-        lines = []
+    y = 100
 
-    y = 90
-    info_lines = [
-        f"WiFi: travel-nas-{socket.gethostname()[-4:]}",
-        "Password: (open / 12345678)",
-        "",
-        f"Web: http://{get_ip() or '10.41.0.1'}",
-        f"SSH: ssh oleg@{get_ip() or '10.41.0.1'}",
-    ]
-    for line in info_lines:
-        surf = F_NORMAL.render(line, True, FG)
-        screen.blit(surf, (12, y))
-        y += 26
+    # Имя AP
+    ap_name = f"travel-nas-{socket.gethostname()[-4:]}"
+    label = F_NORMAL.render("WiFi network:", True, MUTED)
+    screen.blit(label, (10, y))
+    y += 22
+    value = F_MED.render(ap_name, True, FG)
+    screen.blit(value, (10, y))
+    y += 40
+
+    # Pass
+    label = F_NORMAL.render("Password:", True, MUTED)
+    screen.blit(label, (10, y))
+    y += 22
+    value = F_NORMAL.render("(open network)", True, FG)
+    screen.blit(value, (10, y))
+    y += 40
+
+    # IP
+    ip = get_ip() or "10.41.0.1"
+    label = F_NORMAL.render("After connect:", True, MUTED)
+    screen.blit(label, (10, y))
+    y += 22
+    line1 = F_SMALL.render(f"Web: http://{ip}", True, FG)
+    screen.blit(line1, (10, y))
+    y += 18
+    line2 = F_SMALL.render(f"SSH: ssh oleg@{ip}", True, FG)
+    screen.blit(line2, (10, y))
 
 
 # === Touch / click handling ===
@@ -531,4 +579,4 @@ if __name__ == "__main__":
         with open("/var/log/travel-nas-display.error.log", "a") as f:
             f.write(f"[{datetime.now()}] {e}\n")
             f.write(traceback.format_exc())
-        raise
+			raise

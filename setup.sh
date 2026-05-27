@@ -732,56 +732,78 @@ EOF
 fi
 
 # =============================================================================
-# 18. DISPLAY (MHS35 + Python dashboard)
+# 18. DISPLAY (MHS35 + Python dashboard в X-kiosk режиме)
 # =============================================================================
 if [[ -n "${DO_DISPLAY:-}" ]]; then
-    info "=== MHS35 + Display dashboard ==="
+    info "=== MHS35 + Display dashboard (X11 kiosk) ==="
 
-    # Сначала ставим Python dashboard и systemd-сервис (это безопасно)
+    # Удаляем старый systemd-сервис если есть (мы переходим на autostart)
+    if [[ -f /etc/systemd/system/travel-nas-display.service ]]; then
+        sudo systemctl disable --now travel-nas-display.service 2>/dev/null || true
+        sudo rm -f /etc/systemd/system/travel-nas-display.service
+        sudo systemctl daemon-reload
+    fi
+
+    # Сам Python dashboard
     if (
         set -e
         fetch_script "travel-nas-display.py" "$SCRIPT_DIR/travel-nas-display.py"
-        sudo tee /etc/systemd/system/travel-nas-display.service > /dev/null << 'EOF'
-[Unit]
-Description=Travel-NAS Display Dashboard
-After=multi-user.target graphical.target
 
-[Service]
-Type=simple
-ExecStart=/usr/bin/python3 /usr/local/bin/travel-nas-display.py
-Restart=on-failure
-RestartSec=10
-StandardOutput=journal
-StandardError=journal
+        # Autostart .desktop — запустится при логине пользователя в LXDE
+        USER_HOME="/home/$(whoami)"
+        AUTOSTART_DIR="$USER_HOME/.config/autostart"
+        mkdir -p "$AUTOSTART_DIR"
 
-[Install]
-WantedBy=multi-user.target
+        cat > "$AUTOSTART_DIR/travel-nas-display.desktop" << EOF
+[Desktop Entry]
+Type=Application
+Name=Travel-NAS Display
+Comment=Dashboard for travel-NAS
+Exec=/usr/bin/python3 /usr/local/bin/travel-nas-display.py
+X-GNOME-Autostart-enabled=true
+StartupNotify=false
+Terminal=false
+Hidden=false
 EOF
-        sudo systemctl daemon-reload
-        sudo systemctl enable travel-nas-display.service
+
+        # Отключаем экранную заставку и blanking на этом экране
+        SS_DIR="$USER_HOME/.config/lxsession/LXDE-pi"
+        mkdir -p "$SS_DIR"
+        # Добавляем в autostart LXDE команды xset чтобы экран не гасло
+        AUTOSTART_FILE="$SS_DIR/autostart"
+        for cmd in \
+            "@xset s off" \
+            "@xset s noblank" \
+            "@xset -dpms"; do
+            if [[ ! -f "$AUTOSTART_FILE" ]] || ! grep -qF "$cmd" "$AUTOSTART_FILE"; then
+                echo "$cmd" >> "$AUTOSTART_FILE"
+            fi
+        done
     ); then
-        mark_ok "DISPLAY_SERVICE" "dashboard systemd готов"
+        mark_ok "DISPLAY_DASHBOARD" "autostart в LXDE готов"
     else
-        mark_fail "DISPLAY_SERVICE" "service setup failed"
+        mark_fail "DISPLAY_DASHBOARD" "autostart setup failed"
     fi
 
-    # Драйвер MHS35 — отдельно, потому что он ребутит
-    if [[ ! -d /tmp/LCD-show ]]; then
-        cd /tmp
-        sudo git clone https://github.com/goodtft/LCD-show.git 2>/dev/null || warn "git clone LCD-show failed"
-    fi
-
-    warn "Драйвер MHS35 РЕБУТИТ Pi! Все остальные компоненты должны быть уже установлены."
-    echo "Запустить драйвер MHS35 сейчас? (это ребут!) (y/N)"
-    read -r ans
-    if [[ "$ans" == "y" || "$ans" == "Y" ]]; then
-        cd /tmp/LCD-show
-        sudo "./MHS35-show" "90"
-        # сюда не дойдём — ребут
+    # Драйвер MHS35 — только если ещё не установлен
+    if [[ ! -f /etc/X11/xorg.conf.d/40-libinput.conf.bak ]] && [[ ! -d /tmp/LCD-show ]]; then
+        warn "Драйвер MHS35 РЕБУТИТ Pi!"
+        echo "Запустить установку драйвера MHS35 сейчас? (y/N)"
+        read -r ans
+        if [[ "$ans" == "y" || "$ans" == "Y" ]]; then
+            cd /tmp
+            if sudo git clone https://github.com/goodtft/LCD-show.git 2>/dev/null; then
+                cd /tmp/LCD-show
+                sudo "./MHS35-show" "90"
+                # сюда не дойдём — ребут
+            else
+                mark_fail "DISPLAY_DRIVER" "git clone failed"
+            fi
+        else
+            info "Драйвер MHS35 пропущен (запусти потом: cd /tmp/LCD-show && sudo ./MHS35-show 90)"
+        fi
     else
-        info "Запустишь драйвер позже:"
-        info "  cd /tmp/LCD-show && sudo ./MHS35-show 90"
-        mark_ok "DISPLAY_DRIVER" "отложено (запусти LCD-show 90 вручную)"
+        info "Драйвер MHS35 уже установлен"
     fi
 fi
 

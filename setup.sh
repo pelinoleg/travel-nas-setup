@@ -13,7 +13,7 @@
 # Поддерживает повторный запуск — пропустит уже установленное.
 # =============================================================================
 
-set -e
+set -u
 
 # ----- Цвета -----
 RED='\033[0;31m'
@@ -26,6 +26,48 @@ log()   { echo -e "${GREEN}[OK]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 err()   { echo -e "${RED}[ERR]${NC} $*"; }
 info()  { echo -e "${BLUE}[INFO]${NC} $*"; }
+
+# ----- Отчёт -----
+# Каждый компонент пишется в один из этих массивов
+INSTALLED=()
+FAILED=()
+SKIPPED=()
+
+# Помечаем успешно установленный компонент + шлём info в Telegram-summary
+mark_ok() {
+    local name="$1"
+    local detail="${2:-}"
+    INSTALLED+=("$name")
+    log "✓ $name${detail:+: $detail}"
+    # В Telegram-summary (если уже есть tg-notify)
+    if [[ -x /usr/local/bin/tg-notify.sh ]] && [[ -f /etc/travel-nas/tg-notify.conf ]]; then
+        /usr/local/bin/tg-notify.sh --append info "Installed" "$name${detail:+ — $detail}" 2>/dev/null || true
+    fi
+}
+
+# Помечаем упавший компонент + кидаем алерт в Telegram
+mark_fail() {
+    local name="$1"
+    local reason="${2:-unknown}"
+    FAILED+=("$name: $reason")
+    err "✗ $name FAILED: $reason"
+    if [[ -x /usr/local/bin/tg-notify.sh ]] && [[ -f /etc/travel-nas/tg-notify.conf ]]; then
+        /usr/local/bin/tg-notify.sh -l warning "Install failed: $name" "$reason" 2>/dev/null || true
+    fi
+}
+
+# Запускает команду, не прерывая скрипт при ошибке
+try() {
+    local desc="$1"
+    shift
+    if "$@"; then
+        return 0
+    else
+        local code=$?
+        warn "$desc — exit $code"
+        return "$code"
+    fi
+}
 
 # ----- Базовые переменные -----
 REPO_RAW="https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/main"
@@ -133,9 +175,9 @@ else
         "LOG2RAM"      "Логи в RAM (microSD friendly)"                    ON \
         "ZRAM"         "Сжатый swap"                                       ON \
         "COMITUP"      "Полевой WiFi AP-режим"                            ON \
-        "CASAOS"       "CasaOS (для Photoview/Syncthing)"                 OFF \
-        "PHOTOVIEW"    "Photoview (нужен CASAOS)"                         OFF \
-        "DISPLAY"      "MHS35 3.5\" + Python dashboard"                  OFF \
+        "CASAOS"       "CasaOS (для Photoview/Syncthing)"                 ON \
+        "PHOTOVIEW"    "Photoview (нужен CASAOS)"                         ON \
+        "DISPLAY"      "MHS35 3.5\" + Python dashboard"                  ON \
         "DESKTOP"      "Ярлыки на десктоп Pi"                             ON \
         3>&1 1>&2 2>&3) || exit 0
 fi
@@ -155,9 +197,15 @@ sudo chmod 755 "$CONFIG_DIR"
 # =============================================================================
 if [[ -n "${DO_UPDATE:-}" ]]; then
     info "=== Update ==="
-    sudo apt-get update
-    sudo apt-get upgrade -y
-    log "System updated"
+    if (
+        set -e
+        sudo apt-get update
+        sudo apt-get upgrade -y
+    ); then
+        mark_ok "UPDATE" "apt upgrade OK"
+    else
+        mark_fail "UPDATE" "apt update/upgrade failed"
+    fi
 fi
 
 # =============================================================================
@@ -165,15 +213,18 @@ fi
 # =============================================================================
 if [[ -n "${DO_UTILS:-}" ]]; then
     info "=== Utilities ==="
-    sudo apt-get install -y \
+    if sudo apt-get install -y \
         htop ncdu tmux git tree jq curl wget \
         smartmontools nvme-cli rsync sshpass \
         libimage-exiftool-perl \
         whiptail dialog \
         ifupdown net-tools wireless-tools \
         python3-pip python3-pygame python3-evdev \
-        avahi-daemon
-    log "Utilities installed"
+        avahi-daemon; then
+        mark_ok "UTILS"
+    else
+        mark_fail "UTILS" "apt install failed"
+    fi
 fi
 
 # =============================================================================
@@ -181,124 +232,85 @@ fi
 # =============================================================================
 if [[ -n "${DO_HOSTNAME:-}" ]]; then
     info "=== Hostname ==="
-    CURRENT_HOST=$(hostname)
-    if [[ "$CURRENT_HOST" != "travel-nas" ]]; then
-        sudo hostnamectl set-hostname travel-nas
-        # Обновляем /etc/hosts
-        sudo sed -i "s/127.0.1.1\s*$CURRENT_HOST/127.0.1.1\ttravel-nas/" /etc/hosts
-        log "Hostname changed: $CURRENT_HOST → travel-nas"
-        warn "После ребута имя будет travel-nas.local"
+    if (
+        set -e
+        CURRENT_HOST=$(hostname)
+        if [[ "$CURRENT_HOST" != "travel-nas" ]]; then
+            sudo hostnamectl set-hostname travel-nas
+            sudo sed -i "s/127.0.1.1\s*$CURRENT_HOST/127.0.1.1\ttravel-nas/" /etc/hosts
+        fi
+    ); then
+        mark_ok "HOSTNAME" "travel-nas"
     else
-        info "Hostname уже travel-nas"
+        mark_fail "HOSTNAME" "hostnamectl failed"
     fi
 fi
 
 # =============================================================================
-# 4. T7 MOUNT (предполагаем что диск уже в ext4!)
+# 4. T7 MOUNT
 # =============================================================================
 if [[ -n "${DO_T7_MOUNT:-}" ]]; then
     info "=== T7 Mount ==="
 
-    # Ищем диск по label "t7"
     T7_DEV=$(sudo blkid -L "$T7_LABEL" 2>/dev/null || echo "")
 
     if [[ -z "$T7_DEV" ]]; then
-        warn "Диск с label '$T7_LABEL' не найден."
-        warn "T7 должен быть отформатирован в ext4 с меткой 't7'."
-        warn "Команды для форматирования (СОТРЁТ ВСЕ ДАННЫЕ):"
+        mark_fail "T7_MOUNT" "диск с label '$T7_LABEL' не найден — отформатируй в ext4"
+        warn "Команды:"
         warn "  sudo wipefs -a /dev/sdX"
-        warn "  sudo parted /dev/sdX --script mklabel gpt"
-        warn "  sudo parted /dev/sdX --script mkpart primary ext4 0% 100%"
+        warn "  sudo parted /dev/sdX --script mklabel gpt mkpart primary ext4 0% 100%"
         warn "  sudo mkfs.ext4 -L t7 -m 0 /dev/sdX1"
-        warn ""
-        warn "Где /dev/sdX — это твой T7 (проверь через lsblk)"
-        warn "Пропускаю T7_MOUNT."
     else
-        T7_UUID=$(sudo blkid -s UUID -o value "$T7_DEV")
-        info "Найден T7: $T7_DEV (UUID: $T7_UUID)"
-
-        # Создаём точку монтирования
-        sudo mkdir -p "$T7_MOUNT"
-
-        # Добавляем в fstab если ещё нет
-        if ! grep -q "$T7_UUID" /etc/fstab; then
-            echo "UUID=$T7_UUID $T7_MOUNT ext4 defaults,nofail,noatime 0 2" | sudo tee -a /etc/fstab > /dev/null
-            log "T7 добавлен в /etc/fstab"
-        fi
-
-        # Монтируем если ещё нет
-        if ! mountpoint -q "$T7_MOUNT"; then
-            sudo mount "$T7_MOUNT" && log "T7 примонтирован в $T7_MOUNT" || err "Не удалось примонтировать"
+        if (
+            set -e
+            T7_UUID=$(sudo blkid -s UUID -o value "$T7_DEV")
+            sudo mkdir -p "$T7_MOUNT"
+            if ! grep -q "$T7_UUID" /etc/fstab; then
+                echo "UUID=$T7_UUID $T7_MOUNT ext4 defaults,nofail,noatime 0 2" | sudo tee -a /etc/fstab > /dev/null
+            fi
+            if ! mountpoint -q "$T7_MOUNT"; then
+                sudo mount "$T7_MOUNT"
+            fi
+            echo "T7_UUID=\"$T7_UUID\"" | sudo tee "$CONFIG_DIR/t7-info.conf" > /dev/null
+            sudo chmod 644 "$CONFIG_DIR/t7-info.conf"
+            sudo mkdir -p "$T7_MOUNT/nas-backup/"{_deleted,_logs}
+            sudo mkdir -p "$T7_MOUNT/usb-imports" "$T7_MOUNT/pi-config-backups" "$T7_MOUNT/media" "$T7_MOUNT/sync" "$T7_MOUNT/_logs"
+        ); then
+            mark_ok "T7_MOUNT" "$T7_DEV → $T7_MOUNT"
         else
-            info "T7 уже примонтирован"
+            mark_fail "T7_MOUNT" "ошибка монтирования"
         fi
-
-        # Сохраняем UUID для других скриптов (нужно photo-backup чтобы исключать себя)
-        echo "T7_UUID=\"$T7_UUID\"" | sudo tee "$CONFIG_DIR/t7-info.conf" > /dev/null
-        sudo chmod 644 "$CONFIG_DIR/t7-info.conf"
-
-        # Создаём структуру папок на T7
-        sudo mkdir -p "$T7_MOUNT/nas-backup/"{_deleted,_logs}
-        sudo mkdir -p "$T7_MOUNT/usb-imports"
-        sudo mkdir -p "$T7_MOUNT/pi-config-backups"
-        sudo mkdir -p "$T7_MOUNT/media"
-        sudo mkdir -p "$T7_MOUNT/sync"
-        sudo mkdir -p "$T7_MOUNT/_logs"
-        sudo chmod 755 "$T7_MOUNT"
-
-        log "Структура папок T7 создана"
     fi
 fi
 
 # =============================================================================
-# 5. TG_NOTIFY — Telegram helper
+# 5. TG_NOTIFY
 # =============================================================================
 if [[ -n "${DO_TG_NOTIFY:-}" ]]; then
     info "=== Telegram notifications ==="
-
-    fetch_script "tg-notify.sh" "$SCRIPT_DIR/tg-notify.sh"
-
-    # Создаём конфиг если нет
-    if [[ ! -f "$CONFIG_DIR/tg-notify.conf" ]]; then
-        echo ""
-        info "Нужны Telegram bot token и chat_id."
-        info "Если ещё не создал — следуй инструкции на экране, потом запусти setup снова."
-        echo ""
-
-        TG_TOKEN=$(whiptail --inputbox \
-            "Telegram bot token (получи у @BotFather):\n\nПропусти если хочешь настроить потом — будет работать без уведомлений." \
-            14 70 "" 3>&1 1>&2 2>&3) || TG_TOKEN=""
-
-        TG_CHAT_ID=""
-        if [[ -n "$TG_TOKEN" ]]; then
-            TG_CHAT_ID=$(whiptail --inputbox \
-                "Telegram chat_id (твой ID, открой https://api.telegram.org/botTOKEN/getUpdates):" \
-                12 70 "" 3>&1 1>&2 2>&3) || TG_CHAT_ID=""
-        fi
-
-        # Пишем конфиг
-        sudo tee "$CONFIG_DIR/tg-notify.conf" > /dev/null << EOF
-# Telegram bot configuration
-# Изменить позже: sudo nano /etc/travel-nas/tg-notify.conf
-
+    if (
+        set -e
+        fetch_script "tg-notify.sh" "$SCRIPT_DIR/tg-notify.sh"
+        if [[ ! -f "$CONFIG_DIR/tg-notify.conf" ]]; then
+            TG_TOKEN=$(whiptail --inputbox "Telegram bot token (от @BotFather):\nПусто = пропустить." 12 70 "" 3>&1 1>&2 2>&3) || TG_TOKEN=""
+            TG_CHAT_ID=""
+            if [[ -n "$TG_TOKEN" ]]; then
+                TG_CHAT_ID=$(whiptail --inputbox "Telegram chat_id:" 10 70 "" 3>&1 1>&2 2>&3) || TG_CHAT_ID=""
+            fi
+            sudo tee "$CONFIG_DIR/tg-notify.conf" > /dev/null << EOF
 TG_BOT_TOKEN="$TG_TOKEN"
 TG_CHAT_ID="$TG_CHAT_ID"
 HOSTNAME_LABEL="Travel-NAS"
 EOF
-        sudo chmod 600 "$CONFIG_DIR/tg-notify.conf"
-        log "Конфиг создан: $CONFIG_DIR/tg-notify.conf (chmod 600)"
-
-        # Тестовое сообщение
-        if [[ -n "$TG_TOKEN" && -n "$TG_CHAT_ID" ]]; then
-            info "Отправляю тест..."
-            if "$SCRIPT_DIR/tg-notify.sh" success "Travel-NAS setup" "Telegram настроен. Получаешь это значит работает."; then
-                log "Тест отправлен — проверь Telegram"
-            else
-                warn "Тест не отправился — проверь токен и chat_id"
+            sudo chmod 600 "$CONFIG_DIR/tg-notify.conf"
+            if [[ -n "$TG_TOKEN" && -n "$TG_CHAT_ID" ]]; then
+                "$SCRIPT_DIR/tg-notify.sh" success "Travel-NAS setup" "Telegram настроен" || true
             fi
         fi
+    ); then
+        mark_ok "TG_NOTIFY"
     else
-        info "Конфиг уже существует"
+        mark_fail "TG_NOTIFY" "config wizard failed"
     fi
 fi
 
@@ -307,25 +319,20 @@ fi
 # =============================================================================
 if [[ -n "${DO_SAMBA:-}" ]]; then
     info "=== Samba ==="
-
-    if ! command -v smbd &>/dev/null; then
-        sudo apt-get install -y samba samba-common-bin
-    fi
-
-    # Определяем путь шары
-    if mountpoint -q "$T7_MOUNT"; then
-        SHARE_PATH="$T7_MOUNT"
-    else
-        SHARE_PATH="/home/$(whoami)/share"
-        sudo mkdir -p "$SHARE_PATH"
-        sudo chmod 777 "$SHARE_PATH"
-        warn "T7 не примонтирован — шара указывает на $SHARE_PATH"
-        warn "После монтирования T7 поправь: sudo sed -i 's|path = $SHARE_PATH|path = $T7_MOUNT|' /etc/samba/smb.conf"
-    fi
-
-    # Добавляем шару если ещё нет
-    if ! sudo grep -q "^\[travel-nas\]" /etc/samba/smb.conf 2>/dev/null; then
-        sudo tee -a /etc/samba/smb.conf > /dev/null << EOF
+    if (
+        set -e
+        if ! command -v smbd &>/dev/null; then
+            sudo apt-get install -y samba samba-common-bin
+        fi
+        if mountpoint -q "$T7_MOUNT"; then
+            SHARE_PATH="$T7_MOUNT"
+        else
+            SHARE_PATH="/home/$(whoami)/share"
+            sudo mkdir -p "$SHARE_PATH"
+            sudo chmod 777 "$SHARE_PATH"
+        fi
+        if ! sudo grep -q "^\[travel-nas\]" /etc/samba/smb.conf 2>/dev/null; then
+            sudo tee -a /etc/samba/smb.conf > /dev/null << EOF
 
 [travel-nas]
    comment = Travel NAS storage
@@ -339,14 +346,14 @@ if [[ -n "${DO_SAMBA:-}" ]]; then
    force user = nobody
    force group = nogroup
 EOF
-        log "Шара [travel-nas] добавлена → $SHARE_PATH"
+        fi
+        sudo systemctl restart smbd nmbd
+        sudo systemctl enable smbd nmbd
+    ); then
+        mark_ok "SAMBA"
     else
-        info "Шара уже настроена"
+        mark_fail "SAMBA" "install/config failed"
     fi
-
-    sudo systemctl restart smbd nmbd
-    sudo systemctl enable smbd nmbd
-    log "Samba запущена"
 fi
 
 # =============================================================================
@@ -354,16 +361,17 @@ fi
 # =============================================================================
 if [[ -n "${DO_PI_BACKUP:-}" ]]; then
     info "=== Pi config backup ==="
-
-    fetch_script "pi-config-backup.sh" "$SCRIPT_DIR/pi-config-backup.sh"
-
-    # Добавляем в cron root: каждое воскресенье в 03:00
-    CRON_LINE="0 3 * * 0 $SCRIPT_DIR/pi-config-backup.sh"
-    if ! sudo crontab -l 2>/dev/null | grep -qF "$SCRIPT_DIR/pi-config-backup.sh"; then
-        (sudo crontab -l 2>/dev/null; echo "$CRON_LINE") | sudo crontab -
-        log "Cron добавлен: воскресенье 03:00"
+    if (
+        set -e
+        fetch_script "pi-config-backup.sh" "$SCRIPT_DIR/pi-config-backup.sh"
+        CRON_LINE="0 3 * * 0 $SCRIPT_DIR/pi-config-backup.sh"
+        if ! sudo crontab -l 2>/dev/null | grep -qF "$SCRIPT_DIR/pi-config-backup.sh"; then
+            (sudo crontab -l 2>/dev/null; echo "$CRON_LINE") | sudo crontab -
+        fi
+    ); then
+        mark_ok "PI_BACKUP" "cron: воскр 03:00"
     else
-        info "Cron уже настроен"
+        mark_fail "PI_BACKUP" "cron failed"
     fi
 fi
 
@@ -372,43 +380,24 @@ fi
 # =============================================================================
 if [[ -n "${DO_PHOTO_BACKUP:-}" ]]; then
     info "=== Photo backup ==="
-
-    fetch_script "photo-backup.sh" "$SCRIPT_DIR/photo-backup.sh"
-
-    # Читаем T7 UUID
-    T7_UUID=""
-    if [[ -f "$CONFIG_DIR/t7-info.conf" ]]; then
-        # shellcheck source=/dev/null
-        source "$CONFIG_DIR/t7-info.conf"
-    fi
-
-    # Создаём конфиг если нет
-    if [[ ! -f "$CONFIG_DIR/photo-backup.conf" ]]; then
-        sudo tee "$CONFIG_DIR/photo-backup.conf" > /dev/null << EOF
-# Photo backup configuration
-# Изменить: sudo nano /etc/travel-nas/photo-backup.conf
-
-# Целевая папка
+    if (
+        set -e
+        fetch_script "photo-backup.sh" "$SCRIPT_DIR/photo-backup.sh"
+        T7_UUID=""
+        if [[ -f "$CONFIG_DIR/t7-info.conf" ]]; then
+            source "$CONFIG_DIR/t7-info.conf"
+        fi
+        if [[ ! -f "$CONFIG_DIR/photo-backup.conf" ]]; then
+            sudo tee "$CONFIG_DIR/photo-backup.conf" > /dev/null << EOF
 DEST="$T7_MOUNT/usb-imports"
-
-# Авторазмонтирование после бэкапа
 AUTO_UMOUNT=true
-
-# UUID нашего T7 — чтобы НЕ бэкапить сам себя
 T7_UUID="${T7_UUID:-}"
-
-# Минимальный размер файла для копирования (байт)
 MIN_SIZE=1
-
-# Сколько секунд ждать пока devmon (CasaOS) смонтирует
 WAIT_FOR_DEVMON=3
 EOF
-        sudo chmod 644 "$CONFIG_DIR/photo-backup.conf"
-        log "Конфиг создан"
-    fi
-
-    # systemd unit
-    sudo tee /etc/systemd/system/photo-backup@.service > /dev/null << 'EOF'
+            sudo chmod 644 "$CONFIG_DIR/photo-backup.conf"
+        fi
+        sudo tee /etc/systemd/system/photo-backup@.service > /dev/null << 'EOF'
 [Unit]
 Description=Photo Backup for %i
 After=local-fs.target network.target
@@ -419,18 +408,17 @@ ExecStart=/usr/local/bin/photo-backup.sh /dev/%i
 User=root
 TimeoutStartSec=7200
 EOF
-
-    # udev rule
-    sudo tee /etc/udev/rules.d/99-photo-backup.rules > /dev/null << 'EOF'
-# Photo Backup: запускаем при подключении USB-карт ридера
+        sudo tee /etc/udev/rules.d/99-photo-backup.rules > /dev/null << 'EOF'
 ACTION=="add", KERNEL=="sd[a-z][0-9]", SUBSYSTEM=="block", ENV{ID_BUS}=="usb", \
     TAG+="systemd", ENV{SYSTEMD_WANTS}+="photo-backup@%k.service"
 EOF
-
-    sudo systemctl daemon-reload
-    sudo udevadm control --reload-rules
-    log "Photo-backup готов"
-    info "Тест: sudo /usr/local/bin/photo-backup.sh /dev/sdX1"
+        sudo systemctl daemon-reload
+        sudo udevadm control --reload-rules
+    ); then
+        mark_ok "PHOTO_BACKUP"
+    else
+        mark_fail "PHOTO_BACKUP" "udev/systemd setup failed"
+    fi
 fi
 
 # =============================================================================
@@ -438,35 +426,21 @@ fi
 # =============================================================================
 if [[ -n "${DO_NAS_BACKUP:-}" ]]; then
     info "=== NAS backup ==="
-
-    # Зависимость
-    if ! command -v sshpass &>/dev/null; then
-        sudo apt-get install -y sshpass
-    fi
-
-    fetch_script "nas-backup.sh" "$SCRIPT_DIR/nas-backup.sh"
-
-    # Создаём конфиг с whiptail wizard
-    if [[ ! -f "$CONFIG_DIR/nas-backup.conf" ]]; then
-        info "Настройка NAS-backup..."
-
-        NAS_HOST=$(whiptail --inputbox "NAS IP-адрес:" 10 60 "192.168.1.95" 3>&1 1>&2 2>&3) || exit 0
-        NAS_USER=$(whiptail --inputbox "NAS rsync username:" 10 60 "oleg" 3>&1 1>&2 2>&3) || exit 0
-        NAS_PASS=$(whiptail --passwordbox "NAS rsync password:" 10 60 3>&1 1>&2 2>&3) || exit 0
-
-        sudo tee "$CONFIG_DIR/nas-backup.conf" > /dev/null << EOF
-# NAS backup configuration
-# Адаптируй модули под свой NAS!
-# Формат: "rsync_module|local_folder"
-
+    if (
+        set -e
+        if ! command -v sshpass &>/dev/null; then
+            sudo apt-get install -y sshpass
+        fi
+        fetch_script "nas-backup.sh" "$SCRIPT_DIR/nas-backup.sh"
+        if [[ ! -f "$CONFIG_DIR/nas-backup.conf" ]]; then
+            NAS_HOST=$(whiptail --inputbox "NAS IP:" 10 60 "192.168.1.95" 3>&1 1>&2 2>&3) || NAS_HOST="192.168.1.95"
+            NAS_USER=$(whiptail --inputbox "NAS user:" 10 60 "oleg" 3>&1 1>&2 2>&3) || NAS_USER="oleg"
+            NAS_PASS=$(whiptail --passwordbox "NAS password:" 10 60 3>&1 1>&2 2>&3) || NAS_PASS=""
+            sudo tee "$CONFIG_DIR/nas-backup.conf" > /dev/null << EOF
 NAS_HOST="$NAS_HOST"
 NAS_USER="$NAS_USER"
 NAS_PASS="$NAS_PASS"
-
-# Где сохранять
 DEST="$T7_MOUNT/nas-backup"
-
-# Список модулей (адаптируй под свой NAS)
 MODULES=(
     "home|Personal"
     "docker|Docker"
@@ -474,31 +448,18 @@ MODULES=(
     "PMedia|PMedia"
     "Music|Music"
 )
-
-# Исключения rsync
 EXCLUDES=(
-    "_gsdata_"
-    ".DS_Store"
-    "Thumbs.db"
-    "@eaDir/"
-    "#recycle/"
-    ".Trash*"
-    "*.tmp"
-    ".cache/"
-    "node_modules/"
-    "__pycache__/"
-    "vendor/"
-    ".next/"
-    ".nuxt/"
-    "dist/"
-    "build/"
-    ".git/"
-    ".svn/"
+    "_gsdata_" ".DS_Store" "Thumbs.db" "@eaDir/" "#recycle/"
+    ".Trash*" "*.tmp" ".cache/" "node_modules/" "__pycache__/"
+    "vendor/" ".next/" ".nuxt/" "dist/" "build/" ".git/" ".svn/"
 )
 EOF
-        sudo chmod 600 "$CONFIG_DIR/nas-backup.conf"
-        log "Конфиг создан: $CONFIG_DIR/nas-backup.conf"
-        info "Отредактируй MODULES под свой NAS: sudo nano $CONFIG_DIR/nas-backup.conf"
+            sudo chmod 600 "$CONFIG_DIR/nas-backup.conf"
+        fi
+    ); then
+        mark_ok "NAS_BACKUP"
+    else
+        mark_fail "NAS_BACKUP" "config failed"
     fi
 fi
 
@@ -507,11 +468,10 @@ fi
 # =============================================================================
 if [[ -n "${DO_WATCHDOG:-}" ]]; then
     info "=== Disk watchdog ==="
-
-    fetch_script "disk-watchdog.sh" "$SCRIPT_DIR/disk-watchdog.sh"
-
-    # systemd service + timer
-    sudo tee /etc/systemd/system/disk-watchdog.service > /dev/null << 'EOF'
+    if (
+        set -e
+        fetch_script "disk-watchdog.sh" "$SCRIPT_DIR/disk-watchdog.sh"
+        sudo tee /etc/systemd/system/disk-watchdog.service > /dev/null << 'EOF'
 [Unit]
 Description=Travel-NAS disk watchdog
 
@@ -519,8 +479,7 @@ Description=Travel-NAS disk watchdog
 Type=oneshot
 ExecStart=/usr/local/bin/disk-watchdog.sh
 EOF
-
-    sudo tee /etc/systemd/system/disk-watchdog.timer > /dev/null << 'EOF'
+        sudo tee /etc/systemd/system/disk-watchdog.timer > /dev/null << 'EOF'
 [Unit]
 Description=Run disk-watchdog every 5 minutes
 
@@ -532,10 +491,13 @@ Unit=disk-watchdog.service
 [Install]
 WantedBy=timers.target
 EOF
-
-    sudo systemctl daemon-reload
-    sudo systemctl enable --now disk-watchdog.timer
-    log "Watchdog запущен (каждые 5 мин)"
+        sudo systemctl daemon-reload
+        sudo systemctl enable --now disk-watchdog.timer
+    ); then
+        mark_ok "WATCHDOG" "каждые 5 мин"
+    else
+        mark_fail "WATCHDOG" "systemd setup failed"
+    fi
 fi
 
 # =============================================================================
@@ -543,10 +505,10 @@ fi
 # =============================================================================
 if [[ -n "${DO_SYS_MONITOR:-}" ]]; then
     info "=== System monitor ==="
-
-    fetch_script "system-monitor.sh" "$SCRIPT_DIR/system-monitor.sh"
-
-    sudo tee /etc/systemd/system/system-monitor.service > /dev/null << 'EOF'
+    if (
+        set -e
+        fetch_script "system-monitor.sh" "$SCRIPT_DIR/system-monitor.sh"
+        sudo tee /etc/systemd/system/system-monitor.service > /dev/null << 'EOF'
 [Unit]
 Description=Travel-NAS system monitor
 
@@ -554,8 +516,7 @@ Description=Travel-NAS system monitor
 Type=oneshot
 ExecStart=/usr/local/bin/system-monitor.sh
 EOF
-
-    sudo tee /etc/systemd/system/system-monitor.timer > /dev/null << 'EOF'
+        sudo tee /etc/systemd/system/system-monitor.timer > /dev/null << 'EOF'
 [Unit]
 Description=Run system-monitor every 5 minutes
 
@@ -567,10 +528,13 @@ Unit=system-monitor.service
 [Install]
 WantedBy=timers.target
 EOF
-
-    sudo systemctl daemon-reload
-    sudo systemctl enable --now system-monitor.timer
-    log "System monitor запущен"
+        sudo systemctl daemon-reload
+        sudo systemctl enable --now system-monitor.timer
+    ); then
+        mark_ok "SYS_MONITOR"
+    else
+        mark_fail "SYS_MONITOR" "systemd setup failed"
+    fi
 fi
 
 # =============================================================================
@@ -578,10 +542,10 @@ fi
 # =============================================================================
 if [[ -n "${DO_DAILY_SUM:-}" ]]; then
     info "=== Daily summary ==="
-
-    fetch_script "daily-summary.sh" "$SCRIPT_DIR/daily-summary.sh"
-
-    sudo tee /etc/systemd/system/daily-summary.service > /dev/null << 'EOF'
+    if (
+        set -e
+        fetch_script "daily-summary.sh" "$SCRIPT_DIR/daily-summary.sh"
+        sudo tee /etc/systemd/system/daily-summary.service > /dev/null << 'EOF'
 [Unit]
 Description=Travel-NAS daily summary
 
@@ -589,8 +553,7 @@ Description=Travel-NAS daily summary
 Type=oneshot
 ExecStart=/usr/local/bin/daily-summary.sh
 EOF
-
-    sudo tee /etc/systemd/system/daily-summary.timer > /dev/null << 'EOF'
+        sudo tee /etc/systemd/system/daily-summary.timer > /dev/null << 'EOF'
 [Unit]
 Description=Daily summary at 21:00
 
@@ -602,10 +565,13 @@ Unit=daily-summary.service
 [Install]
 WantedBy=timers.target
 EOF
-
-    sudo systemctl daemon-reload
-    sudo systemctl enable --now daily-summary.timer
-    log "Daily summary запланирован на 21:00"
+        sudo systemctl daemon-reload
+        sudo systemctl enable --now daily-summary.timer
+    ); then
+        mark_ok "DAILY_SUM" "21:00"
+    else
+        mark_fail "DAILY_SUM" "systemd setup failed"
+    fi
 fi
 
 # =============================================================================
@@ -613,62 +579,68 @@ fi
 # =============================================================================
 if [[ -n "${DO_LOG2RAM:-}" ]]; then
     info "=== Log2ram ==="
-
-    if ! dpkg -l | grep -q log2ram; then
-        echo "deb http://packages.azlux.fr/debian/ bookworm main" | sudo tee /etc/apt/sources.list.d/azlux.list
-        sudo wget -qO /etc/apt/trusted.gpg.d/azlux-archive-keyring.gpg https://azlux.fr/repo.gpg
-        sudo apt-get update
-        sudo apt-get install -y log2ram
-        log "Log2ram установлен"
+    if (
+        set -e
+        if ! dpkg -l | grep -q log2ram; then
+            echo "deb http://packages.azlux.fr/debian/ bookworm main" | sudo tee /etc/apt/sources.list.d/azlux.list
+            sudo wget -qO /etc/apt/trusted.gpg.d/azlux-archive-keyring.gpg https://azlux.fr/repo.gpg
+            sudo apt-get update
+            sudo apt-get install -y log2ram
+        fi
+    ); then
+        mark_ok "LOG2RAM"
     else
-        info "Log2ram уже установлен"
+        mark_fail "LOG2RAM" "install failed"
     fi
 fi
 
 # =============================================================================
-# 14. ZRAM
+# 14. ZRAM (не критично — PiOS уже использует встроенный zram)
 # =============================================================================
 if [[ -n "${DO_ZRAM:-}" ]]; then
     info "=== ZRAM ==="
-
-    # ZRAM конфликтует с уже работающим встроенным zram в PiOS.
-    # Делаем не-критичным: ставим, но не падаем если рестарт не удался.
     if ! dpkg -l | grep -q zram-tools; then
         sudo apt-get install -y zram-tools || warn "zram-tools install failed"
     fi
     sudo sed -i 's/^#\?ALGO=.*/ALGO=zstd/' /etc/default/zramswap 2>/dev/null || true
     sudo sed -i 's/^#\?PERCENT=.*/PERCENT=50/' /etc/default/zramswap 2>/dev/null || true
 
-    # Перезапуск может упасть если уже есть zram0 от PiOS — это OK
     if sudo systemctl restart zramswap 2>/dev/null; then
-        log "ZRAM настроен (zstd, 50%)"
+        mark_ok "ZRAM" "zstd, 50%"
     else
-        warn "zramswap не запустился — возможно PiOS уже использует zram. Это не критично."
-        warn "Проверь: zramctl"
+        warn "zramswap не запустился (PiOS уже использует встроенный zram — это норма)"
+        mark_ok "ZRAM" "уже работает (встроенный)"
     fi
 
-    # Swappiness
-    if ! grep -q "vm.swappiness" /etc/sysctl.conf; then
+    if [[ -f /etc/sysctl.conf ]] && ! grep -q "vm.swappiness" /etc/sysctl.conf; then
         echo "vm.swappiness=10" | sudo tee -a /etc/sysctl.conf > /dev/null
         sudo sysctl -p > /dev/null 2>&1 || true
     fi
-    log "Swappiness = 10"
 fi
 
 # =============================================================================
-# 15. COMITUP
+# 15. COMITUP (через deb-пакет — рекомендованный авторами способ)
 # =============================================================================
 if [[ -n "${DO_COMITUP:-}" ]]; then
     info "=== Comitup (field WiFi) ==="
+    if (
+        set -e
+        if ! dpkg -l | grep -q "^ii.*comitup "; then
+            # Чистим старые подходы которые не работают на Trixie
+            sudo rm -f /etc/apt/sources.list.d/comitup.list 2>/dev/null || true
+            sudo rm -f /etc/apt/trusted.gpg.d/davesteele-comitup-archive-keyring.gpg 2>/dev/null || true
 
-    if ! dpkg -l | grep -q comitup; then
-        echo "deb http://davesteele.github.io/comitup/repo comitup main" | sudo tee /etc/apt/sources.list.d/comitup.list
-        sudo wget -qO /etc/apt/trusted.gpg.d/davesteele-comitup-archive-keyring.gpg https://davesteele.github.io/comitup/deb/davesteele-comitup-apt-source.gpg
-        sudo apt-get update
-        sudo apt-get install -y comitup
-        log "Comitup установлен"
+            TMPDEB=$(mktemp --suffix=.deb)
+            wget -qO "$TMPDEB" "https://davesteele.github.io/comitup/deb/davesteele-comitup-apt-source_1.3_all.deb"
+            sudo dpkg -i "$TMPDEB"
+            rm -f "$TMPDEB"
+            sudo apt-get update
+            sudo apt-get install -y comitup
+        fi
+    ); then
+        mark_ok "COMITUP"
     else
-        info "Comitup уже установлен"
+        mark_fail "COMITUP" "deb install failed"
     fi
 fi
 
@@ -677,18 +649,20 @@ fi
 # =============================================================================
 if [[ -n "${DO_CASAOS:-}" ]]; then
     info "=== CasaOS ==="
-
     if command -v casaos-cli &>/dev/null; then
-        info "CasaOS уже установлен"
+        mark_ok "CASAOS" "уже установлен"
     else
         warn "Установка CasaOS, ~10 минут..."
-        if ! command -v curl &>/dev/null; then
-            sudo apt-get install -y curl
-        fi
-        curl -fsSL https://get.casaos.io | sudo bash || warn "Установка не прошла"
-
-        if command -v casaos-cli &>/dev/null; then
-            log "CasaOS установлен → http://travel-nas.local"
+        if (
+            set -e
+            if ! command -v curl &>/dev/null; then
+                sudo apt-get install -y curl
+            fi
+            curl -fsSL https://get.casaos.io | sudo bash
+        ); then
+            mark_ok "CASAOS" "http://travel-nas.local"
+        else
+            mark_fail "CASAOS" "install script failed"
         fi
     fi
 
@@ -701,7 +675,6 @@ if [[ -n "${DO_CASAOS:-}" ]]; then
         for dev in $FSTAB_DEVS; do
             if ! grep -q "ignore-device $dev" /etc/conf.d/devmon; then
                 sudo sed -i "s|ARGS=\"\(.*\)\"|ARGS=\"\1 --ignore-device $dev\"|" /etc/conf.d/devmon
-                log "devmon ignore: $dev"
             fi
         done
         sudo systemctl restart devmon@devmon.service 2>/dev/null || true
@@ -709,15 +682,14 @@ if [[ -n "${DO_CASAOS:-}" ]]; then
 fi
 
 # =============================================================================
-# 17. PHOTOVIEW (после CasaOS)
+# 17. PHOTOVIEW
 # =============================================================================
 if [[ -n "${DO_PHOTOVIEW:-}" ]]; then
     info "=== Photoview ==="
-
     if ! command -v docker &>/dev/null; then
-        warn "Docker не установлен. Сначала установи CasaOS или Docker."
-    else
-        # Создаём compose-файл
+        mark_fail "PHOTOVIEW" "Docker не установлен (сначала CASAOS)"
+    elif (
+        set -e
         sudo mkdir -p /opt/photoview
         sudo tee /opt/photoview/docker-compose.yml > /dev/null << EOF
 version: "3"
@@ -751,8 +723,11 @@ services:
       - $T7_MOUNT/usb-imports:/photos:ro
 EOF
         cd /opt/photoview
-        sudo docker compose up -d || warn "Не удалось запустить Photoview"
-        log "Photoview → http://travel-nas.local:8000"
+        sudo docker compose up -d
+    ); then
+        mark_ok "PHOTOVIEW" "http://travel-nas.local:8000"
+    else
+        mark_fail "PHOTOVIEW" "docker compose failed"
     fi
 fi
 
@@ -760,23 +735,13 @@ fi
 # 18. DISPLAY (MHS35 + Python dashboard)
 # =============================================================================
 if [[ -n "${DO_DISPLAY:-}" ]]; then
-    info "=== MHS35 + Display ==="
+    info "=== MHS35 + Display dashboard ==="
 
-    # Драйвер MHS35
-    if [[ ! -d /tmp/LCD-show ]]; then
-        cd /tmp
-        sudo git clone https://github.com/goodtft/LCD-show.git
-    fi
-
-    warn "ВНИМАНИЕ: установка драйвера MHS35 ребутает Pi!"
-    warn "Перед ребутом сохранится скрипт dashboard."
-    echo "Продолжить? (y/N)"
-    read -r ans
-
-    # Сначала ставим Python dashboard и systemd-сервис
-    fetch_script "travel-nas-display.py" "$SCRIPT_DIR/travel-nas-display.py"
-
-    sudo tee /etc/systemd/system/travel-nas-display.service > /dev/null << 'EOF'
+    # Сначала ставим Python dashboard и systemd-сервис (это безопасно)
+    if (
+        set -e
+        fetch_script "travel-nas-display.py" "$SCRIPT_DIR/travel-nas-display.py"
+        sudo tee /etc/systemd/system/travel-nas-display.service > /dev/null << 'EOF'
 [Unit]
 Description=Travel-NAS Display Dashboard
 After=multi-user.target graphical.target
@@ -792,17 +757,31 @@ StandardError=journal
 [Install]
 WantedBy=multi-user.target
 EOF
-    sudo systemctl daemon-reload
-    sudo systemctl enable travel-nas-display.service
-    log "Display dashboard service создан (запустится после ребута)"
+        sudo systemctl daemon-reload
+        sudo systemctl enable travel-nas-display.service
+    ); then
+        mark_ok "DISPLAY_SERVICE" "dashboard systemd готов"
+    else
+        mark_fail "DISPLAY_SERVICE" "service setup failed"
+    fi
 
+    # Драйвер MHS35 — отдельно, потому что он ребутит
+    if [[ ! -d /tmp/LCD-show ]]; then
+        cd /tmp
+        sudo git clone https://github.com/goodtft/LCD-show.git 2>/dev/null || warn "git clone LCD-show failed"
+    fi
+
+    warn "Драйвер MHS35 РЕБУТИТ Pi! Все остальные компоненты должны быть уже установлены."
+    echo "Запустить драйвер MHS35 сейчас? (это ребут!) (y/N)"
+    read -r ans
     if [[ "$ans" == "y" || "$ans" == "Y" ]]; then
         cd /tmp/LCD-show
         sudo "./MHS35-show" "90"
-        # Сюда не дойдём — ребут
+        # сюда не дойдём — ребут
     else
-        info "Запустишь драйвер вручную:"
+        info "Запустишь драйвер позже:"
         info "  cd /tmp/LCD-show && sudo ./MHS35-show 90"
+        mark_ok "DISPLAY_DRIVER" "отложено (запусти LCD-show 90 вручную)"
     fi
 fi
 
@@ -811,13 +790,12 @@ fi
 # =============================================================================
 if [[ -n "${DO_DESKTOP:-}" ]]; then
     info "=== Desktop shortcuts ==="
-
-    USER_HOME="/home/$(whoami)"
-    DESKTOP_DIR="$USER_HOME/Desktop"
-
-    if [[ -d "$DESKTOP_DIR" ]]; then
-        # NAS-backup ярлык
-        cat > "$DESKTOP_DIR/NAS-Backup.desktop" << EOF
+    if (
+        set -e
+        USER_HOME="/home/$(whoami)"
+        DESKTOP_DIR="$USER_HOME/Desktop"
+        if [[ -d "$DESKTOP_DIR" ]]; then
+            cat > "$DESKTOP_DIR/NAS-Backup.desktop" << EOF
 [Desktop Entry]
 Version=1.0
 Type=Application
@@ -828,9 +806,7 @@ Icon=drive-harddisk
 Terminal=false
 Categories=System;
 EOF
-
-        # Logs view
-        cat > "$DESKTOP_DIR/View-Logs.desktop" << EOF
+            cat > "$DESKTOP_DIR/View-Logs.desktop" << EOF
 [Desktop Entry]
 Version=1.0
 Type=Application
@@ -841,38 +817,74 @@ Icon=utilities-log-viewer
 Terminal=false
 Categories=System;
 EOF
-
-        chmod +x "$DESKTOP_DIR"/*.desktop
-        log "Ярлыки созданы в $DESKTOP_DIR"
+            chmod +x "$DESKTOP_DIR"/*.desktop
+        else
+            echo "Desktop folder not found"
+            exit 1
+        fi
+    ); then
+        mark_ok "DESKTOP" "ярлыки на десктопе"
     else
-        warn "$DESKTOP_DIR не найден (не Desktop версия PiOS?)"
+        mark_fail "DESKTOP" "Desktop folder не найден (не Desktop PiOS?)"
     fi
 fi
 
 # =============================================================================
-# Финал
+# Финальный отчёт
 # =============================================================================
 echo ""
 echo "================================================================"
-log "Установка завершена!"
+echo "                    Установка завершена"
 echo "================================================================"
 echo ""
 
+if [[ ${#INSTALLED[@]} -gt 0 ]]; then
+    log "Установлено успешно (${#INSTALLED[@]}):"
+    for item in "${INSTALLED[@]}"; do
+        echo "   ✓ $item"
+    done
+fi
+
+if [[ ${#FAILED[@]} -gt 0 ]]; then
+    echo ""
+    err "Не удалось установить (${#FAILED[@]}):"
+    for item in "${FAILED[@]}"; do
+        echo "   ✗ $item"
+    done
+fi
+
+echo ""
 IP=$(hostname -I | awk '{print $1}')
-echo "IP: $IP"
+echo "IP:       $IP"
 echo "Hostname: $(hostname).local"
-echo ""
 
-[[ -n "${DO_SAMBA:-}" ]] && info "Samba: smb://travel-nas.local/travel-nas"
-[[ -n "${DO_CASAOS:-}" ]] && info "CasaOS: http://travel-nas.local"
-[[ -n "${DO_PHOTOVIEW:-}" ]] && info "Photoview: http://travel-nas.local:8000"
-[[ -n "${DO_PHOTO_BACKUP:-}" ]] && info "Photo backup: вставь USB-картридер → автобэкап"
-[[ -n "${DO_NAS_BACKUP:-}" ]] && info "NAS backup: sudo nas-backup.sh"
+# Отправляем итоговый отчёт в Telegram
+if [[ -x /usr/local/bin/tg-notify.sh ]] && [[ -f /etc/travel-nas/tg-notify.conf ]]; then
+    REPORT="Setup finished.
+
+✅ Installed (${#INSTALLED[@]}):
+$(printf '• %s\n' "${INSTALLED[@]}")"
+
+    if [[ ${#FAILED[@]} -gt 0 ]]; then
+        REPORT+="
+
+❌ Failed (${#FAILED[@]}):
+$(printf '• %s\n' "${FAILED[@]}")"
+    fi
+
+    REPORT+="
+
+IP: $IP
+Hostname: $(hostname).local"
+
+    if [[ ${#FAILED[@]} -gt 0 ]]; then
+        /usr/local/bin/tg-notify.sh -l warning "Setup finished with errors" "$REPORT" 2>/dev/null || true
+    else
+        /usr/local/bin/tg-notify.sh -l success "Setup complete" "$REPORT" 2>/dev/null || true
+    fi
+fi
 
 echo ""
-warn "После ребута имя будет travel-nas.local"
-warn "Чтобы применить hostname, требуется ребут:"
+warn "Рекомендуется ребут для применения hostname и других изменений:"
 warn "  sudo reboot"
 echo ""
-echo "Повторный запуск: bash setup.sh"
-echo "Установить всё:   bash setup.sh --all"

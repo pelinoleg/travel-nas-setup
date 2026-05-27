@@ -46,6 +46,7 @@ NAS_STATUS_JSON    = Path("/var/lib/travel-nas/nas-backup-status.json")
 DAILY_SUMMARY_JSON = Path("/var/lib/travel-nas/daily-summary.json")
 SERVICES_DEFAULTS = [
     ("CasaOS",      "http://{host}"),
+    ("Photoview",   "http://{host}:8000"),
     ("yt-archiver", "http://{host}:8081"),
     ("Samba",       "smb://{host}/travel-nas"),
     ("SSH",         "ssh oleg@{host}"),

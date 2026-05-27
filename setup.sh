@@ -126,7 +126,7 @@ fetch_conf_example() {
 # =============================================================================
 
 if [[ "${1:-}" == "--all" ]]; then
-    SELECTED="UPDATE UTILS HOSTNAME T7_MOUNT TG_NOTIFY SAMBA PI_BACKUP PHOTO_BACKUP NAS_BACKUP WATCHDOG SYS_MONITOR DAILY_SUM LOG2RAM ZRAM COMITUP CASAOS DISPLAY DESKTOP"
+    SELECTED="UPDATE UTILS HOSTNAME T7_MOUNT TG_NOTIFY SAMBA PI_BACKUP PHOTO_BACKUP NAS_BACKUP WATCHDOG SYS_MONITOR DAILY_SUM LOG2RAM ZRAM COMITUP CASAOS PHOTOVIEW DISPLAY DESKTOP"
 elif [[ "${1:-}" == "--help" ]]; then
     cat << EOF
 Travel-NAS Setup v2
@@ -151,7 +151,8 @@ Components:
   LOG2RAM        Logs in RAM (microSD friendly)
   ZRAM           Compressed swap
   COMITUP        Field WiFi AP mode
-  CASAOS         For yt-archiver/Syncthing/etc
+  CASAOS         For Photoview/Syncthing/etc
+  PHOTOVIEW      Photo gallery via Docker (после CASAOS, путь /t7/* в UI)
   DISPLAY        MHS35 3.5" + Python dashboard
   DESKTOP        Desktop shortcuts (Pi Desktop)
 EOF
@@ -174,7 +175,8 @@ else
         "LOG2RAM"      "Логи в RAM (microSD friendly)"                    ON \
         "ZRAM"         "Сжатый swap"                                       ON \
         "COMITUP"      "Полевой WiFi AP-режим"                            ON \
-        "CASAOS"       "CasaOS (yt-archiver/Syncthing и т.п.)"            ON \
+        "CASAOS"       "CasaOS (для Photoview/Syncthing)"                 ON \
+        "PHOTOVIEW"    "Photoview (нужен CASAOS, путь /t7/* в UI)"        ON \
         "DISPLAY"      "MHS35 3.5\" + Python dashboard"                  ON \
         "DESKTOP"      "Ярлыки на десктоп Pi"                             ON \
         3>&1 1>&2 2>&3) || exit 0
@@ -743,8 +745,59 @@ if [[ -n "${DO_CASAOS:-}" ]]; then
     fi
 fi
 
-# Photoview удалён: не работал с /mnt/t7/usb-imports (требует "system folders").
-# Если когда-то установится подходящая замена — добавить сюда новый блок.
+# =============================================================================
+# 17. PHOTOVIEW
+# =============================================================================
+# В UI Photoview добавляй пути вида /t7/usb-imports или /t7/media — это пути
+# ВНУТРИ контейнера, не на хосте. Photoview видит только что мы примонтировали.
+# Mount только read-only — гарантия что галерея ничего не сотрёт.
+if [[ -n "${DO_PHOTOVIEW:-}" ]]; then
+    info "=== Photoview ==="
+    if ! command -v docker &>/dev/null; then
+        mark_fail "PHOTOVIEW" "Docker не установлен (сначала CASAOS)"
+    elif (
+        set -e
+        sudo mkdir -p /opt/photoview
+        sudo tee /opt/photoview/docker-compose.yml > /dev/null << EOF
+version: "3"
+services:
+  db:
+    image: mariadb:10.11
+    restart: unless-stopped
+    environment:
+      - MYSQL_DATABASE=photoview
+      - MYSQL_USER=photoview
+      - MYSQL_PASSWORD=photoview
+      - MYSQL_RANDOM_ROOT_PASSWORD=1
+    volumes:
+      - /opt/photoview/db:/var/lib/mysql
+
+  photoview:
+    image: viktorstrate/photoview:latest
+    restart: unless-stopped
+    ports:
+      - "8000:80"
+    depends_on:
+      - db
+    environment:
+      - PHOTOVIEW_DATABASE_DRIVER=mysql
+      - PHOTOVIEW_MYSQL_URL=photoview:photoview@tcp(db)/photoview
+      - PHOTOVIEW_LISTEN_IP=0.0.0.0
+      - PHOTOVIEW_LISTEN_PORT=80
+      - PHOTOVIEW_MEDIA_CACHE=/app/cache
+    volumes:
+      - /opt/photoview/cache:/app/cache
+      # Весь T7 как read-only — в UI указывай /t7/usb-imports, /t7/media и т.п.
+      - $T7_MOUNT:/t7:ro
+EOF
+        cd /opt/photoview
+        sudo docker compose up -d
+    ); then
+        mark_ok "PHOTOVIEW" "http://travel-nas.local:8000 (UI path: /t7/usb-imports)"
+    else
+        mark_fail "PHOTOVIEW" "docker compose failed"
+    fi
+fi
 
 # =============================================================================
 # 18. DISPLAY (MHS35 + Python dashboard в X-kiosk режиме)

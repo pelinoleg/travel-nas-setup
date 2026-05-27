@@ -617,9 +617,9 @@ c_pmode = Cached(_power_mode, 5)
 
 def draw_top_strip(page_label=None):
     """Top-strip:
-       Слева:    ● health-точка + hostname
-       Центр:    [⚡] power: <mode> <freq>GHz <W>W
-       Справа:   HH:MM"""
+       Слева:  ● health-точка + hostname
+       Справа: [⚡] power: <mode> <freq>GHz <W>W
+       (часы убраны по запросу — место занято power-блоком)"""
     pygame.draw.rect(screen, PANEL, (0, 0, SCREEN_W, 22))
     _, color = health_status()
     pygame.draw.circle(screen, color, (12, 11), 5)
@@ -628,11 +628,7 @@ def draw_top_strip(page_label=None):
     host_surf = F_SMALL.render(host_text, True, FG)
     screen.blit(host_surf, (24, 4))
 
-    now_str = datetime.now().strftime("%H:%M")
-    t_surf = F_SMALL.render(now_str, True, MUTED)
-    screen.blit(t_surf, (SCREEN_W - t_surf.get_width() - 8, 4))
-
-    # === Центрированный блок «power: ...» ===
+    # === Power-блок прижат к правому краю (где раньше были часы) ===
     th = c_throttle.get()
     mode = c_pmode.get()
     mode_color = ACCENT if mode == "normal" else (WARN if mode == "saver" else MUTED)
@@ -652,7 +648,7 @@ def draw_top_strip(page_label=None):
 
     GAP = 5
     total_w = sum(p.get_width() for p in pieces) + GAP * (len(pieces) - 1)
-    bx = (SCREEN_W - total_w) // 2
+    bx = SCREEN_W - total_w - 8   # прижато к правому краю
     for p in pieces:
         screen.blit(p, (bx, 4))
         bx += p.get_width() + GAP
@@ -1712,11 +1708,11 @@ def do_action(action):
         # daemon ловит это через D-Bus и тут же стартует AP.
         # Destructive: пароль домашнего WiFi пропадёт из NetworkManager,
         # юзер перезаходит через captive portal на 10.41.0.1.
-        if not Path("/usr/bin/comitup-cli").exists():
+        if not Path("/usr/sbin/comitup-cli").exists():
             toast("comitup not installed", ERROR)
         else:
             subprocess.Popen(
-                ["sudo", "-n", "/usr/bin/comitup-cli", "d"],
+                ["sudo", "-n", "/usr/sbin/comitup-cli", "d"],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 stdin=subprocess.DEVNULL, start_new_session=True,
             )

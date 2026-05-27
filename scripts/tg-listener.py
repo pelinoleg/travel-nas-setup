@@ -116,31 +116,34 @@ def send(token, chat_id, text, parse_mode="Markdown"):
 # === Command handlers ============================================================
 
 def cmd_help(token, chat_id, args):
-    send(token, chat_id, """*Travel-NAS bot* — что умеет:
+    send(token, chat_id, """*Travel-NAS bot* — все команды:
 
-📊 *Status*
-`/status` `/today` — snapshot системы
+📊 *Статус*
+`/status` `/today` — snapshot (uptime, CPU, T7, throttle)
 `/nas` — статус NAS-бэкапов (модули, размеры, last-run)
-`/docker` — список Docker-compose проектов + Stop/Start/Restart кнопки
-`/services` — список сервисов с URL
-`/configs` — какие `/etc/travel-nas/` конфиги существуют + где что лежит
+`/docker` — Docker-compose проекты + кнопки Stop/Start/Restart
+`/services` — все URL установленных сервисов
+`/configs` — `/etc/travel-nas/` файлы + где что лежит
 
-🔄 *Actions*
-`/backup` — запустить NAS backup
-`/backup dry` — dry-run
-`/backup diff` — diff
+🔄 *Действия*
+`/backup` — NAS backup
+`/backup dry` — dry-run NAS backup
+`/backup diff` — diff с NAS (что изменится)
 `/update` — обновить скрипты из GitHub
 `/logs [N]` — хвост всех логов (default 30 строк)
 
-🔌 *Power*
-`/power` — текущий режим
-`/power home` / `field` / `emergency` / `auto`
+🔌 *Питание*
+`/power` — текущий режим + полная справка
+`/power auto` — пересчитать по throttle/temp
+`/power normal` — принудительно ondemand
+`/power saver` — принудительно powersave
 
-⚙️ *System*
-`/reboot` — ребут (нужно /yes для подтверждения)
+⚙️ *Система*
+`/rotate` — текущий поворот экрана
+`/rotate 0` / `90` / `180` / `270` — повернуть MHS35 (нужен /yes для ребута)
+`/reboot` — ребут Pi (нужно /yes)
 `/shutdown` — выключение (нужно /yes)
-`/rotate [0|90|180|270]` — поворот MHS35 экрана (ребут)
-`/yes` — подтвердить pending action
+`/yes` — подтвердить pending действие (rotate/reboot/shutdown)
 
 `/help` `/start` — это сообщение""")
 

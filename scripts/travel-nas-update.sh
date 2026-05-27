@@ -138,7 +138,7 @@ REQUIRED_CMDS=(
     "/usr/local/bin/set-led.sh"
     "/usr/local/bin/docker-mgr.sh"
     "/usr/local/bin/screen-rotate.sh"
-    "/usr/bin/comitup-cli"
+    "/usr/sbin/comitup-cli"
     "/usr/bin/nmcli connection down *"
     "/usr/bin/systemctl reboot, /usr/bin/systemctl poweroff"
     "/usr/bin/systemctl restart comitup"

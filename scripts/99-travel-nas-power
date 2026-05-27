@@ -1,0 +1,23 @@
+#!/bin/bash
+# /etc/NetworkManager/dispatcher.d/99-travel-nas-power
+#
+# Триггерится NetworkManager при connect/disconnect событиях.
+# Вызывает power-mode.sh auto для пересчёта режима по новому SSID.
+#
+# Аргументы: $1 = iface, $2 = action (up/down/connectivity-change/...)
+
+set -u
+
+IFACE="${1:-}"
+ACTION="${2:-}"
+
+# Нам интересны только wlan up/down
+case "$ACTION" in
+    up|down|connectivity-change|hostname)
+        if [[ -x /usr/local/bin/power-mode.sh ]]; then
+            /usr/local/bin/power-mode.sh auto >/dev/null 2>&1 &
+        fi
+        ;;
+esac
+
+exit 0

@@ -44,6 +44,7 @@ T7_MOUNT = "/mnt/t7"
 SERVICES_CONF      = Path("/etc/travel-nas/services.conf")
 NAS_STATUS_JSON    = Path("/var/lib/travel-nas/nas-backup-status.json")
 DAILY_SUMMARY_JSON = Path("/var/lib/travel-nas/daily-summary.json")
+POWER_MODE_FILE    = Path("/var/lib/travel-nas/power-mode.txt")
 SERVICES_DEFAULTS = [
     ("CasaOS",      "http://{host}"),
     ("Photoview",   "http://{host}:8000"),
@@ -1155,6 +1156,25 @@ def page_daily_summary():
 
         errs = data.get("errors_today") or 0
         kv("Errors",   errs, ACCENT if errs == 0 else ERROR)
+
+        inc = data.get("incomplete") or 0
+        if inc > 0:
+            kv("Incomplete", inc, WARN)
+
+        sd = data.get("sd_wear_pct")
+        if sd is not None:
+            sd_col = ACCENT if sd < 50 else (WARN if sd < 70 else ERROR)
+            kv("microSD wear", f"~{sd}%", sd_col)
+
+        if POWER_MODE_FILE.exists():
+            try:
+                pm = POWER_MODE_FILE.read_text().strip()
+            except Exception:
+                pm = "?"
+            pm_col = (ACCENT if pm == "home" else
+                      WARN   if pm == "emergency" else
+                      INFO)
+            kv("Power mode", pm, pm_col)
 
     half_w = (SCREEN_W - 28) // 2
     refresh = Btn("Refresh", "daily_refresh",

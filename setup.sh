@@ -126,7 +126,7 @@ fetch_conf_example() {
 # =============================================================================
 
 if [[ "${1:-}" == "--all" ]]; then
-    SELECTED="UPDATE UTILS HOSTNAME T7_MOUNT TG_NOTIFY SAMBA PI_BACKUP PHOTO_BACKUP NAS_BACKUP WATCHDOG SYS_MONITOR DAILY_SUM LOG2RAM ZRAM COMITUP CASAOS PHOTOVIEW YTARCHIVER DISPLAY DESKTOP"
+    SELECTED="UPDATE UTILS HOSTNAME T7_MOUNT TG_NOTIFY SAMBA PI_BACKUP PHOTO_BACKUP NAS_BACKUP WATCHDOG SYS_MONITOR POWER_MODE TG_LISTENER DAILY_SUM LOG2RAM ZRAM COMITUP CASAOS PHOTOVIEW YTARCHIVER DISPLAY DESKTOP"
 elif [[ "${1:-}" == "--help" ]]; then
     cat << EOF
 Travel-NAS Setup v2
@@ -147,6 +147,8 @@ Components:
   NAS_BACKUP     Manual NAS → T7 backup tool
   WATCHDOG       Disk health monitor (5min)
   SYS_MONITOR    CPU/temp/throttling monitor (5min)
+  POWER_MODE     Auto switch home/field/emergency power profile
+  TG_LISTENER    Two-way Telegram bot: /status /backup /logs /reboot
   DAILY_SUM      Daily summary in Telegram (21:00)
   LOG2RAM        Logs in RAM (microSD friendly)
   ZRAM           Compressed swap
@@ -172,6 +174,8 @@ else
         "NAS_BACKUP"   "Бэкап с домашнего NAS (вручную)"                  ON \
         "WATCHDOG"     "Мониторинг T7 (каждые 5 мин)"                     ON \
         "SYS_MONITOR"  "Мониторинг CPU/temp/throttling"                   ON \
+        "POWER_MODE"   "Авто power-профиль (home/field/emergency)"        ON \
+        "TG_LISTENER"  "Telegram бот: /status /backup /logs /reboot"      ON \
         "DAILY_SUM"    "Вечерний отчёт в Telegram (21:00)"                ON \
         "LOG2RAM"      "Логи в RAM (microSD friendly)"                    ON \
         "ZRAM"         "Сжатый swap"                                       ON \
@@ -224,6 +228,25 @@ if [[ -n "${DO_UTILS:-}" ]]; then
         python3-pip python3-pygame python3-evdev \
         wmctrl \
         avahi-daemon; then
+        # `travel-nas-setup` shortcut — пользователь сможет в любой момент
+        # перезапустить визард командой без curl-paste.
+        fetch_script "travel-nas-setup.sh" "$SCRIPT_DIR/travel-nas-setup"
+        # set-led — управление встроенным power-LED Pi из других скриптов
+        fetch_script "set-led.sh"          "$SCRIPT_DIR/set-led.sh"
+
+        # /etc/motd — что увидит юзер при ssh-логине
+        sudo tee /etc/motd >/dev/null << 'EOF'
+
+  ╔══════════════════════════════════════════════════════════╗
+  ║                      Travel-NAS                          ║
+  ║                                                          ║
+  ║   Dashboard:  http://travel-nas.local                    ║
+  ║   Re-config:  travel-nas-setup                           ║
+  ║   Logs:       tail -F /mnt/t7/_logs/*.log                ║
+  ║   Backups:    /mnt/t7/{usb-imports,nas-backup}           ║
+  ╚══════════════════════════════════════════════════════════╝
+
+EOF
         mark_ok "UTILS"
     else
         mark_fail "UTILS" "apt install failed"
@@ -513,7 +536,7 @@ if [[ -n "${DO_NAS_BACKUP:-}" ]]; then
         fetch_script "nas-backup-status.py" "$SCRIPT_DIR/nas-backup-status.py"
 
         # /var/lib/travel-nas создаём заранее (туда пишутся status JSON'ы)
-        sudo install -d -m 0755 /var/lib/travel-nas
+        sudo install -d -o "$(whoami)" -g "$(whoami)" -m 0755 /var/lib/travel-nas
 
         # Systemd timer — обновляет размеры папок раз в час фоном
         sudo tee /etc/systemd/system/nas-backup-status.service > /dev/null << 'EOF'
@@ -648,6 +671,78 @@ EOF
 fi
 
 # =============================================================================
+# 11b. POWER_MODE — переключение CPU governor + Docker apps под условия питания
+# =============================================================================
+if [[ -n "${DO_POWER_MODE:-}" ]]; then
+    info "=== Power mode ==="
+    if (
+        set -e
+        fetch_script "power-mode.sh" "$SCRIPT_DIR/power-mode.sh"
+        sudo mkdir -p /etc/travel-nas
+        if [[ ! -f /etc/travel-nas/power-mode.conf ]]; then
+            fetch_conf_example "power-mode.conf.example" /etc/travel-nas/power-mode.conf
+        fi
+        sudo chown "$(whoami):$(whoami)" /etc/travel-nas/power-mode.conf
+        sudo chmod 0644 /etc/travel-nas/power-mode.conf
+
+        # NetworkManager dispatcher — при connect/disconnect пересчитывает режим
+        DISP_DIR="/etc/NetworkManager/dispatcher.d"
+        if [[ -d "$DISP_DIR" ]]; then
+            fetch_script "99-travel-nas-power" "$DISP_DIR/99-travel-nas-power"
+            sudo chown root:root "$DISP_DIR/99-travel-nas-power"
+            sudo chmod 0755 "$DISP_DIR/99-travel-nas-power"
+        fi
+        # И один раз сейчас — применить режим по текущему состоянию
+        sudo /usr/local/bin/power-mode.sh auto >/dev/null 2>&1 || true
+    ); then
+        mark_ok "POWER_MODE" "auto-switches by SSID + throttle"
+    else
+        mark_fail "POWER_MODE" "install failed"
+    fi
+fi
+
+# =============================================================================
+# 11c. TG_LISTENER — двусторонний Telegram-бот (long-polling)
+# =============================================================================
+if [[ -n "${DO_TG_LISTENER:-}" ]]; then
+    info "=== Telegram bot listener ==="
+    if [[ ! -f "$CONFIG_DIR/tg-notify.conf" ]]; then
+        mark_fail "TG_LISTENER" "сначала настрой TG_NOTIFY (нужен токен бота)"
+    elif (
+        set -e
+        fetch_script "tg-listener.py" "$SCRIPT_DIR/tg-listener.py"
+
+        # Service от oleg чтобы writable /var/lib/travel-nas и просто
+        sudo tee /etc/systemd/system/tg-listener.service > /dev/null << EOF
+[Unit]
+Description=Travel-NAS Telegram bot listener
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=$(whoami)
+Group=$(whoami)
+ExecStart=/usr/bin/python3 /usr/local/bin/tg-listener.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/mnt/t7/_logs/tg-listener.log
+StandardError=append:/mnt/t7/_logs/tg-listener.log
+
+[Install]
+WantedBy=multi-user.target
+EOF
+        sudo install -d -o "$(whoami)" -g "$(whoami)" -m 0755 /var/lib/travel-nas
+        sudo systemctl daemon-reload
+        sudo systemctl enable --now tg-listener.service
+    ); then
+        mark_ok "TG_LISTENER" "/help в Telegram чтобы увидеть команды"
+    else
+        mark_fail "TG_LISTENER" "systemd setup failed"
+    fi
+fi
+
+# =============================================================================
 # 12. DAILY_SUM
 # =============================================================================
 if [[ -n "${DO_DAILY_SUM:-}" ]]; then
@@ -699,7 +794,7 @@ Unit=daily-summary-refresh.service
 [Install]
 WantedBy=timers.target
 EOF
-        sudo install -d -m 0755 /var/lib/travel-nas
+        sudo install -d -o "$(whoami)" -g "$(whoami)" -m 0755 /var/lib/travel-nas
         sudo systemctl daemon-reload
         sudo systemctl enable --now daily-summary.timer
         sudo systemctl enable --now daily-summary-refresh.timer
@@ -1049,6 +1144,8 @@ EOF
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/nas-backup.sh
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/nas-backup-status.py
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/daily-summary.sh
+$DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/power-mode.sh
+$DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/set-led.sh
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/comitup-cli
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/sbin/smartctl

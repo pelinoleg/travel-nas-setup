@@ -87,11 +87,27 @@ PHOTO_COUNT=0
 PHOTO_FILES=0
 PHOTO_SIZE="0"
 if [[ -d "$T7_MOUNT/usb-imports/$TODAY" ]]; then
-    PHOTO_COUNT=$(find "$T7_MOUNT/usb-imports/$TODAY" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | wc -l)
+    PHOTO_COUNT=$(find "$T7_MOUNT/usb-imports/$TODAY" -maxdepth 1 -mindepth 1 -type d \
+        ! -name '*.incomplete' 2>/dev/null | wc -l)
     if [[ "$PHOTO_COUNT" -gt 0 ]]; then
-        PHOTO_FILES=$(find "$T7_MOUNT/usb-imports/$TODAY" -type f 2>/dev/null | wc -l)
+        PHOTO_FILES=$(find "$T7_MOUNT/usb-imports/$TODAY" -type f \
+            ! -path '*.incomplete/*' 2>/dev/null | wc -l)
         PHOTO_SIZE=$(du -sh "$T7_MOUNT/usb-imports/$TODAY" 2>/dev/null | awk '{print $1}')
     fi
+fi
+
+# Incomplete folders across all dates — оборвавшиеся бэкапы
+INCOMPLETE_COUNT=0
+if [[ -d "$T7_MOUNT/usb-imports" ]]; then
+    INCOMPLETE_COUNT=$(find "$T7_MOUNT/usb-imports" -maxdepth 2 -mindepth 2 -type d \
+        -name '*.incomplete' 2>/dev/null | wc -l)
+fi
+
+# microSD wear estimate (см. system-monitor.sh для деталей)
+SD_WEAR_PCT=""
+if [[ -r /sys/block/mmcblk0/device/life_time ]]; then
+    SD_WEAR_PCT=$(awk '{a=strtonum($1); b=strtonum($2); m=(a>b?a:b); print m*10}' \
+        /sys/block/mmcblk0/device/life_time 2>/dev/null)
 fi
 
 NAS_BACKUP_TODAY="no"
@@ -132,7 +148,7 @@ export TODAY UPTIME CPU_TEMP IP_ADDR SSID
 export T7_MOUNTED T7_USED T7_AVAIL T7_TOTAL T7_PCT T7_TEMP
 export THROTTLE_VAL THROTTLE_NOW THROTTLE_PAST
 export PHOTO_COUNT PHOTO_FILES PHOTO_SIZE
-export NAS_BACKUP_TODAY ERRORS_TODAY EVENTS_JSON
+export NAS_BACKUP_TODAY ERRORS_TODAY EVENTS_JSON INCOMPLETE_COUNT SD_WEAR_PCT
 python3 - <<PYEOF > "$TMP_JSON"
 import json, os, time
 data = {
@@ -162,6 +178,8 @@ data = {
     },
     "nas_today":    os.environ.get("NAS_BACKUP_TODAY") == "yes",
     "errors_today": int(os.environ.get("ERRORS_TODAY") or 0),
+    "incomplete":   int(os.environ.get("INCOMPLETE_COUNT") or 0),
+    "sd_wear_pct":  int(os.environ["SD_WEAR_PCT"]) if os.environ.get("SD_WEAR_PCT") else None,
     "events":       json.loads(os.environ.get("EVENTS_JSON") or "[]"),
 }
 print(json.dumps(data, indent=2))
@@ -223,6 +241,14 @@ if [[ "$ERRORS_TODAY" -gt 0 ]]; then
 
 ⚠️ *Issues:* $ERRORS_TODAY log(s) with errors
 Check: \`/mnt/t7/_logs/\`"
+fi
+
+if [[ "$INCOMPLETE_COUNT" -gt 0 ]]; then
+    MSG+="
+
+🔶 *Incomplete backups:* $INCOMPLETE_COUNT
+Folders with .incomplete suffix exist — backup was interrupted.
+Check: \`/mnt/t7/usb-imports/\`"
 fi
 
 if [[ -f "$SUMMARY_QUEUE" && -s "$SUMMARY_QUEUE" ]]; then

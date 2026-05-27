@@ -151,10 +151,23 @@ UUID_SHORT=$(echo "$DEVICE_UUID" | cut -c1-8)
 DATE_DIR=$(date '+%d-%m-%Y')
 TIME_PREFIX=$(date '+%H-%M-%S')
 BACKUP_NAME="${TIME_PREFIX}_${LABEL}_${UUID_SHORT}"
-TARGET_DIR="${DEST}/${DATE_DIR}/${BACKUP_NAME}"
+FINAL_DIR="${DEST}/${DATE_DIR}/${BACKUP_NAME}"
+# Пишем в *.incomplete чтобы по этому суффиксу можно было найти оборвавшиеся
+# бэкапы (вынул карту посреди rsync). Переименуем после успешного завершения.
+TARGET_DIR="${FINAL_DIR}.incomplete"
 mkdir -p "$TARGET_DIR"
 
 log_msg "Target: $TARGET_DIR"
+
+# Чистим старые orphan-incomplete'ы (>24h) перед стартом — оставлять смысла нет.
+INC_BASE="${DEST}/${DATE_DIR}"
+if [[ -d "$INC_BASE" ]]; then
+    while IFS= read -r -d '' orphan; do
+        log_msg "Removing stale incomplete: $orphan"
+        rm -rf "$orphan"
+    done < <(find "$INC_BASE" -maxdepth 1 -mindepth 1 -type d -name '*.incomplete' \
+        -mtime +0 -print0 2>/dev/null)
+fi
 
 # Размер источника и количество файлов
 SIZE_HUMAN=$(du -sh "$MOUNT_SRC" 2>/dev/null | awk '{print $1}')
@@ -179,6 +192,9 @@ Size: $SIZE_HUMAN
 Target: \`$DATE_DIR/$BACKUP_NAME\`"
 
 START_TIME=$(date +%s)
+
+# LED → "busy" пока копируем (slow heartbeat). Скрипт безопасен если LED нет.
+[[ -x /usr/local/bin/set-led.sh ]] && /usr/local/bin/set-led.sh busy 2>/dev/null || true
 
 # rsync — копируем ВСЁ. Пайплим через progress-writer чтобы dashboard
 # видел прогресс в реальном времени (/var/run/travel-nas/backup-progress.json).
@@ -235,8 +251,17 @@ SIZE_DST=$(du -sh "$TARGET_DIR" 2>/dev/null | awk '{print $1}')
 # 0  — успех
 # 23 — partial (часть файлов не передалась — это нормально если карта битая)
 # 24 — vanished files — тоже не fatal
+# Если успешно — переименовываем .incomplete → final имя.
+# Если fatal fail — оставляем .incomplete (видим в Today summary).
+set_led() {
+    [[ -x /usr/local/bin/set-led.sh ]] && /usr/local/bin/set-led.sh "$1" 2>/dev/null || true
+}
+
 case "$RSYNC_EXIT" in
     0)
+        set_led idle
+        mv "$TARGET_DIR" "$FINAL_DIR"
+        TARGET_DIR="$FINAL_DIR"
         log_msg "Backup OK: $FILE_COUNT_DST/$FILE_COUNT_SRC files, $SIZE_DST in ${DURATION_MIN}m${DURATION_SEC}s"
         tg_notify success "Backup complete" "Files: $FILE_COUNT_DST/$FILE_COUNT_SRC
 Size: $SIZE_DST
@@ -251,23 +276,31 @@ You can safely remove the card."
         SUCCESS_PCT=$((FILE_COUNT_DST * 100 / FILE_COUNT_SRC))
         log_msg "Backup PARTIAL: $FILE_COUNT_DST/$FILE_COUNT_SRC files ($SUCCESS_PCT%), missed $MISSED"
         if [[ "$SUCCESS_PCT" -ge 90 ]]; then
-            # 90%+ — считаем за успех с предупреждением
+            # 90%+ — считаем за успех с предупреждением, .incomplete снимаем
+            set_led idle
+            mv "$TARGET_DIR" "$FINAL_DIR"
+            TARGET_DIR="$FINAL_DIR"
             tg_notify warning "Backup complete with warnings" "Files: $FILE_COUNT_DST/$FILE_COUNT_SRC (${SUCCESS_PCT}%)
 Missed: $MISSED files (read errors on card?)
 Size: $SIZE_DST
 Duration: ${DURATION_MIN}m ${DURATION_SEC}s
 Path: \`$DATE_DIR/$BACKUP_NAME\`"
         else
-            tg_notify error "Backup failed" "Only $FILE_COUNT_DST/$FILE_COUNT_SRC files copied (${SUCCESS_PCT}%)
-Card may be damaged. Check log:
-/mnt/t7/_logs/photo-backup.log"
+            # <90% — оставляем .incomplete, чтобы было видно что копия частичная
+            set_led error
+            tg_notify error "Backup failed (.incomplete kept)" "Only $FILE_COUNT_DST/$FILE_COUNT_SRC files copied (${SUCCESS_PCT}%)
+Card may be damaged. Folder marked .incomplete.
+Check log: /mnt/t7/_logs/photo-backup.log"
         fi
         ;;
     *)
-        log_msg "Backup FAILED with rsync exit $RSYNC_EXIT"
+        # Fatal — оставляем .incomplete для разбора
+        set_led error
+        log_msg "Backup FAILED with rsync exit $RSYNC_EXIT (.incomplete kept)"
         tg_notify error "Backup failed" "Device: \`$DEVICE\`
 Rsync exit: $RSYNC_EXIT
 Files: $FILE_COUNT_DST/$FILE_COUNT_SRC
+Folder marked .incomplete.
 
 Check log: \`/mnt/t7/_logs/photo-backup.log\`"
         ;;

@@ -1,101 +1,157 @@
-# Travel-NAS Setup v2 (T7 edition)
+# Travel-NAS Setup
 
-Infrastructure-as-Code для travel-NAS на Raspberry Pi 5 с Samsung T7 Shield SSD.
+Infrastructure-as-Code для travel-NAS на Raspberry Pi 5 + USB SSD (Samsung T7 Shield по умолчанию). Whiptail-меню с компонентами, поддержка повторного запуска. Всё переустанавливается одной командой.
 
 ## Установка одной командой
+
+После того как:
+1. Прошил microSD через **Raspberry Pi Imager** (PiOS Desktop Trixie 64-bit)
+2. В Imager → Advanced settings: задал hostname, SSH on, WiFi, пользователь
+3. Загрузился, SSH'нулся → `ssh oleg@travel-nas.local`
+
+Запусти:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/main/setup.sh -o setup.sh && bash setup.sh
 ```
 
-Откроется интерактивное меню — выбери компоненты галочками.
+Откроется whiptail-меню — отметь компоненты, нажми Enter. После установки доступна команда:
 
-## Что устанавливается
+```bash
+travel-nas-setup       # один в один то же что выше — re-fetch и launch wizard
+```
+
+## Компоненты
 
 | Компонент | Назначение |
 |---|---|
-| 📡 **Comitup** | Полевой WiFi AP-режим (если нет WiFi) |
-| 💾 **T7 auto-mount** | Samsung T7 Shield в `/mnt/t7` через fstab |
-| 📁 **Samba** | SMB-шара `smb://travel-nas.local/travel-nas` (открытая) |
-| 📷 **Photo backup** | udev + rsync + Telegram — автокопирование SD/USB |
-| 🏠 **NAS backup** | Manual бэкап с UGREEN NAS через rsync daemon |
-| 💼 **Pi config backup** | Еженедельный бэкап конфигов на T7 |
-| 🐕 **Disk watchdog** | Мониторинг T7 (SMART, temp, mount, space) |
-| 💻 **System monitor** | CPU/temp/throttling Pi |
-| 📊 **Daily summary** | Вечерний отчёт в Telegram (21:00) |
-| 📱 **TG-notify** | Единый helper для всех Telegram уведомлений |
-| 💾 **Log2ram** | Логи в RAM → microSD живёт дольше |
-| 🗜️ **ZRAM** | Сжатый swap с zstd |
-| 🏠 **CasaOS** | Опционально для Photoview/Syncthing |
-| 🖼️ **Photoview** | Опциональная web-галерея фотографий |
-| 🖥️ **MHS35 display** | 3.5" сенсорный экран + Python dashboard |
+| 📦 **UPDATE** | `apt update && upgrade` (на свежем PiOS долго — ~5-10 мин) |
+| 🛠 **UTILS** | htop, ncdu, smartmontools, exiftool, wmctrl и т.д. |
+| 🏷 **HOSTNAME** | Переименовать в `travel-nas` |
+| 💾 **T7_MOUNT** | Интерактивный wizard: выбор внешнего диска + форматирование в ext4 + fstab |
+| 📱 **TG_NOTIFY** | Telegram-уведомления (helper script) |
+| 📁 **SAMBA** | SMB-шара `smb://travel-nas.local/travel-nas` (open guest) |
+| 📷 **PHOTO_BACKUP** | udev + rsync — автокопирование USB/SD при подключении |
+| 🏠 **NAS_BACKUP** | Ручной бэкап с домашнего NAS через rsync daemon |
+| 🐕 **WATCHDOG** | Мониторинг T7 (mount/SMART/temp/space) каждые 5 мин |
+| 💻 **SYS_MONITOR** | CPU temp / throttling / RAM / microSD wear каждые 5 мин |
+| 🔌 **POWER_MODE** | Авто-переключение CPU governor + Docker apps под условия питания |
+| 📲 **TG_LISTENER** | Двусторонний Telegram-бот: `/status /backup /logs /reboot` |
+| 📊 **DAILY_SUM** | Вечерний отчёт в Telegram (21:00) + JSON refresh каждые 10 мин |
+| 💾 **LOG2RAM** | Логи в RAM — микро-SD живёт дольше |
+| 🗜 **ZRAM** | Сжатый swap (zstd) |
+| 📡 **COMITUP** | Полевой WiFi AP-режим |
+| 🏠 **CASAOS** | Веб-UI для Docker-приложений |
+| 🖼 **PHOTOVIEW** | Photo-галерея (Docker, после CASAOS, путь `/t7/*` в UI) |
+| 📺 **YTARCHIVER** | YouTube archiver (Docker, после CASAOS, UI на `:8081`) |
+| 🖥 **DISPLAY** | MHS35 3.5" сенсорный + Python dashboard в X-kiosk |
+| 💻 **DESKTOP** | Ярлыки на рабочий стол: Dashboard, Setup, T7 Files, Services, Logs |
+
+## Hardware
+
+- Raspberry Pi 5 (8GB RAM рекомендуется)
+- Samsung T7 Shield SSD 4TB через USB 3.0 (или любой ext4-форматируемый внешний диск)
+- microSD 64GB+ (для системы)
+- Pi 5 27W USB-C блок питания (комплектный — критично, иначе under-voltage)
+- (Опционально) **MHS35 3.5" SPI display** — `goodtft ili9486`, rotation 90
+- (Опционально) **Powerbank** с 5V/5A USB-C PD (Anker 737, Prime 27650) для поля
 
 ## Структура файлов на T7
 
 ```
-/mnt/t7/
-├── nas-backup/           # с UGREEN NAS (АВТОЧИСТКА когда <10% места)
-│   ├── Personal/
-│   ├── Docker/
-│   ├── Photos-Other/
-│   ├── Music/
+/mnt/t7/                  (owned by install user — можно создавать папки без sudo)
+├── nas-backup/           Бэкапы с домашнего NAS
+│   ├── Personal/  Docker/  Photos-Other/  ...
 │   ├── _deleted/<DD-MM-YYYY>/
 │   └── _logs/
-│
-├── usb-imports/          # бэкапы USB/SD (НЕ ЧИСТИТЬ автоматически)
-│   ├── <DD-MM-YYYY>/
-│   │   ├── HH-MM_<label>_<uuid>/
-│   │   └── ...
-│   └── ...
-│
-├── pi-config-backups/    # 4 копии конфигов Pi
-├── media/                # твои медиа (вручную)
-├── sync/                 # для Syncthing
-└── _logs/                # логи скриптов
+├── usb-imports/          Бэкапы SD/USB (DD-MM-YYYY/HH-MM-SS_label_uuid/)
+│   └── *.incomplete/     Если backup был прерван (видно в Today summary)
+├── pi-config-backups/    4 копии /etc и т.п. (автоматический Pi-backup)
+├── media/                Пользовательское (YT-Archiver, фильмы и т.п.)
+├── sync/                 Для Syncthing (опционально)
+└── _logs/                Логи всех скриптов
 ```
 
-## Архитектура конфигов
+## Конфигурация
 
-**Секреты НЕ хранятся в git!** Они в `/etc/travel-nas/`:
+Секреты НЕ в git — лежат в `/etc/travel-nas/`:
 
-```
-/etc/travel-nas/
-├── tg-notify.conf        # Telegram bot token + chat_id (chmod 600)
-├── nas-backup.conf       # NAS IP/user/pass + список модулей (chmod 600)
-├── photo-backup.conf     # настройки автобэкапа SD
-└── t7-info.conf          # UUID нашего T7
-```
+| Файл | Назначение | Перм |
+|---|---|---|
+| `tg-notify.conf` | Telegram bot token + chat_id | 600 root |
+| `nas-backup.conf` | NAS host/user/pass + список модулей | 600 root |
+| `photo-backup.conf` | Настройки автобэкапа SD | 644 root |
+| `t7-info.conf` | UUID диска T7 (сгенерён при mount) | 644 root |
+| `services.conf` | URL-ы для Services page в dashboard | 644 oleg |
+| `power-mode.conf` | HOME_SSIDS + HEAVY_DOCKER_APPS | 644 oleg |
 
-В git коммитятся только примеры в `conf-examples/`.
+В git коммитятся только `*.example` в `conf-examples/`.
 
-## Telegram уведомления
+## Dashboard (MHS35 display)
 
-Три уровня важности:
+Pygame-кiosk в X11. Никаких внешних терминалов — фокус не уходит, тач всегда работает. Pages:
 
-- 🟢 **Info** — копится в очередь, отправляется в daily summary
-- 🟡 **Normal** — сразу (старт/конец бэкапа, прогресс)
-- 🔴 **Critical** — сразу + повтор через час если проблема не исчезла
+- **Status** — Network/IP/SSID, T7 disk + bar, RAM + bar, CPU + bar, Last photo backup. Если бэкап в процессе — зелёная карточка с прогрессом. В AP-режиме автоматически показывается оранжевая AP-карточка.
+- **Menu** — секции NAS BACKUP / INFO & STATUS / SYSTEM с цветными разделителями. Run, Dry-run, Diff, NAS status, Today, Logs, Services, AP info, Force AP, Reboot, Shutdown, Exit to desktop.
+- **NAS status** — по каждому модулю: цвет-точка статуса (ok/warn/fail/absent), размер на диске, "X ago". Обновляется hourly timer + по кнопке Refresh.
+- **Today** — превью того что в 21:00 уйдёт в Telegram: uptime, CPU°C, IP, T7%, throttling/under-voltage, photo cards/files/size today, NAS today, errors, incomplete, microSD wear%, power mode.
+- **Services** — список из `/etc/travel-nas/services.conf` с подстановкой `{host}` и `{ip}`. Редактируй через `nano` или через Edit Services desktop shortcut.
+- **Logs** — встроенный viewer (photo-backup, nas-backup, watchdog, system-monitor, display errors).
+- **AP info / Force AP** — SSID/пароль/IP/инструкция и опасная кнопка перейти в AP-режим (с подтверждением).
+- **Reboot / Shutdown** — с двойным тапом.
 
-Конфиг: `/etc/travel-nas/tg-notify.conf`
+Auto-sleep через 5 минут неактивности (xset dpms + sysfs backlight для дисплеев которые умеют). На MHS35 lampbacklight прибита к 5V, экран чернеет но лампа горит — hardware-limit, не наш баг.
+
+## Telegram бот
+
+Если установлен **TG_LISTENER**, бот понимает:
+
+| Команда | Действие |
+|---|---|
+| `/status` | Snapshot: uptime, T7, CPU, photos today, throttle, power mode |
+| `/backup` | Запустить NAS backup |
+| `/backup dry` | Dry-run |
+| `/logs [N]` | Хвосты всех логов (default 30 строк) |
+| `/power [home/field/emergency/auto]` | Переключить power-mode |
+| `/reboot` `/shutdown` | С подтверждением `/yes` в течение 30 секунд |
+| `/help` | Список команд |
+
+Авторизация: только chat_id из `TG_CHAT_ID`. Остальные сообщения игнорируются.
+
+## Power mode
+
+Авто-переключает CPU governor + Docker apps:
+
+| Режим | Когда | Что делает |
+|---|---|---|
+| `home` | Подключён к SSID из `HOME_SSIDS` | `ondemand` governor, все Docker apps запущены |
+| `field` | Любой другой WiFi или AP | `ondemand`, Docker не трогает |
+| `emergency` | Прямо сейчас под-вольтаж (`vcgencmd get_throttled & 0x7`) | `powersave` + остановить `HEAVY_DOCKER_APPS` |
+
+Триггеры: NetworkManager dispatcher на connect/disconnect + system-monitor когда видит throttling.
+
+Ручной override: `power-mode.sh home|field|emergency|auto|status`.
+
+## photo-backup надёжность
+
+- Каждый бэкап стартует с suffix `.incomplete`, переименовывается без него после успешного rsync. Прерванные/сбойные остаются `.incomplete` — видно в Today page и в Telegram daily summary.
+- Стейл `.incomplete` старше 24 часов автоматически удаляются на следующем запуске photo-backup.
+- LED статус: солидный = idle, heartbeat = busy, фастблинк = error.
 
 ## Доступ
 
 - **Samba**: `smb://travel-nas.local/travel-nas` (Cmd+K в Finder)
-- **CasaOS**: `http://travel-nas.local` (если установлен)
-- **Photoview**: `http://travel-nas.local:8000` (если установлен)
+- **CasaOS**: `http://travel-nas.local`
+- **Photoview**: `http://travel-nas.local:8000` (в UI указывай путь `/t7/usb-imports` или `/t7/media`)
+- **YT-Archiver**: `http://travel-nas.local:8081`
 - **SSH**: `ssh oleg@travel-nas.local`
 
-## Восстановление из бэкапа
-
-При замене microSD или переустановке:
+## Восстановление при замене microSD
 
 ```bash
-# 1. Установить чистую Pi OS Desktop
-# 2. Запустить setup.sh (поднимет базу)
-bash setup.sh --all
-sudo reboot
-
-# 3. Восстановить конфиги из бэкапа на T7
+# 1. Установить чистую PiOS Desktop через Imager (SSH + WiFi настроены)
+# 2. travel-nas-setup       # whiptail-меню → отметить всё → Enter
+# 3. (после ребута) restore-pi-config из бэкапа на T7
 curl -fsSL https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/main/restore-pi-config.sh -o restore.sh
 bash restore.sh
 sudo reboot
@@ -103,61 +159,47 @@ sudo reboot
 
 ## Дата формата
 
-Везде используется EU-формат: `DD-MM-YYYY`. Например `27-05-2026`.
-
-## Поддержка повторного запуска
-
-`setup.sh` можно запускать сколько угодно раз — он:
-- Пропускает уже установленные пакеты
-- Не перезаписывает существующие конфиги
-- Обновляет только сами скрипты в `/usr/local/bin/`
+Везде EU: `DD-MM-YYYY` (например `27-05-2026`).
 
 ## Ручные команды
 
 ```bash
-# Запустить бэкап Pi config сейчас
-sudo /usr/local/bin/pi-config-backup.sh
+# Бэкап с NAS
+sudo nas-backup.sh                 # whiptail menu
+sudo nas-backup.sh --run           # без вопросов
+sudo nas-backup.sh --dry-run       # симуляция
+sudo nas-backup.sh --diff          # diff
 
-# Бэкап с NAS (интерактивно)
-sudo nas-backup.sh
+# Pi config backup
+sudo pi-config-backup.sh
 
-# Бэкап с NAS (без вопросов)
-sudo nas-backup.sh --run
-
-# Симуляция NAS-бэкапа
-sudo nas-backup.sh --dry-run
-
-# Diff с NAS (что изменится)
-sudo nas-backup.sh --diff
-
-# Тест photo-backup вручную
+# Photo-backup вручную
 sudo photo-backup.sh /dev/sdX1
 
-# Проверить watchdog
+# Watchdog
 sudo systemctl status disk-watchdog.timer
 sudo journalctl -u disk-watchdog.service -f
 
-# Тест Telegram
-/usr/local/bin/tg-notify.sh "Test" "Hello from Travel-NAS"
+# Power mode
+power-mode.sh status
+sudo power-mode.sh home            # принудительно
 
 # Логи
 tail -F /mnt/t7/_logs/*.log
+
+# Telegram тест
+/usr/local/bin/tg-notify.sh "Test" "Hello from Travel-NAS"
 ```
-
-## Hardware
-
-- Raspberry Pi 5 (8GB RAM)
-- Samsung T7 Shield SSD 4TB (USB 3.2 Gen 2, IP65)
-- microSD 64GB+ (для системы)
-- Pi 5 27W блок питания (комплектный)
-- (Опционально) MHS35 3.5" touch display
-- (Опционально) Powerbank с 5V/5A USB-C (Anker 737, Prime 27650)
 
 ## Lessons learned
 
-- **NVMe через N04 PCIe HAT нестабилен** — стабильнее USB SSD
-- **Kingston SNV2S без DRAM не для NAS-нагрузки** — TLC SSD с DRAM лучше
-- **lbb (Little Backup Box) конфликтует с CasaOS/fstab** — заменён собственным photo-backup
-- **EXT4 надёжнее exFAT** на тяжёлой записи
+- **NVMe через PCIe HAT нестабилен** на Pi 5 (Kingston SNV2S падал) — стабильнее USB SSD.
+- **Bare USB SSD без DRAM не для NAS-нагрузки** — TLC SSD с DRAM (T7) лучше.
+- **lbb (Little Backup Box) конфликтует с CasaOS/fstab** — заменён собственным photo-backup.
+- **EXT4 надёжнее exFAT** на тяжёлой записи.
+- **PiOS Imager preconfig** обязательно — иначе первый boot без сети и без SSH.
+- **Pi 5 27W блок питания критичен** — с 15W блоками или хилым USB-PD идёт throttle.
 
-См. историю проекта в коммитах для деталей.
+## CHANGELOG
+
+См. [CHANGELOG.md](CHANGELOG.md).

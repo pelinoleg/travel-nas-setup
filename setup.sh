@@ -631,19 +631,28 @@ fi
 if [[ -n "${DO_ZRAM:-}" ]]; then
     info "=== ZRAM ==="
 
+    # ZRAM конфликтует с уже работающим встроенным zram в PiOS.
+    # Делаем не-критичным: ставим, но не падаем если рестарт не удался.
     if ! dpkg -l | grep -q zram-tools; then
-        sudo apt-get install -y zram-tools
+        sudo apt-get install -y zram-tools || warn "zram-tools install failed"
     fi
-    sudo sed -i 's/^#\?ALGO=.*/ALGO=zstd/' /etc/default/zramswap
-    sudo sed -i 's/^#\?PERCENT=.*/PERCENT=50/' /etc/default/zramswap
-    sudo systemctl restart zramswap
+    sudo sed -i 's/^#\?ALGO=.*/ALGO=zstd/' /etc/default/zramswap 2>/dev/null || true
+    sudo sed -i 's/^#\?PERCENT=.*/PERCENT=50/' /etc/default/zramswap 2>/dev/null || true
+
+    # Перезапуск может упасть если уже есть zram0 от PiOS — это OK
+    if sudo systemctl restart zramswap 2>/dev/null; then
+        log "ZRAM настроен (zstd, 50%)"
+    else
+        warn "zramswap не запустился — возможно PiOS уже использует zram. Это не критично."
+        warn "Проверь: zramctl"
+    fi
 
     # Swappiness
     if ! grep -q "vm.swappiness" /etc/sysctl.conf; then
         echo "vm.swappiness=10" | sudo tee -a /etc/sysctl.conf > /dev/null
-        sudo sysctl -p
+        sudo sysctl -p > /dev/null 2>&1 || true
     fi
-    log "ZRAM настроен (zstd, 50%, swappiness=10)"
+    log "Swappiness = 10"
 fi
 
 # =============================================================================

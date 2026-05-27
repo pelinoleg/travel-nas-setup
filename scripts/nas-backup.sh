@@ -119,8 +119,11 @@ run_module() {
     info "📦 $dest_folder ← NAS::$module"
     echo "   → $dest_path"
 
+    # --info=progress2 --no-inc-recursive нужен для глобального % и парсинга
+    # writer-скриптом (вместо просто -P).
     local rsync_args=(
-        -rltD -P
+        -rltD
+        --info=progress2 --no-inc-recursive
         --no-owner --no-group --no-perms
         --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r
         --omit-dir-times
@@ -139,8 +142,21 @@ run_module() {
 
     rsync_args+=("$NAS_USER@$NAS_HOST::$module/" "$dest_path/")
 
-    sshpass -p "$NAS_PASS" rsync "${rsync_args[@]}" 2>&1 | tee "$log_file"
-    local exit_code="${PIPESTATUS[0]}"
+    local progress_writer="/usr/local/bin/backup-progress-writer.py"
+    local exit_code
+    if [[ -x "$progress_writer" ]] && [[ "${DRY_RUN:-false}" != "true" ]]; then
+        sshpass -p "$NAS_PASS" rsync "${rsync_args[@]}" 2>&1 \
+            | "$progress_writer" \
+                --source nas \
+                --device "$NAS_HOST" \
+                --label "$dest_folder" \
+                --target "$dest_path" \
+            | tee "$log_file"
+        exit_code="${PIPESTATUS[0]}"
+    else
+        sshpass -p "$NAS_PASS" rsync "${rsync_args[@]}" 2>&1 | tee "$log_file"
+        exit_code="${PIPESTATUS[0]}"
+    fi
 
     if [[ "$exit_code" -eq 0 ]]; then
         log "Module $dest_folder OK"

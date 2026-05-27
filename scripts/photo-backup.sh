@@ -168,22 +168,48 @@ Target: \`$DATE_DIR/$BACKUP_NAME\`"
 
 START_TIME=$(date +%s)
 
-# rsync — копируем ВСЁ
-rsync -avh \
-    --info=PROGRESS2 \
-    --stats \
-    --no-owner --no-group --no-perms \
-    --min-size="${MIN_SIZE}" \
-    --exclude='*$recycle.bin/*' \
-    --exclude='*trash*' \
-    --exclude='.Spotlight-V100' \
-    --exclude='.fseventsd' \
-    --exclude='.Trashes' \
-    --exclude='System Volume Information' \
-    --exclude='._*' \
-    "$MOUNT_SRC/" "$TARGET_DIR/" 2>&1
-
-RSYNC_EXIT=$?
+# rsync — копируем ВСЁ. Пайплим через progress-writer чтобы dashboard
+# видел прогресс в реальном времени (/var/run/travel-nas/backup-progress.json).
+# --no-inc-recursive нужен чтобы PROGRESS2 считал глобальный процент.
+PROGRESS_WRITER="/usr/local/bin/backup-progress-writer.py"
+if [[ -x "$PROGRESS_WRITER" ]]; then
+    rsync -avh \
+        --info=progress2 --no-inc-recursive \
+        --stats \
+        --no-owner --no-group --no-perms \
+        --min-size="${MIN_SIZE}" \
+        --exclude='*$recycle.bin/*' \
+        --exclude='*trash*' \
+        --exclude='.Spotlight-V100' \
+        --exclude='.fseventsd' \
+        --exclude='.Trashes' \
+        --exclude='System Volume Information' \
+        --exclude='._*' \
+        "$MOUNT_SRC/" "$TARGET_DIR/" 2>&1 \
+    | "$PROGRESS_WRITER" \
+        --source photo \
+        --device "$DEVICE" \
+        --label "$LABEL" \
+        --target "$TARGET_DIR" \
+        --files-total "$FILE_COUNT_SRC" \
+        --size-total "$SIZE_HUMAN"
+    RSYNC_EXIT=${PIPESTATUS[0]}
+else
+    rsync -avh \
+        --info=progress2 --no-inc-recursive \
+        --stats \
+        --no-owner --no-group --no-perms \
+        --min-size="${MIN_SIZE}" \
+        --exclude='*$recycle.bin/*' \
+        --exclude='*trash*' \
+        --exclude='.Spotlight-V100' \
+        --exclude='.fseventsd' \
+        --exclude='.Trashes' \
+        --exclude='System Volume Information' \
+        --exclude='._*' \
+        "$MOUNT_SRC/" "$TARGET_DIR/" 2>&1
+    RSYNC_EXIT=$?
+fi
 END_TIME=$(date +%s)
 DURATION=$((END_TIME - START_TIME))
 DURATION_MIN=$((DURATION / 60))

@@ -218,7 +218,7 @@ def cmd_power(token, chat_id, args):
 Текущий режим: `{cur}`
 
 Что какой режим делает:
-🟢 `home` — на домашнем Wi-Fi (из HOME_SSIDS).
+🟢 `home` — на домашнем Wi-Fi (из списка `HOME_SSIDS`).
    CPU governor = ondemand, все Docker apps запущены.
 🔵 `field` — в дороге, питание ок.
    CPU governor = ondemand, ничего не трогаем.

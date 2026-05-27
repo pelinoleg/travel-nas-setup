@@ -51,7 +51,7 @@ fi
 # =============================================================================
 
 if [[ "$1" == "--all" ]]; then
-    SELECTED="UPDATE PCIE USERS UTILS NVMEMOUNT LBB CASAOS SAMBA LOG2RAM ZRAM PIBACKUP LCD"
+    SELECTED="UPDATE PCIE USERS UTILS NVMEMOUNT LBB CASAOS SAMBA LOG2RAM ZRAM PIBACKUP PHOTOBACKUP LCD"
 elif [[ "$1" == "--help" ]]; then
     sed -n '2,15p' "$0" | sed 's/^# //'
     exit 0
@@ -71,6 +71,7 @@ else
         "LOG2RAM"   "Log2ram (экономит microSD)" ON \
         "ZRAM"      "Тюнинг zram swap (4GB, swappiness=10)" ON \
         "PIBACKUP"  "Скрипт бэкапа конфига Pi" ON \
+        "PHOTOBACKUP" "Photo Backup (udev + rsync + Telegram, альтернатива lbb)" OFF \
         "LCD"       "3.5\" экран MHS35 (ВНИМАНИЕ: ребутает в конце)" OFF \
         3>&1 1>&2 2>&3)
 
@@ -248,6 +249,25 @@ if [[ -n "$DO_NVMEMOUNT" ]]; then
                     sudo mount -a
                     if findmnt -n "$MOUNT_POINT" &>/dev/null; then
                         log "NVMe смонтирован в $MOUNT_POINT"
+
+                        # Bind-mount для совместимости с lbb
+                        # lbb захардкодил путь /media/nvme_target — без bind он не найдёт диск
+                        LBB_MOUNT="/media/nvme_target"
+                        sudo mkdir -p "$LBB_MOUNT"
+
+                        if ! mountpoint -q "$LBB_MOUNT"; then
+                            sudo mount --bind "$MOUNT_POINT" "$LBB_MOUNT"
+                            log "Bind-mount: $LBB_MOUNT → $MOUNT_POINT (для совместимости с lbb)"
+                        else
+                            info "$LBB_MOUNT уже примонтирован"
+                        fi
+
+                        # Добавляем bind-mount в fstab если ещё нет
+                        BIND_FSTAB_LINE="$MOUNT_POINT $LBB_MOUNT none bind,nofail 0 0"
+                        if ! grep -qF "$BIND_FSTAB_LINE" /etc/fstab; then
+                            echo "$BIND_FSTAB_LINE" | sudo tee -a /etc/fstab > /dev/null
+                            log "Bind-mount добавлен в /etc/fstab"
+                        fi
 
                         # Спрашиваем какие подпапки создать
                         # Примечание: lbb сам создаёт папки lbb_<источник> в корне диска,
@@ -621,6 +641,287 @@ BACKEOF
 fi
 
 # =============================================================================
+# Photo Backup (udev + rsync + Telegram) - простая альтернатива lbb
+# =============================================================================
+# Автокопирование SD-карт на NVMe при подключении USB-картридера.
+# Минимальная архитектура: udev → systemd → bash + rsync.
+# Не дерётся с lbb (если установлен) и CasaOS (использует его devmon-mount если есть).
+
+if [[ -n "$DO_PHOTOBACKUP" ]]; then
+    info "=== Photo Backup ==="
+
+    # Целевая папка
+    PHOTO_DEST="/mnt/nvme_target/photos"
+    if ! mountpoint -q /mnt/nvme_target; then
+        warn "/mnt/nvme_target не примонтирован — photo-backup потом будет писать туда"
+    fi
+    sudo mkdir -p "$PHOTO_DEST"
+    sudo chmod 777 "$PHOTO_DEST"
+
+    # === Конфиг ===
+    CONFIG_FILE="/etc/photo-backup.conf"
+
+    # Спрашиваем Telegram-параметры
+    TG_TOKEN=""
+    TG_CHAT_ID=""
+
+    if [[ -f "$CONFIG_FILE" ]]; then
+        info "Конфиг $CONFIG_FILE уже существует — пропускаю настройку Telegram"
+    else
+        if whiptail --yesno "Настроить Telegram-уведомления о бэкапе?\n\n(Нужны bot token и chat_id — см. инструкцию в чате)" 12 60; then
+            TG_TOKEN=$(whiptail --inputbox "Telegram bot token:" 10 70 "" 3>&1 1>&2 2>&3) || TG_TOKEN=""
+            TG_CHAT_ID=$(whiptail --inputbox "Telegram chat_id:" 10 60 "" 3>&1 1>&2 2>&3) || TG_CHAT_ID=""
+        fi
+
+        # Пишем конфиг
+        sudo tee "$CONFIG_FILE" > /dev/null << CONFEOF
+# Photo Backup config
+# /etc/photo-backup.conf
+
+# Куда копировать (структура: <DEST>/<DATE>_<LABEL>/)
+DEST="$PHOTO_DEST"
+
+# Что копировать: "all" = вся карта, "dcim" = только DCIM
+# (Олег выбрал all)
+COPY_MODE="all"
+
+# Telegram уведомления (оставь пустым чтобы отключить)
+TG_BOT_TOKEN="$TG_TOKEN"
+TG_CHAT_ID="$TG_CHAT_ID"
+
+# Минимальный размер файла для копирования (байт). Игнорируем мусор.
+MIN_SIZE=1
+
+# Размонтировать SD после бэкапа? (true/false)
+# false = безопаснее, вручную вытащить когда увидишь Telegram-сообщение
+AUTO_UMOUNT=false
+CONFEOF
+        sudo chmod 600 "$CONFIG_FILE"
+        log "Создан $CONFIG_FILE (chmod 600 — содержит токен)"
+    fi
+
+    # === Сам скрипт бэкапа ===
+    BACKUP_BIN="/usr/local/bin/photo-backup.sh"
+
+    sudo tee "$BACKUP_BIN" > /dev/null << 'BACKEOF'
+#!/bin/bash
+# /usr/local/bin/photo-backup.sh
+# Автобэкап SD-карт при вставке. Запускается через systemd unit.
+
+set -u
+
+DEVICE="${1:-}"   # передаётся через udev/systemd: /dev/sda1, /dev/sdb1 etc
+
+# Загружаем конфиг
+CONFIG="/etc/photo-backup.conf"
+[[ -f "$CONFIG" ]] || { echo "No config $CONFIG"; exit 1; }
+source "$CONFIG"
+
+LOG="/var/log/photo-backup.log"
+exec >> "$LOG" 2>&1
+
+log_msg() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
+
+# Telegram helper
+tg_send() {
+    local msg="$1"
+    if [[ -n "${TG_BOT_TOKEN:-}" && -n "${TG_CHAT_ID:-}" ]]; then
+        curl -s --max-time 10 \
+            -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TG_CHAT_ID}" \
+            -d text="${msg}" \
+            -d parse_mode="Markdown" > /dev/null || true
+    fi
+}
+
+log_msg "=== Backup triggered for $DEVICE ==="
+
+if [[ -z "$DEVICE" || ! -b "$DEVICE" ]]; then
+    log_msg "ERROR: $DEVICE is not a block device"
+    exit 1
+fi
+
+# Проверка что это съёмный носитель (не системный диск, не NVMe)
+if [[ "$DEVICE" =~ nvme || "$DEVICE" =~ mmcblk0 ]]; then
+    log_msg "Skipping system/NVMe device: $DEVICE"
+    exit 0
+fi
+
+# Ждём немного — devmon (CasaOS) может монтировать
+sleep 3
+
+# Где смонтирован диск?
+MOUNT_SRC=$(findmnt -n -o TARGET "$DEVICE" 2>/dev/null | head -1)
+TEMP_MOUNT=""
+
+if [[ -z "$MOUNT_SRC" ]]; then
+    # Не смонтирован — монтируем сами
+    TEMP_MOUNT=$(mktemp -d /tmp/photo-backup-XXXXXX)
+    if mount -o ro "$DEVICE" "$TEMP_MOUNT" 2>/dev/null; then
+        MOUNT_SRC="$TEMP_MOUNT"
+        log_msg "Mounted $DEVICE at $TEMP_MOUNT (read-only)"
+    else
+        log_msg "ERROR: cannot mount $DEVICE"
+        rmdir "$TEMP_MOUNT" 2>/dev/null
+        exit 1
+    fi
+fi
+
+log_msg "Source mounted at: $MOUNT_SRC"
+
+# Метка диска и UUID
+LABEL=$(lsblk -no LABEL "$DEVICE" 2>/dev/null | head -1 | tr ' /' '_-' | tr -cd '[:alnum:]_-')
+UUID_SHORT=$(lsblk -no UUID "$DEVICE" 2>/dev/null | head -1 | cut -c1-8)
+[[ -z "$LABEL" ]] && LABEL="NOLABEL"
+[[ -z "$UUID_SHORT" ]] && UUID_SHORT="nouuid"
+
+DATE_STR=$(date +%Y-%m-%d_%H-%M)
+BACKUP_NAME="${DATE_STR}_${LABEL}_${UUID_SHORT}"
+TARGET_DIR="${DEST}/${BACKUP_NAME}"
+mkdir -p "$TARGET_DIR"
+
+log_msg "Target: $TARGET_DIR"
+
+# Размер источника для уведомления
+SIZE_HUMAN=$(du -sh "$MOUNT_SRC" 2>/dev/null | awk '{print $1}')
+FILE_COUNT_SRC=$(find "$MOUNT_SRC" -type f 2>/dev/null | wc -l)
+
+tg_send "📷 *Backup started*
+Device: \`$DEVICE\` ($LABEL)
+Files: $FILE_COUNT_SRC
+Size: $SIZE_HUMAN
+Target: $BACKUP_NAME"
+
+# Что копировать
+if [[ "${COPY_MODE:-all}" == "dcim" ]]; then
+    SOURCE_PATH="$MOUNT_SRC/DCIM"
+    if [[ ! -d "$SOURCE_PATH" ]]; then
+        log_msg "WARN: no DCIM folder, copying everything instead"
+        SOURCE_PATH="$MOUNT_SRC/"
+    fi
+else
+    SOURCE_PATH="$MOUNT_SRC/"
+fi
+
+# Сам rsync
+START_TIME=$(date +%s)
+
+rsync -avh \
+    --info=PROGRESS2 \
+    --stats \
+    --no-owner --no-group --no-perms \
+    --mkpath \
+    --min-size="${MIN_SIZE:-1}" \
+    --exclude='*$recycle.bin/*' \
+    --exclude='*trash*' \
+    --exclude='.Spotlight-V100' \
+    --exclude='.fseventsd' \
+    --exclude='.Trashes' \
+    --exclude='System Volume Information' \
+    "$SOURCE_PATH" "$TARGET_DIR/" 2>&1 | tee -a "$LOG"
+
+RSYNC_EXIT=${PIPESTATUS[0]}
+END_TIME=$(date +%s)
+DURATION=$((END_TIME - START_TIME))
+DURATION_MIN=$((DURATION / 60))
+DURATION_SEC=$((DURATION % 60))
+
+# Результат
+FILE_COUNT_DST=$(find "$TARGET_DIR" -type f 2>/dev/null | wc -l)
+
+if [[ "$RSYNC_EXIT" -eq 0 ]]; then
+    log_msg "Backup OK: $FILE_COUNT_DST files in ${DURATION_MIN}m${DURATION_SEC}s"
+    tg_send "✅ *Backup complete*
+Files copied: $FILE_COUNT_DST / $FILE_COUNT_SRC
+Duration: ${DURATION_MIN}m ${DURATION_SEC}s
+Path: \`$BACKUP_NAME\`
+
+You can now safely remove the card."
+else
+    log_msg "Backup FAILED with rsync exit code $RSYNC_EXIT"
+    tg_send "❌ *Backup FAILED*
+Device: \`$DEVICE\`
+Rsync exit: $RSYNC_EXIT
+Files: $FILE_COUNT_DST / $FILE_COUNT_SRC
+
+Check log: /var/log/photo-backup.log"
+fi
+
+# Auto-umount если нужно
+if [[ "${AUTO_UMOUNT:-false}" == "true" ]]; then
+    sleep 2
+    sync
+    umount "$MOUNT_SRC" 2>/dev/null && log_msg "Unmounted $MOUNT_SRC"
+fi
+
+# Уборка временного mount если сами монтировали
+if [[ -n "$TEMP_MOUNT" && -d "$TEMP_MOUNT" ]]; then
+    umount "$TEMP_MOUNT" 2>/dev/null || true
+    rmdir "$TEMP_MOUNT" 2>/dev/null || true
+fi
+
+log_msg "=== Done ==="
+exit "$RSYNC_EXIT"
+BACKEOF
+
+    sudo chmod +x "$BACKUP_BIN"
+    log "Создан $BACKUP_BIN"
+
+    # === systemd unit (template) ===
+    SYSTEMD_UNIT="/etc/systemd/system/photo-backup@.service"
+
+    sudo tee "$SYSTEMD_UNIT" > /dev/null << 'SYSEOF'
+[Unit]
+Description=Photo Backup for %i
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/photo-backup.sh /dev/%i
+User=root
+TimeoutStartSec=3600
+SYSEOF
+
+    sudo systemctl daemon-reload
+    log "Создан systemd unit photo-backup@.service"
+
+    # === udev rule ===
+    UDEV_RULE="/etc/udev/rules.d/99-photo-backup.rules"
+
+    # Запускаем для любого USB-storage раздела (sd[a-z][0-9])
+    # Игнорируем NVMe (там система или наш storage)
+    sudo tee "$UDEV_RULE" > /dev/null << 'UDEVEOF'
+# Photo Backup: запускаем при подключении USB-карт ридера
+# Срабатывает только на разделы (PARTITION), не на сам диск
+ACTION=="add", KERNEL=="sd[a-z][0-9]", SUBSYSTEM=="block", ENV{ID_BUS}=="usb", \
+    TAG+="systemd", ENV{SYSTEMD_WANTS}+="photo-backup@%k.service"
+UDEVEOF
+
+    sudo udevadm control --reload-rules
+    log "Создано udev-правило $UDEV_RULE"
+
+    # Создаём лог-файл
+    sudo touch /var/log/photo-backup.log
+    sudo chmod 666 /var/log/photo-backup.log
+    log "Лог: /var/log/photo-backup.log"
+
+    info ""
+    info "📷 Photo Backup готов!"
+    info ""
+    info "Что произойдёт при вставке USB-картридера с SD:"
+    info "  1. udev детектит → запускает photo-backup@sda1.service"
+    info "  2. Скрипт ждёт 3 сек (CasaOS успевает смонтировать)"
+    info "  3. rsync копирует на $PHOTO_DEST/<дата>_<метка>_<uuid>/"
+    info "  4. Telegram: уведомление о результате"
+    info ""
+    info "Логи:    sudo journalctl -u photo-backup@*"
+    info "Лог-файл: tail -f /var/log/photo-backup.log"
+    info "Конфиг:   sudo nano $CONFIG_FILE"
+    info "Тест вручную: sudo /usr/local/bin/photo-backup.sh /dev/sda1"
+fi
+
+
+# =============================================================================
 # 13. 3.5" MHS35 экран
 # =============================================================================
 
@@ -675,6 +976,7 @@ echo ""
 [[ -n "$DO_LBB" ]]     && info "Little Backup Box: http://lbb.local:8080"
 [[ -n "$DO_CASAOS" ]]  && info "CasaOS:            http://lbb.local (порт 80)"
 [[ -n "$DO_SAMBA" ]]   && info "Samba шара:        smb://lbb.local/travel-nas"
+[[ -n "$DO_PHOTOBACKUP" ]] && info "Photo Backup:      вставь USB-картридер → автобэкап"
 [[ -n "$DO_PCIE" ]]    && warn "PCIe/NVMe применятся ПОСЛЕ ребута"
 
 echo ""

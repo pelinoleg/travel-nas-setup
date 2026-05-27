@@ -13,6 +13,7 @@
 # =============================================================================
 
 import os
+import re
 import sys
 import json
 import time
@@ -232,6 +233,36 @@ def _throttled():
     return ("past", WARN)
 
 
+_PMIC_RE = re.compile(r"\s*(\S+)_([AV])\s+\w+\(\d+\)=([\d.]+)[AV]")
+
+
+def _watts():
+    """Грубая оценка потребления Pi 5 через `vcgencmd pmic_read_adc`.
+    Возвращает округлённое до целого число ватт (например 5) или None.
+    Считаем сумму V*I по каждому rail у которого есть и V и A показания."""
+    try:
+        out = subprocess.check_output(
+            ["vcgencmd", "pmic_read_adc"],
+            timeout=3, stderr=subprocess.DEVNULL,
+        ).decode()
+    except Exception:
+        return None
+    rails = {}
+    for line in out.splitlines():
+        m = _PMIC_RE.match(line)
+        if not m:
+            continue
+        rail, suffix, val = m.group(1), m.group(2), float(m.group(3))
+        rails.setdefault(rail, {})[suffix] = val
+    total = 0.0
+    for d in rails.values():
+        if "V" in d and "A" in d:
+            total += d["V"] * d["A"]
+    if total <= 0:
+        return None
+    return round(total)
+
+
 def _t7_temp():
     device = subprocess.check_output(
         ["findmnt", "-n", "-o", "SOURCE", T7_MOUNT], timeout=2
@@ -381,6 +412,7 @@ c_swap     = Cached(_swap,            4)
 c_zram     = Cached(_zram_ratio,      5)
 c_load     = Cached(_load,            2)
 c_throttle = Cached(_throttled,       5)
+c_watts    = Cached(_watts,           5)
 c_t7_temp  = Cached(_t7_temp,        30)
 c_disk     = Cached(_disk_info,       5)
 c_ip       = Cached(_ip,              5)
@@ -471,7 +503,8 @@ def load_services():
 
 
 def health_status():
-    """Аггрегат: ('OK'|'WARN'|'ERR', color)."""
+    """Аггрегат "общего здоровья" — mount/SMART/temp/disk-fill.
+    Throttling и питание оцениваются ОТДЕЛЬНО через ⚡-значок, не сюда."""
     bad, warn = False, False
     disk = c_disk.get()
     if not disk:
@@ -485,9 +518,6 @@ def health_status():
     ct = c_cpu_temp.get()
     if ct and ct >= 75: bad = True
     elif ct and ct >= 65: warn = True
-    th = c_throttle.get()
-    if th and th[0] == "NOW":   bad = True
-    elif th and th[0] == "past": warn = True
     if not c_ip.get(): warn = True
     if bad:  return ("ERR", ERROR)
     if warn: return ("WARN", WARN)
@@ -558,23 +588,35 @@ def draw_bar(x, y, w, h, pct, color):
 
 
 def draw_top_strip(page_label=None):
-    """Top-strip: health-точка, hostname, ⚡ при under-voltage, часы.
-    Возвращает y после полосы."""
+    """Top-strip:
+       ● health-точка (mount/SMART/temp/disk — БЕЗ throttling)
+       hostname
+       ⚡ только если под-вольтаж ПРЯМО СЕЙЧАС (как PiOS taskbar)
+       <N>W оценка текущего потребления Pi 5 (PMIC ADC)
+       HH:MM справа."""
     pygame.draw.rect(screen, PANEL, (0, 0, SCREEN_W, 22))
     _, color = health_status()
     pygame.draw.circle(screen, color, (12, 11), 5)
+
+    x = 24
     host_text = page_label or socket.gethostname()
     host_surf = F_SMALL.render(host_text, True, FG)
-    screen.blit(host_surf, (24, 4))
+    screen.blit(host_surf, (x, 4))
+    x += host_surf.get_width() + 6
 
-    # ⚡ значок если детектится under-voltage (как в PiOS desktop tray)
+    # ⚡ — ТОЛЬКО когда под-вольтаж сейчас. Past-флаг не показываем
+    # (висел бы до ребута и захламлял).
     th = c_throttle.get()
     if th and th[0] == "NOW":
         bolt = F_SMALL.render("⚡", True, ERROR)
-        screen.blit(bolt, (24 + host_surf.get_width() + 4, 4))
-    elif th and th[0] == "past":
-        bolt = F_SMALL.render("⚡", True, WARN)
-        screen.blit(bolt, (24 + host_surf.get_width() + 4, 4))
+        screen.blit(bolt, (x, 4))
+        x += bolt.get_width() + 6
+
+    # Текущее потребление в W (PMIC ADC) — справочная цифра, всегда видна
+    w = c_watts.get()
+    if w is not None:
+        w_surf = F_SMALL.render(f"{w}W", True, MUTED)
+        screen.blit(w_surf, (x, 4))
 
     now = datetime.now().strftime("%H:%M")
     t = F_SMALL.render(now, True, MUTED)

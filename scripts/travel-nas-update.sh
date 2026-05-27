@@ -20,6 +20,17 @@
 
 set -u
 
+# Самопродвижение в root: если не root — re-exec через sudo. Так и tg-listener
+# (NOPASSWD: travel-nas-update), и интерактивный юзер (sudo prompts in tty) —
+# оба попадут в одну и ту же ветку без необходимости разруливать sudo внутри.
+if [[ "$EUID" -ne 0 ]]; then
+    if [[ -t 0 ]]; then
+        exec sudo -- "$0" "$@"
+    fi
+    echo "ERROR: must run as root (или через sudo с tty)" >&2
+    exit 1
+fi
+
 REPO_RAW="https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/main"
 
 # Пары: src-имя-в-репо  →  target-путь на устройстве
@@ -51,13 +62,13 @@ echo ""
 for name in "${!SCRIPTS[@]}"; do
     target="${SCRIPTS[$name]}"
     tmp="${target}.tmp.$$"
-    if sudo curl -fsSL "$REPO_RAW/scripts/${name}?${TS}" -o "$tmp"; then
-        sudo mv "$tmp" "$target"
-        sudo chmod +x "$target"
+    if curl -fsSL "$REPO_RAW/scripts/${name}?${TS}" -o "$tmp"; then
+        mv "$tmp" "$target"
+        chmod +x "$target"
         echo "  ✓ $target"
         OK=$((OK + 1))
     else
-        sudo rm -f "$tmp" 2>/dev/null
+        rm -f "$tmp" 2>/dev/null
         echo "  ✗ $name — fetch failed"
         FAIL=$((FAIL + 1))
     fi
@@ -72,7 +83,7 @@ echo ""
 echo "→ Restarting active services..."
 for svc in tg-listener.service; do
     if systemctl is-active --quiet "$svc"; then
-        if sudo systemctl restart "$svc"; then
+        if systemctl restart "$svc"; then
             RESTARTED+=("$svc")
             echo "  ✓ $svc"
         else
@@ -81,21 +92,26 @@ for svc in tg-listener.service; do
     fi
 done
 
-# Dashboard — перезапуск только если бежит и есть X-сессия
+# Dashboard — перезапуск только если бежит и есть X-сессия.
+# Внутри скрипт root (после exec sudo), но dashboard должен бежать от юзера
+# (его X-сессия). Берём оригинального юзера из SUDO_USER, fallback на logname.
+USER_LOGIN="${SUDO_USER:-$(logname 2>/dev/null || echo "")}"
+USER_HOME="/home/$USER_LOGIN"
+
 if pgrep -f /usr/local/bin/travel-nas-display.py >/dev/null; then
     pkill -f /usr/local/bin/travel-nas-display.py 2>/dev/null || true
     sleep 1
-    # Запуск под текущим X-сервером пользователя
-    USER_HOME="/home/$(whoami)"
-    if [[ -e "$USER_HOME/.Xauthority" ]]; then
-        DISPLAY=:0 XAUTHORITY="$USER_HOME/.Xauthority" \
+    if [[ -n "$USER_LOGIN" && -e "$USER_HOME/.Xauthority" ]]; then
+        # Дропаем привилегии обратно к юзеру и запускаем в его X
+        sudo -u "$USER_LOGIN" -H \
+            env DISPLAY=:0 XAUTHORITY="$USER_HOME/.Xauthority" \
             nohup /usr/bin/python3 /usr/local/bin/travel-nas-display.py \
             >/tmp/travel-nas-display.out 2>&1 &
         disown 2>/dev/null || true
         RESTARTED+=("dashboard")
-        echo "  ✓ dashboard"
+        echo "  ✓ dashboard (as $USER_LOGIN)"
     else
-        echo "  ⚠ X-сессия не найдена — dashboard перезапустится при следующем логине"
+        echo "  ⚠ нет X-сессии — dashboard поднимется при следующем логине"
     fi
 fi
 

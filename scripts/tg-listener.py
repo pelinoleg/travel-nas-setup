@@ -197,9 +197,40 @@ def cmd_logs(token, chat_id, args):
 
 
 def cmd_power(token, chat_id, args):
-    mode = (args[0] if args else "auto").lower()
+    # /power без аргументов — справка + текущее состояние
+    if not args:
+        try:
+            cur = POWER_MODE_FILE.read_text().strip() if POWER_MODE_FILE.exists() else "unknown"
+        except Exception:
+            cur = "unknown"
+        send(token, chat_id, f"""*Power mode* — авто-профили питания
+
+Текущий режим: `{cur}`
+
+Что какой режим делает:
+🟢 `home` — на домашнем Wi-Fi (из HOME_SSIDS).
+   CPU governor = ondemand, все Docker apps запущены.
+🔵 `field` — в дороге, питание ок.
+   CPU governor = ondemand, ничего не трогаем.
+🟠 `emergency` — детект under-voltage сейчас.
+   governor = powersave, тяжёлые Docker apps (yt-archiver,
+   Photoview) останавливаются — спасаем питание.
+⚪ `auto` — пересчитать режим по текущему SSID/throttle.
+
+Команды:
+`/power auto` — пересчитать сейчас
+`/power home` `/power field` `/power emergency` — форсировать
+
+Триггеры авто-переключения:
+• NetworkManager dispatcher при connect/disconnect
+• system-monitor когда видит throttling
+
+Конфиг: `/etc/travel-nas/power-mode.conf` (HOME_SSIDS, HEAVY_DOCKER_APPS)""")
+        return
+
+    mode = args[0].lower()
     if mode not in ("home", "field", "emergency", "auto", "status"):
-        send(token, chat_id, "Usage: /power [home|field|emergency|auto|status]")
+        send(token, chat_id, "Usage: `/power [home|field|emergency|auto|status]`\nБез аргумента → справка")
         return
     try:
         out = subprocess.check_output(

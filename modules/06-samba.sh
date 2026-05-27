@@ -4,8 +4,7 @@ info "=== Samba ==="
 if (
     set -e
     if ! command -v smbd &>/dev/null; then
-        wait_for_apt
-        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y samba samba-common-bin
+        apt_install samba samba-common-bin
     fi
     if mountpoint -q "$T7_MOUNT"; then
         SHARE_PATH="$T7_MOUNT"

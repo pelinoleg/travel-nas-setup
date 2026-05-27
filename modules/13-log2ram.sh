@@ -4,12 +4,14 @@ info "=== Log2ram ==="
 if (
     set -e
     if ! dpkg -l | grep -q log2ram; then
-        echo "deb http://packages.azlux.fr/debian/ bookworm main" | sudo tee /etc/apt/sources.list.d/azlux.list
+        # Auto-detect distro codename (trixie / bookworm / bullseye)
+        CODENAME=$(. /etc/os-release && echo "$VERSION_CODENAME")
+        [[ -z "$CODENAME" ]] && CODENAME="trixie"
+        echo "deb http://packages.azlux.fr/debian/ $CODENAME main" | \
+            sudo tee /etc/apt/sources.list.d/azlux.list
         sudo wget -qO /etc/apt/trusted.gpg.d/azlux-archive-keyring.gpg https://azlux.fr/repo.gpg
-        wait_for_apt
-        sudo DEBIAN_FRONTEND=noninteractive apt-get update
-        wait_for_apt
-        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y log2ram
+        apt_get update
+        apt_install log2ram
     fi
 ); then
     mark_ok "LOG2RAM"

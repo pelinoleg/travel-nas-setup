@@ -5,8 +5,7 @@ if (
     set -e
     sudo mkdir -p "$CONFIG_DIR"
     if ! command -v sshpass &>/dev/null; then
-        wait_for_apt
-        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y sshpass
+        apt_install sshpass
     fi
     fetch_script "nas-backup.sh"        "$SCRIPT_DIR/nas-backup.sh"
     fetch_script "nas-backup-status.py" "$SCRIPT_DIR/nas-backup-status.py"

@@ -103,6 +103,32 @@ apt_get() {
 }
 
 # =============================================================================
+# apt_install — install с ретраями и --fix-missing fallback
+# =============================================================================
+# Debian mirrors иногда отдают stale metadata: пакет в Packages.gz есть,
+# а .deb ещё не залит → 404. Делаем 3 попытки с apt-get update между.
+# Финально пробуем --fix-missing чтобы пропустить недоступные пакеты.
+# =============================================================================
+apt_install() {
+    local max=3 attempt=1
+    while (( attempt <= max )); do
+        wait_for_apt
+        if sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$@"; then
+            return 0
+        fi
+        warn "apt install attempt $attempt failed — refreshing index & retrying"
+        sleep 5
+        wait_for_apt
+        sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq || true
+        sudo DEBIAN_FRONTEND=noninteractive apt-get --fix-broken install -y 2>/dev/null || true
+        attempt=$((attempt + 1))
+    done
+    warn "apt install окончательно упал — пробую --fix-missing"
+    wait_for_apt
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --fix-missing "$@"
+}
+
+# =============================================================================
 # fetch_script / fetch_conf_example — копируют из локального чекаута или curl с GitHub
 # =============================================================================
 fetch_script() {

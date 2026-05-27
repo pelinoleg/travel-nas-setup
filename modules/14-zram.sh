@@ -2,8 +2,7 @@
 
 info "=== ZRAM ==="
 if ! dpkg -l | grep -q zram-tools; then
-    wait_for_apt
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y zram-tools || warn "zram-tools install failed"
+    apt_install zram-tools || warn "zram-tools install failed"
 fi
 sudo sed -i 's/^#\?ALGO=.*/ALGO=zstd/' /etc/default/zramswap 2>/dev/null || true
 sudo sed -i 's/^#\?PERCENT=.*/PERCENT=50/' /etc/default/zramswap 2>/dev/null || true

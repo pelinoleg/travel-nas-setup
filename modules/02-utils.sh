@@ -3,8 +3,7 @@
 info "=== Utilities ==="
 if (
     set -e
-    wait_for_apt
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    apt_install \
         htop ncdu tmux git tree jq curl wget \
         smartmontools nvme-cli rsync sshpass \
         libimage-exiftool-perl \

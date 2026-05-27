@@ -13,10 +13,8 @@ if (
         wait_for_apt
         sudo dpkg -i "$TMPDEB"
         rm -f "$TMPDEB"
-        wait_for_apt
-        sudo DEBIAN_FRONTEND=noninteractive apt-get update
-        wait_for_apt
-        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y comitup
+        apt_get update
+        apt_install comitup
     fi
 ); then
     mark_ok "COMITUP"

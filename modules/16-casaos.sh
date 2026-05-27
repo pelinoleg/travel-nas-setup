@@ -8,10 +8,18 @@ else
     if (
         set -e
         if ! command -v curl &>/dev/null; then
-            wait_for_apt
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y curl
+            apt_install curl
         fi
-        # CasaOS installer внутри сам делает apt-операции — ждём lock первым
+        # CasaOS installer внутри тащит smartmontools и другие зависимости.
+        # Если UTILS до этого упал (mirror 404), apt оказывается в broken-state
+        # → installer падает "Unmet dependencies". Чиним заранее.
+        wait_for_apt
+        sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq || true
+        sudo DEBIAN_FRONTEND=noninteractive apt-get --fix-broken install -y 2>/dev/null || true
+        # Преставим smartmontools и docker dependencies сами — installer тогда
+        # просто проверит "уже установлено" и пойдёт дальше.
+        apt_install smartmontools ca-certificates curl gnupg lsb-release || true
+
         wait_for_apt
         curl -fsSL https://get.casaos.io | sudo bash
     ); then

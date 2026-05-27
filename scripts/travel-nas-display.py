@@ -1276,13 +1276,14 @@ def page_ap_confirm():
     return _draw_confirm(
         "Force AP",
         [
-            "This disconnects WiFi",
+            "Deletes current WiFi",
             "and starts comitup AP.",
             "",
-            "SSH session will drop.",
-            "Reconnect via WiFi:",
+            "WiFi password will be",
+            "forgotten — re-enter via",
+            "captive portal:",
             "  travel-nas-XXXX",
-            "  ssh oleg@10.41.0.1",
+            "  http://10.41.0.1",
         ],
         "do_force_ap", "Force AP", WARN,
     )
@@ -1433,41 +1434,21 @@ def do_action(action):
     elif action == "progress_open":     go(PAGE_PROGRESS)
 
     elif action == "do_force_ap":
-        # `comitup-cli a` не существует. Правильный путь:
-        # 1) выключить активные wifi-connection'ы через nmcli
-        # 2) рестартанyть comitup — он увидит что сети нет → стартует AP
-        try:
-            out = subprocess.check_output(
-                ["nmcli", "-t", "-f", "NAME,TYPE", "connection", "show", "--active"],
-                timeout=5,
-            ).decode()
-        except Exception:
-            out = ""
-        wifi_names = []
-        for line in out.splitlines():
-            parts = line.split(":")
-            if len(parts) >= 2 and "wireless" in parts[1]:
-                wifi_names.append(parts[0])
-
-        any_spawned = False
-        for n in wifi_names:
+        # Документированный (см. comitup-cli.8) способ переключения в HOTSPOT:
+        # `comitup-cli d` — удаляет текущий NM-connection профиль; comitup
+        # daemon ловит это через D-Bus и тут же стартует AP.
+        # Destructive: пароль домашнего WiFi пропадёт из NetworkManager,
+        # юзер перезаходит через captive portal на 10.41.0.1.
+        if not Path("/usr/bin/comitup-cli").exists():
+            toast("comitup not installed", ERROR)
+        else:
             subprocess.Popen(
-                ["sudo", "-n", "/usr/bin/nmcli", "connection", "down", n],
+                ["sudo", "-n", "/usr/bin/comitup-cli", "d"],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 stdin=subprocess.DEVNULL, start_new_session=True,
             )
-            any_spawned = True
-        # Restart comitup — он переключится в AP если сети нет
-        subprocess.Popen(
-            ["sudo", "-n", "/usr/bin/systemctl", "restart", "comitup"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            stdin=subprocess.DEVNULL, start_new_session=True,
-        )
-        if any_spawned:
-            toast("Switching to AP… (5-15 сек)", WARN)
-        else:
-            toast("No active wifi to drop", WARN)
-        go(PAGE_STATUS)
+            toast("Dropping WiFi → AP… (5-15 сек)", WARN)
+            go(PAGE_STATUS)
     elif action == "do_reboot":
         subprocess.Popen(["sudo", "-n", "/usr/bin/systemctl", "reboot"],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,

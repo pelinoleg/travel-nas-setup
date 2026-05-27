@@ -146,6 +146,73 @@ Auto-sleep через 5 минут неактивности (xset dpms + sysfs b
 - **YT-Archiver**: `http://travel-nas.local:8081`
 - **SSH**: `ssh oleg@travel-nas.local`
 
+> ⚠️ **Photoview** UI принимает только пути ВНУТРИ контейнера. Мы монтируем `/mnt/t7` как `/t7:ro`. То есть в Photoview указывай `/t7/usb-imports`, а **не** `/mnt/t7/usb-imports`. Иначе получишь "Server error: internal system error at initialSetupWizard".
+
+## Обновление скриптов после установки
+
+После того как Pi уже настроена (`travel-nas-setup` отработал), обновлять можно тремя способами.
+
+### A. Через wizard (рекомендуется)
+
+```bash
+travel-nas-setup
+```
+
+Открывается то же whiptail-меню. Оставь галки только на компонентах которые хочешь обновить (например только `DISPLAY` чтобы обновить dashboard). Конфиги (`/etc/travel-nas/*.conf`) сохраняются — модули проверяют наличие файла и не перезатирают.
+
+### B. Один конкретный скрипт точечно
+
+```bash
+# Bash-скрипты
+sudo curl -fsSL "https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/main/scripts/X.sh?$(date +%s)" -o /usr/local/bin/X.sh
+sudo chmod +x /usr/local/bin/X.sh
+
+# Python-скрипты
+sudo curl -fsSL "https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/main/scripts/X.py?$(date +%s)" -o /usr/local/bin/X.py
+sudo chmod +x /usr/local/bin/X.py
+```
+
+`?$(date +%s)` — cache-buster, чтобы GitHub CDN не отдал устаревшую версию.
+
+После обновления dashboard'а — перезапусти его:
+```bash
+pkill -f travel-nas-display.py     # autostart его поднимет, либо вручную ↓
+DISPLAY=:0 XAUTHORITY=/home/oleg/.Xauthority nohup /usr/bin/python3 /usr/local/bin/travel-nas-display.py >/tmp/dashboard.log 2>&1 &
+```
+
+После обновления tg-listener.py:
+```bash
+sudo systemctl restart tg-listener
+```
+
+После изменения compose-файлов:
+```bash
+cd /opt/photoview && sudo docker compose up -d
+cd /var/lib/casaos/apps/ytarchiver && sudo docker compose up -d
+```
+
+### C. Через git clone (если планируешь разрабатывать)
+
+```bash
+git clone https://github.com/pelinoleg/travel-nas-setup ~/travel-nas-setup
+cd ~/travel-nas-setup
+git pull
+bash setup.sh        # подхватит локальные lib/ и modules/
+```
+
+### Где что лежит на устройстве
+
+| Путь | Что |
+|---|---|
+| `/usr/local/bin/` | Все скрипты (`*.sh`, `*.py`, `travel-nas-setup`) |
+| `/etc/travel-nas/` | Конфиги (tg-notify, nas-backup, services, и т.п.) |
+| `/etc/systemd/system/` | Юниты (`*.service`, `*.timer`) |
+| `/etc/sudoers.d/travel-nas-dashboard` | NOPASSWD для dashboard buttons |
+| `/var/lib/travel-nas/` | Runtime state (JSON-ы, offset, queue) |
+| `/var/run/travel-nas/` | tmpfs runtime (backup-progress) |
+| `/mnt/t7/_logs/` | Логи скриптов |
+| `/mnt/t7/pi-config-backups/` | Еженедельные бэкапы конфигов |
+
 ## Восстановление при замене microSD
 
 ```bash

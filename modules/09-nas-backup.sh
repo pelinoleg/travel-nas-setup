@@ -81,6 +81,21 @@ NAS_HOST="$NAS_HOST"
 NAS_USER="$NAS_USER"
 NAS_PASS="$NAS_PASS"
 DEST="$T7_MOUNT/nas-backup"
+
+# Модули для бэкапа (формат: "rsync_module|local_folder")
+#
+# Список доступных модулей: sshpass -p "\$NAS_PASS" rsync "\$NAS_USER@\$NAS_HOST::"
+#
+# Можно бэкапить subpath внутри модуля (если папка существует на NAS):
+#   "HDD6TB/Photos|Photos-Other"      ← подпапка модуля HDD6TB
+#   "HDD6TB/Media/Movies|Movies"      ← глубокий путь
+#   "home/Pictures|MyPictures"        ← подпапка home
+#
+# НЕ работает (rsync daemon отвергает):
+#   "/volume1/Backup|Backup"          ← абсолютные пути запрещены
+#   "volume1/Backup|Backup"           ← volume1 не модуль
+#
+# Тест перед commit'ом: sudo nas-backup --diff (кривой subpath → error)
 MODULES=(
     "home|Personal"
     "docker|Docker"

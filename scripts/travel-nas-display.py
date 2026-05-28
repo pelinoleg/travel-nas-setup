@@ -1230,7 +1230,7 @@ def _menu_helpers(btns, btn_h=36, gap_row=2, sect_h=12):
         set_y(get_y() + btn_h + gap_row)
 
     def bottom_pair(l1, a1, l2, a2):
-        bh = 44
+        bh = 48
         bot_y = SCREEN_H - bh - 8
         b1 = Btn(l1, a1, pygame.Rect(margin, bot_y, half_w, bh), MUTED)
         b2 = Btn(l2, a2,
@@ -1249,9 +1249,9 @@ def page_menu():
     screen.fill(BG)
     y0 = draw_top_strip("Menu") + 6
     btns = []
-    # SCREEN_H=480 — места хватает на touch-friendly 44px кнопки + 3 секции
+    # btn_h=48: чуть крупнее под резистивный touch (MHS35 шумит у краёв)
     (set_y, _g, section, row_full, row_pair, row_triple, bottom_pair
-     ) = _menu_helpers(btns, btn_h=44, gap_row=6, sect_h=16)
+     ) = _menu_helpers(btns, btn_h=48, gap_row=6, sect_h=16)
     set_y(y0)
 
     # NAS — Run/Stop пара с NAS status. Run превращается в Stop когда

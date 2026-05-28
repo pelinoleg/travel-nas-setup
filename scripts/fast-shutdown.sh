@@ -1,15 +1,16 @@
 #!/bin/bash
 # =============================================================================
-# fast-shutdown.sh — гарантированный shutdown за ~5 секунд
+# fast-shutdown.sh — canonical Pi 5 shutdown с pre-stop docker
 # =============================================================================
-# Юзер: 'нажал shutdown и всё зависло' (предыдущая версия делала
-# SysRq remount-RO ПЕРЕД systemctl — после этого systemd не мог
-# нормально завершиться).
+# Урок: Pi 5 poweroff занимает ~10-30 сек штатно — ждёт NVMe/hardware
+# power-down. Это by design, не баг. Попытки использовать --force --force
+# дают halt syscall но плата остаётся в standby (красная LED активна).
 #
-# Новая стратегия — НЕ трогаем FS до halt'а:
-# 1. docker stop в фоне (best-effort, не блокируем)
-# 2. exec systemctl poweroff --force --force = immediate halt syscall
-# 3. Если за 8 секунд не halt — SysRq emergency (sync → power off)
+# Правильно:
+# 1. Pre-stop docker чтобы не висел 90s в TimeoutStopSec
+# 2. systemctl poweroff (без --force) = canonical Pi shutdown
+# 3. POWER_OFF_ON_HALT=1 в /boot/firmware/config.txt → красная LED тоже
+#    гаснет, плата полностью обесточивается. Это ставит setup-модуль.
 # =============================================================================
 
 set -u
@@ -18,24 +19,19 @@ if [[ "$EUID" -ne 0 ]]; then
     exec sudo -- "$0" "$@"
 fi
 
-# 1) Best-effort docker stop — параллельно, не блокируем
+# 1) Pre-stop docker контейнеров (parallel, best-effort) — главная причина
+# 90-сек задержки systemctl poweroff если их не остановить заранее
 if command -v docker >/dev/null 2>&1; then
-    docker ps -q 2>/dev/null | xargs -r timeout 3 docker stop -t 1 2>/dev/null &
+    docker ps -q 2>/dev/null | xargs -r timeout 5 docker stop -t 3 2>/dev/null &
 fi
 
-# 2) Fallback: SysRq emergency через 8 сек если halt не сработал.
-# Здесь делаем remount-RO потому что halt syscall уже не выполнился —
-# нужен kernel-level хард.
-(
-    sleep 8
-    echo 1 > /proc/sys/kernel/sysrq 2>/dev/null
-    echo s > /proc/sysrq-trigger 2>/dev/null     # sync
-    sleep 1
-    echo u > /proc/sysrq-trigger 2>/dev/null     # remount RO
-    sleep 1
-    echo o > /proc/sysrq-trigger 2>/dev/null     # power off
-) &
+# 2) Стоп длительных backup'ов — rsync через samba может висеть до 90s
+pkill -TERM rsync 2>/dev/null
+systemctl stop nas-backup-runtime 2>/dev/null
 
-# 3) Основной путь: --force --force = halt syscall напрямую.
-# Не трогаем FS заранее — systemd сам делает sync через halt(2) syscall.
-exec systemctl poweroff --force --force
+# Маленькая пауза чтоб docker stop успел дойти
+sleep 2
+
+# 3) Canonical Pi shutdown. Не --force — он не помогает на Pi 5 и
+# рискует data loss. По умолчанию ~10-15 сек после docker pre-stop.
+exec systemctl poweroff

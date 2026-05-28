@@ -2874,16 +2874,16 @@ def do_action(action):
             toast("Dropping WiFi → AP… (5-15 сек)", WARN)
             go(PAGE_STATUS)
     elif action == "do_reboot":
-        # Перед halt'ом очищаем экран в чёрный + крупная надпись.
-        # MHS35 LCD persistence иначе показывает последний кадр (тост) после
-        # power-off — выглядит как зависание. Чёрный фон с понятным текстом
-        # = чище визуально.
-        _shutdown_screen("REBOOTING\n\nunplug USB-C\nto force off")
+        # Ставим persistent shutdown-screen state — main loop увидит и
+        # будет держать чёрный экран с текстом пока fast-reboot.sh не
+        # прибьёт нас через halt syscall. LCD persistence сохранит ЭТОТ
+        # кадр после power-cut, не обычный дашборд.
+        state["shutdown_msg"] = "REBOOTING\n\nunplug USB-C\nto force off"
         subprocess.Popen(["sudo", "-n", "/usr/local/bin/fast-reboot.sh"],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          stdin=subprocess.DEVNULL, start_new_session=True)
     elif action == "do_shutdown":
-        _shutdown_screen("POWERED OFF\n\nunplug USB-C\nto fully disconnect\n(red LED = standby)")
+        state["shutdown_msg"] = "POWERED OFF\n\nunplug USB-C\nto fully disconnect\n(red LED = standby)"
         subprocess.Popen(["sudo", "-n", "/usr/local/bin/fast-shutdown.sh"],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          stdin=subprocess.DEVNULL, start_new_session=True)
@@ -2968,6 +2968,14 @@ def main():
 
         overlays_active = (touch_flash is not None) or (state.get("toast") is not None)
         interval = FAST_REFRESH_INTERVAL if overlays_active else REFRESH_INTERVAL
+
+        # Shutdown overlay — рисуем каждый тик пока state['shutdown_msg']
+        # активен. Это до halt syscall'а — LCD persistence сохранит ИМЕННО
+        # этот кадр после power-cut, не обычный дашборд.
+        if state.get("shutdown_msg"):
+            _shutdown_screen(state["shutdown_msg"])
+            clock.tick(FPS)
+            continue
 
         if display_on and (now - last_refresh) > interval:
             last_refresh = now

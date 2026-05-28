@@ -8,6 +8,18 @@ if ! command -v docker &>/dev/null; then
 elif (
     set -e
     sudo mkdir -p /opt/photoview
+
+    # Photoview контейнер работает от UID 999 (photoview user). mariadb
+    # внутри тоже drops to UID 999 (mysql user). Если host-папки cache/db
+    # не принадлежат 999:999 — контейнер не может писать туда →
+    # 'mkdir /app/cache/15: permission denied' → thumbnails не генерятся
+    # → UI выдаёт 'record not found at (media)' при попытке открыть фото.
+    #
+    # Решение: явный chown перед docker compose up. install -d создаёт
+    # папку (если нет) с указанным владельцем и режимом.
+    sudo install -d -o 999 -g 999 -m 0755 /opt/photoview/cache
+    sudo install -d -o 999 -g 999 -m 0755 /opt/photoview/db
+
     sudo tee /opt/photoview/docker-compose.yml > /dev/null << EOF
 # Photoview app + MariaDB
 # В UI Photoview добавляй путь /t7/usb-imports или /t7/media — это пути

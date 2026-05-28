@@ -93,8 +93,9 @@ def query_source_size(user, host, password, module, timeout=600):
 
 
 def read_modules_from_config():
-    """Парсит DEST и MODULES из bash-конфига регулярками (без source/dev).
-    Конфиг 600 → читать только root."""
+    """Парсит DEST и MODULES. Формат: 'src|target' где src — rsync-module на
+    NAS (`home`, `docker`), target — локальная папка (`Personal`, `Docker`).
+    Возвращает (dest, [(src, target), ...])."""
     dest = DEFAULT_DEST
     modules = []
     if not CONFIG_PATH.exists():
@@ -116,8 +117,18 @@ def read_modules_from_config():
             for tok in tokens:
                 tok = tok.strip()
                 if "|" in tok:
-                    modules.append(tok.split("|", 1)[1])
+                    src, target = tok.split("|", 1)
+                    modules.append((src.strip(), target.strip()))
     return dest, modules
+
+
+def scan_subdirs_as_pairs(dest):
+    """Fallback: если в конфиге нет MODULES, сканируем папки в dest и
+    предполагаем что rsync-module имеет то же имя (src == target)."""
+    out = []
+    for name in scan_subdirs(dest):
+        out.append((name, name))
+    return out
 
 
 def scan_subdirs(dest):
@@ -273,45 +284,42 @@ def main():
 
     dest, modules = read_modules_from_config()
     if not modules:
-        modules = scan_subdirs(dest)
+        modules = scan_subdirs_as_pairs(dest)
 
     log_dir = Path(dest) / "_logs"
     cache = load_source_cache()
     creds = read_nas_creds() if query_source else (None, None, None)
 
     out_modules = []
-    for name in modules:
-        path = Path(dest) / name
-        entry = {"name": name, "exists": path.exists()}
+    for src_module, target_name in modules:
+        path = Path(dest) / target_name
+        entry = {"name": target_name, "exists": path.exists()}
         if entry["exists"]:
             entry["size"] = folder_size(path)
-            log = latest_log(log_dir, name)
+            log = latest_log(log_dir, target_name)
             if log is not None:
                 entry["last_run"] = int(log.stat().st_mtime)
                 entry["status"]   = parse_log_status(log)
-                stats_log = latest_log_with_stats(log_dir, name)
+                stats_log = latest_log_with_stats(log_dir, target_name)
                 nas_sz = parse_source_size(stats_log) if stats_log else None
-
-                # Если из логов не достать — пробуем кэш, потом прямой запрос
-                if nas_sz is None:
-                    nas_sz = (cache.get(name) or {}).get("size")
-                    if nas_sz is None and query_source:
-                        nas_sz = query_source_size(*creds, module=name)
-                        if nas_sz:
-                            cache[name] = {"size": nas_sz,
-                                           "queried": int(time.time())}
-
-                entry["nas_size"] = nas_sz
             else:
                 entry["last_run"] = None
                 entry["status"]   = None
-                # Для никогда не бэкапленных модулей тоже пробуем NAS query
-                nas_sz = (cache.get(name) or {}).get("size")
-                if nas_sz is None and query_source:
-                    nas_sz = query_source_size(*creds, module=name)
-                    if nas_sz:
-                        cache[name] = {"size": nas_sz, "queried": int(time.time())}
-                entry["nas_size"] = nas_sz
+                nas_sz = None
+        else:
+            nas_sz = None
+
+        # NAS size fallback: кэш → прямой rsync-запрос (только с флагом)
+        if nas_sz is None:
+            nas_sz = (cache.get(target_name) or {}).get("size")
+            if nas_sz is None and query_source:
+                # Запрос ИДЁТ ПО src_module ('home'), не target ('Personal').
+                nas_sz = query_source_size(*creds, module=src_module)
+                if nas_sz:
+                    cache[target_name] = {"size": nas_sz,
+                                          "queried": int(time.time())}
+
+        entry["nas_size"] = nas_sz
         out_modules.append(entry)
 
     save_source_cache(cache)

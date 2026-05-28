@@ -29,6 +29,20 @@ else
     fi
 fi
 
+# NetworkManager: игнорим docker bridge/veth/br-* интерфейсы. Без этого
+# каждый docker start/stop генерит NM state-change → desktop notification
+# с именем вида "You are now connected to vetha45aeae" → выглядит как
+# непонятные символы (по факту это имя docker veth-интерфейса).
+if [[ -d /etc/NetworkManager/conf.d ]]; then
+    sudo tee /etc/NetworkManager/conf.d/no-docker.conf >/dev/null << 'EOF'
+# Travel-NAS: NM ignore docker bridges/veths. Без этого popup при
+# docker start/stop с именем veth-интерфейса (выглядит как мусор).
+[keyfile]
+unmanaged-devices=interface-name:veth*;interface-name:docker*;interface-name:br-*
+EOF
+    sudo systemctl reload NetworkManager 2>/dev/null || true
+fi
+
 # Защита fstab-устройств от перехвата devmon (CasaOS поставил devmon)
 if [[ -f /etc/conf.d/devmon ]] && command -v findmnt &>/dev/null; then
     FSTAB_DEVS=$(awk '/^UUID=/ {print $2}' /etc/fstab | while read mp; do

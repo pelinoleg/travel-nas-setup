@@ -858,7 +858,9 @@ def draw_top_strip(page_label=None):
             else:
                 rem_str = f"{int(rem // 3600)}h"
             rem_col = ERROR if rem < 10 else (WARN if rem < 60 else MUTED)
-            # `z ` префикс — universal sleep notation (emoji 💤 не в DejaVu)
+            # Separator `·` перед sleep — отделяем power-блок от sleep visually.
+            # `z ` — universal sleep notation (emoji 💤 не в DejaVu).
+            pieces.append(F_SMALL.render("·", True, MUTED))
             pieces.append(F_SMALL.render(f"z {rem_str}", True, rem_col))
 
     GAP = 4

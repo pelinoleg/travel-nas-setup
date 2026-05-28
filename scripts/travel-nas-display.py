@@ -309,12 +309,20 @@ def _t7_temp():
 def _disk_info():
     # Без проверки mountpoint df вернёт цифры корневого раздела (когда /mnt/t7
     # существует как пустой каталог без mount) — выглядело бы как «всё ОК».
-    # Path.is_mount() = pure mountpoint check, не лезет в IO.
     if not Path(T7_MOUNT).is_mount():
         return None
-    out = subprocess.check_output(
-        ["df", "-h", "--output=used,avail,size,pcent", T7_MOUNT], timeout=2
-    ).decode().splitlines()
+    # Hot-pull: mount остаётся прописан, df возвращает кэш metaданных, но
+    # любая I/O операция фейлит. Делаем cheap listdir-probe чтобы поймать.
+    try:
+        os.listdir(T7_MOUNT)
+    except OSError:
+        return "io_error"
+    try:
+        out = subprocess.check_output(
+            ["df", "-h", "--output=used,avail,size,pcent", T7_MOUNT], timeout=2
+        ).decode().splitlines()
+    except Exception:
+        return "io_error"
     if len(out) < 2:
         return None
     p = out[1].split()
@@ -947,6 +955,7 @@ PAGE_CONFIGS        = "configs"
 PAGE_DOCKER         = "docker"
 PAGE_YTARCHIVER     = "ytarchiver"
 PAGE_SYSTEM_DETAIL  = "system_detail"
+PAGE_STORAGE_DETAIL = "storage_detail"
 
 state = {
     "page":        PAGE_STATUS,
@@ -1021,13 +1030,17 @@ def _card_storage(rect):
     inner = _card(rect, "STORAGE  T7")
     disk = c_disk.get()
     t7t = c_t7_temp.get()
-    if not disk:
-        # /mnt/t7 не примонтирован — большое предупреждение по центру.
-        # Без этого карточка показывала бы цифры корневого раздела (df fallback),
-        # выглядело как «всё ОК» при недоступном NAS-диске.
+    if disk is None:
         msg = F_MED.render("NOT MOUNTED", True, ERROR)
         screen.blit(msg, msg.get_rect(center=(inner.centerx, inner.centery)))
         hint = F_TINY.render("plug T7 / check /mnt/t7", True, MUTED)
+        screen.blit(hint, hint.get_rect(midtop=(inner.centerx, inner.centery + 12)))
+        return
+    if disk == "io_error":
+        # Mount висит, но диск не отвечает (hot-pull / USB-glitch / sleep)
+        msg = F_MED.render("I/O ERROR", True, ERROR)
+        screen.blit(msg, msg.get_rect(center=(inner.centerx, inner.centery)))
+        hint = F_TINY.render("tap for details · replug / fsck", True, MUTED)
         screen.blit(hint, hint.get_rect(midtop=(inner.centerx, inner.centery + 12)))
         return
     col = ACCENT if disk["pct"] < 80 else (WARN if disk["pct"] < 90 else ERROR)
@@ -1259,6 +1272,8 @@ def page_status():
             btns.append(Btn("", "progress_open", rect, ACCENT))
         elif draw_fn is _card_system:
             btns.append(Btn("", "open_system_detail", rect, ACCENT))
+        elif draw_fn is _card_storage:
+            btns.append(Btn("", "open_storage_detail", rect, ACCENT))
         y += h + gap
 
     # Footer: SMB-клиенты — uptime теперь в top-strip, тут только активные сессии
@@ -1922,6 +1937,193 @@ def page_ytarchiver():
     return btns
 
 
+def _disk_diag():
+    """Диагностика T7: mount/fs/temp/SMART/dmesg-errors. Не fail-fast — каждая
+    подсекция отдельно try/except. Тяжёлый (~1-2 сек) — вызываем только когда
+    юзер открыл storage detail page."""
+    info = {
+        "mount_ok": False, "io_error": False, "fs_type": "?",
+        "source": "?", "mount_opts": "?", "label": "?",
+        "df_used": "?", "df_total": "?", "df_free": "?", "df_pct": None,
+        "temp_c": None, "smart_ok": None, "smart_msg": "?",
+        "dmesg_errs": 0, "usb_resets": 0, "usb_disconnects": 0,
+        "model": "?",
+    }
+    # 1) Mount state
+    try:
+        if not Path(T7_MOUNT).is_mount():
+            return info
+        info["mount_ok"] = True
+    except Exception:
+        return info
+    # 2) I/O probe
+    try:
+        os.listdir(T7_MOUNT)
+    except OSError:
+        info["io_error"] = True
+
+    # 3) mount info: source/fs/opts
+    try:
+        out = subprocess.check_output(
+            ["findmnt", "-no", "SOURCE,FSTYPE,OPTIONS", T7_MOUNT], timeout=2
+        ).decode().strip().split()
+        if len(out) >= 3:
+            info["source"], info["fs_type"], info["mount_opts"] = out[0], out[1], out[2][:60]
+    except Exception:
+        pass
+
+    # 4) df (если не io_error)
+    if not info["io_error"]:
+        try:
+            out = subprocess.check_output(
+                ["df", "-h", "--output=used,avail,size,pcent", T7_MOUNT], timeout=2
+            ).decode().splitlines()
+            if len(out) >= 2:
+                p = out[1].split()
+                info["df_used"], info["df_free"], info["df_total"] = p[0], p[1], p[2]
+                info["df_pct"] = int(p[3].rstrip("%"))
+        except Exception:
+            pass
+
+    # 5) temp
+    t = c_t7_temp.get()
+    if t: info["temp_c"] = t
+
+    # 6) SMART через smartctl (sudo NOPASSWD есть)
+    src = info["source"] if info["source"] != "?" else "/dev/sda"
+    try:
+        out = subprocess.check_output(
+            ["sudo", "-n", "/usr/sbin/smartctl", "-H", "-d", "sat", src],
+            timeout=5, stderr=subprocess.STDOUT,
+        ).decode(errors="replace")
+        if "PASSED" in out:
+            info["smart_ok"] = True; info["smart_msg"] = "PASSED"
+        elif "FAILED" in out:
+            info["smart_ok"] = False; info["smart_msg"] = "FAILED"
+        else:
+            info["smart_msg"] = "unknown"
+    except subprocess.CalledProcessError as e:
+        info["smart_msg"] = f"err {e.returncode}"
+    except Exception:
+        info["smart_msg"] = "n/a"
+
+    # 7) Модель / Vendor
+    try:
+        out = subprocess.check_output(
+            ["sudo", "-n", "/usr/sbin/smartctl", "-i", "-d", "sat", src],
+            timeout=5, stderr=subprocess.DEVNULL,
+        ).decode(errors="replace")
+        for line in out.splitlines():
+            if line.startswith("Model Number:") or line.startswith("Device Model:"):
+                info["model"] = line.split(":", 1)[1].strip()[:30]
+                break
+    except Exception:
+        pass
+
+    # 8) dmesg-ошибки (последний час)
+    try:
+        out = subprocess.check_output(
+            ["sudo", "-n", "dmesg", "--time-format=iso"],
+            timeout=3, stderr=subprocess.DEVNULL,
+        ).decode(errors="replace")
+    except Exception:
+        out = ""
+    if out:
+        for line in out.splitlines()[-500:]:  # last ~500 lines
+            ll = line.lower()
+            if "sda" in ll:
+                if "i/o error" in ll or "ext4-fs error" in ll:
+                    info["dmesg_errs"] += 1
+                if "reset" in ll and "usb" in ll:
+                    info["usb_resets"] += 1
+            if "usb disconnect" in ll:
+                info["usb_disconnects"] += 1
+    return info
+
+
+c_disk_diag = Cached(_disk_diag, 30)
+
+
+def page_storage_detail():
+    """Подробности T7: mount, FS, SMART, температура, USB-ошибки в dmesg."""
+    screen.fill(BG)
+    y = draw_top_strip("Storage")
+    y += 8
+    btns = []
+    d = c_disk_diag.get() or {}
+
+    # === Header: mount status ===
+    if not d.get("mount_ok"):
+        screen.blit(F_LARGE.render("NOT MOUNTED", True, ERROR), (10, y))
+        y += 28
+        screen.blit(F_SMALL.render("проверь USB-кабель и /etc/fstab", True, MUTED), (10, y))
+        y += 18
+    elif d.get("io_error"):
+        screen.blit(F_LARGE.render("I/O ERROR", True, ERROR), (10, y))
+        y += 28
+        screen.blit(F_SMALL.render("диск отвалился (hot-pull / glitch)", True, WARN), (10, y))
+        y += 16
+        screen.blit(F_SMALL.render("замени кабель → reboot → fsck", True, MUTED), (10, y))
+        y += 18
+    else:
+        # OK путь — вкладка-таблица
+        screen.blit(F_NORMAL.render(d.get("model", "?")[:28], True, FG), (10, y))
+        y += 22
+
+    # === Mount details ===
+    if d.get("mount_ok"):
+        def kv(label, value, value_col=FG):
+            nonlocal y
+            screen.blit(F_TINY.render(label, True, MUTED), (10, y))
+            v = F_SMALL.render(str(value), True, value_col)
+            screen.blit(v, (SCREEN_W - 10 - v.get_width(), y - 1))
+            y += 16
+
+        kv("source", d.get("source", "?"))
+        kv("fs",     d.get("fs_type", "?"))
+        if d.get("df_pct") is not None:
+            pct_col = ACCENT if d["df_pct"] < 80 else (WARN if d["df_pct"] < 90 else ERROR)
+            kv("space", f"{d.get('df_used')} / {d.get('df_total')} ({d['df_pct']}%)", pct_col)
+            kv("free",  d.get("df_free", "?"))
+        if d.get("temp_c"):
+            tc = d["temp_c"]
+            t_col = ACCENT if tc < 50 else (WARN if tc < 60 else ERROR)
+            kv("temp", f"{tc}°C", t_col)
+
+    y += 6
+    pygame.draw.line(screen, BTN_BG, (10, y), (SCREEN_W - 10, y), 1)
+    y += 6
+
+    # === SMART ===
+    screen.blit(F_TINY.render("SMART", True, MUTED), (10, y))
+    smart_msg = d.get("smart_msg", "?")
+    smart_col = ACCENT if d.get("smart_ok") else (ERROR if d.get("smart_ok") is False else MUTED)
+    sm = F_SMALL.render(smart_msg, True, smart_col)
+    screen.blit(sm, (SCREEN_W - 10 - sm.get_width(), y - 1))
+    y += 22
+
+    # === USB / dmesg errors ===
+    screen.blit(F_TINY.render("ERRORS (recent dmesg)", True, MUTED), (10, y))
+    y += 14
+    err_count = d.get("dmesg_errs", 0)
+    usb_d = d.get("usb_disconnects", 0)
+    usb_r = d.get("usb_resets", 0)
+    err_col = ERROR if (err_count or usb_d or usb_r) else MUTED
+    screen.blit(F_SMALL.render(f"sda I/O errors: {err_count}", True, err_col), (10, y)); y += 16
+    screen.blit(F_SMALL.render(f"USB disconnects: {usb_d}", True, err_col), (10, y)); y += 16
+    screen.blit(F_SMALL.render(f"USB resets:      {usb_r}", True, err_col), (10, y)); y += 16
+
+    # === Bottom: Back | Refresh ===
+    half_w = (SCREEN_W - 28) // 2
+    back = Btn("Back", "back_to_status",
+               pygame.Rect(8, SCREEN_H - 54, half_w, 46), MUTED)
+    refresh = Btn("Refresh", "storage_refresh",
+                  pygame.Rect(SCREEN_W - 8 - half_w, SCREEN_H - 54, half_w, 46), INFO)
+    draw_button(back); draw_button(refresh)
+    btns.extend([back, refresh])
+    return btns
+
+
 def page_system_detail():
     """Детали системы — top CPU/RAM-процессов + текущие метрики.
     Открывается по тапу на SYSTEM card на главной."""
@@ -2170,6 +2372,7 @@ PAGES = {
     PAGE_DOCKER:         page_docker,
     PAGE_YTARCHIVER:     page_ytarchiver,
     PAGE_SYSTEM_DETAIL:  page_system_detail,
+    PAGE_STORAGE_DETAIL: page_storage_detail,
 }
 
 
@@ -2269,6 +2472,10 @@ def do_action(action):
     elif action == "system_refresh":
         c_top_cpu.invalidate(); c_top_mem.invalidate()
         toast("Refreshing…", INFO)
+    elif action == "open_storage_detail":  go(PAGE_STORAGE_DETAIL)
+    elif action == "storage_refresh":
+        c_disk_diag.invalidate(); c_disk.invalidate()
+        toast("Refreshing storage…", INFO)
     elif action == "docker_refresh":
         # Сброс кеша → следующий рендер дёрнет actual data
         c_docker.last = 0

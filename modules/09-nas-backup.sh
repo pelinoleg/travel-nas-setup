@@ -40,9 +40,42 @@ EOF
     sudo systemctl enable --now nas-backup-status.timer
 
     if [[ ! -f "$CONFIG_DIR/nas-backup.conf" ]]; then
-        NAS_HOST=$(whiptail --inputbox "NAS IP:" 10 60 "192.168.1.95" 3>&1 1>&2 2>&3) || NAS_HOST="192.168.1.95"
-        NAS_USER=$(whiptail --inputbox "NAS user:" 10 60 "oleg" 3>&1 1>&2 2>&3) || NAS_USER="oleg"
-        NAS_PASS=$(whiptail --passwordbox "NAS password:" 10 60 3>&1 1>&2 2>&3) || NAS_PASS=""
+        # Дефолты для retry-loop'а
+        NAS_HOST="192.168.1.95"; NAS_USER="oleg"; NAS_PASS=""
+        while true; do
+            NAS_HOST=$(whiptail --inputbox "NAS IP:" 10 60 "$NAS_HOST" 3>&1 1>&2 2>&3) || break
+            NAS_USER=$(whiptail --inputbox "NAS user:" 10 60 "$NAS_USER" 3>&1 1>&2 2>&3) || break
+            NAS_PASS=$(whiptail --passwordbox "NAS password:" 10 60 3>&1 1>&2 2>&3) || break
+
+            # === Validate ===
+            # 1) Reachability через ping (3 сек тайм-аут)
+            if ! ping -c 1 -W 3 "$NAS_HOST" &>/dev/null; then
+                if whiptail --yesno "Не отвечает $NAS_HOST.\nПопробовать другой адрес?" 10 60; then
+                    continue
+                fi
+                break
+            fi
+            # 2) rsync daemon — sshpass + перечисление модулей. Если ошибка
+            # аутентификации, видно из stderr ('auth failed' / '@ERROR: auth').
+            AVAIL=$(sshpass -p "$NAS_PASS" rsync "$NAS_USER@$NAS_HOST::" 2>&1 || true)
+            if echo "$AVAIL" | grep -qE "auth failed|@ERROR"; then
+                if whiptail --yesno "❌ Авторизация на NAS не прошла:\n\n$AVAIL\n\nПопробовать снова?" 14 70; then
+                    continue
+                fi
+                break
+            fi
+            # 3) OK — показываем доступные модули чтобы юзер сверил с MODULES в конфиге
+            MODULES_LIST=$(echo "$AVAIL" | awk '{print $1}' | grep -vE '^$|^msg=' | head -10 | tr '\n' ' ')
+            whiptail --msgbox \
+"✓ NAS доступен. Доступные rsync-модули:
+
+  $MODULES_LIST
+
+В конфиге MODULES записаны как src|target (src — слева, имя на NAS).
+Если у тебя другие шары — поправь /etc/travel-nas/nas-backup.conf после установки." \
+                14 72
+            break
+        done
         sudo tee "$CONFIG_DIR/nas-backup.conf" > /dev/null << EOF
 NAS_HOST="$NAS_HOST"
 NAS_USER="$NAS_USER"

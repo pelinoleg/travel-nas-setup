@@ -733,14 +733,14 @@ def _card_ap(rect):
     """AP MODE card — крупная инструкция чтоб не забыть как зайти."""
     inner = _card(rect, "AP MODE — setup WiFi here", WARN,
                   bg=PANEL_WARN, border=WARN)
-    # comitup создаёт AP с именем <hostname>-XXXX.
-    ap_name = f"{socket.gethostname()}-XXXX"
+    # comitup создаёт AP с именем comitup-NNN (NNN = последние цифры
+    # serial/MAC). Точное имя не знаем — показываем формат.
     # 1) что подключить
     screen.blit(F_SMALL.render("WiFi (no password):", True, MUTED), (inner.x, inner.y))
-    screen.blit(F_MED.render(ap_name, True, FG), (inner.x, inner.y + 14))
-    # 2) куда зайти — крупно и ярко, чтоб видно даже мельком
+    screen.blit(F_MED.render("comitup-NNN", True, FG), (inner.x, inner.y + 14))
+    # 2) куда зайти — крупно и ярко (порт 8080, чтоб не конфликтить с CasaOS:80)
     screen.blit(F_SMALL.render("then open in browser:", True, MUTED), (inner.x, inner.y + 40))
-    screen.blit(F_MED.render("http://10.41.0.1", True, INFO), (inner.x, inner.y + 54))
+    screen.blit(F_MED.render("http://10.41.0.1:8080", True, INFO), (inner.x, inner.y + 54))
 
 
 def _card_storage(rect):
@@ -1479,21 +1479,19 @@ def page_ap_info():
         col = ACCENT if cs.upper() in ("CONNECTED", "CONNECTING") else WARN
         screen.blit(F_SMALL.render(f"comitup: {cs}", True, col), (8, y)); y += 18
 
-    # comitup создаёт AP с именем <hostname>-XXXX (где XXXX = первые 4
-    # символа hash или MAC, зависит от версии). Берём текущий hostname.
-    ap_name = f"{socket.gethostname()}-XXXX"
+    # comitup создаёт AP с именем comitup-NNN (NNN = последние цифры MAC/serial).
     screen.blit(F_SMALL.render("WiFi network:", True, MUTED), (8, y)); y += 16
-    screen.blit(F_MED.render(ap_name, True, FG), (8, y)); y += 30
+    screen.blit(F_MED.render("comitup-NNN", True, FG), (8, y)); y += 30
 
     screen.blit(F_SMALL.render("Password:", True, MUTED), (8, y)); y += 16
     screen.blit(F_NORMAL.render("(open network)", True, FG), (8, y)); y += 26
 
     ip = c_ip.get() or "10.41.0.1"
     screen.blit(F_SMALL.render("Connect to AP, then:", True, MUTED), (8, y)); y += 16
-    screen.blit(F_SMALL.render("Setup WiFi: http://10.41.0.1", True, FG), (8, y)); y += 16
+    screen.blit(F_SMALL.render("Setup WiFi: http://10.41.0.1:8080", True, FG), (8, y)); y += 16
     if not (ip and ip.startswith("10.41.")):
         screen.blit(F_SMALL.render(f"Current IP: {ip}", True, MUTED), (8, y)); y += 16
-    screen.blit(F_SMALL.render(f"Web:  http://{ip}", True, FG), (8, y)); y += 16
+    screen.blit(F_SMALL.render(f"Web:  http://{ip}:8080", True, FG), (8, y)); y += 16
     screen.blit(F_SMALL.render(f"SSH:  ssh oleg@{ip}", True, FG), (8, y))
 
     back = Btn("Back", "back_to_prev", pygame.Rect(8, SCREEN_H - 54, SCREEN_W - 16, 46), MUTED)
@@ -1522,16 +1520,15 @@ def page_ap_confirm():
     return _draw_confirm(
         "Force AP",
         [
-            "Drops WiFi + stops",
-            "CasaOS-gateway to free",
-            "port 80 for comitup-web.",
+            "Drops current WiFi and",
+            "starts comitup hotspot.",
             "",
             "Connect to:",
-            f"  {socket.gethostname()}-XXXX",
-            "  http://10.41.0.1",
+            "  comitup-NNN",
+            "  http://10.41.0.1:8080",
             "",
-            "After setup: sudo reboot",
-            "to restore CasaOS.",
+            "Pi запомнит новый WiFi",
+            "после ввода через portal.",
         ],
         "do_force_ap", "Force AP", WARN,
     )
@@ -1709,17 +1706,12 @@ def do_action(action):
     elif action == "do_force_ap":
         # Документированный (см. comitup-cli.8) способ переключения в HOTSPOT:
         # `comitup-cli d` — удаляет текущий NM-connection профиль; comitup
-        # daemon ловит это через D-Bus и тут же стартует AP.
-        # CasaOS gateway держит порт 80, не давая comitup-web запуститься —
-        # останавливаем его до начала AP. Восстановится при ребуте автоматом.
+        # daemon ловит это через D-Bus и тут же стартует AP. comitup-web
+        # слушает на :8080 (web_port в /etc/comitup.conf), чтобы не
+        # конфликтить с CasaOS-gateway на :80.
         if not Path("/usr/sbin/comitup-cli").exists():
             toast("comitup not installed", ERROR)
         else:
-            subprocess.Popen(
-                ["sudo", "-n", "/usr/bin/systemctl", "stop", "casaos-gateway"],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL, start_new_session=True,
-            )
             subprocess.Popen(
                 ["sudo", "-n", "/usr/sbin/comitup-cli", "d"],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,

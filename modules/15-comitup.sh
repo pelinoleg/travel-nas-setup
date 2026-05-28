@@ -32,6 +32,21 @@ if (
         err "comitup установлен но /usr/sbin/comitup-cli не найден — возможно деб битый"
         exit 1
     fi
+
+    # web_port: 8080 — чтоб comitup-web не дрался с casaos-gateway за :80.
+    # AP портал тогда доступен на http://10.41.0.1:8080 (показано на дашборде).
+    CONF=/etc/comitup.conf
+    if [[ -f "$CONF" ]]; then
+        if grep -qE '^[[:space:]]*web_port[[:space:]]*:' "$CONF"; then
+            sudo sed -i -E 's|^[[:space:]]*web_port[[:space:]]*:.*|web_port: 8080|' "$CONF"
+        else
+            echo "web_port: 8080" | sudo tee -a "$CONF" >/dev/null
+        fi
+        # Рестарт демона — подхватит новый порт. Сервис может не бежать
+        # (если не активен AP) — игнорируем код возврата.
+        sudo systemctl restart comitup 2>/dev/null || true
+        sudo systemctl restart comitup-web 2>/dev/null || true
+    fi
 ); then
     mark_ok "COMITUP" "$(/usr/sbin/comitup-cli i 2>/dev/null | head -1 || echo 'installed')"
 else

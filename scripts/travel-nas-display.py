@@ -1459,9 +1459,19 @@ def page_progress():
     screen.blit(pct_t, pct_t.get_rect(center=(SCREEN_W // 2, y + bar_h // 2)))
     y += bar_h + 18
 
+    # Format files / size — если total известен показываем "done / total",
+    # иначе просто "done" (для NAS backup total пишется как 0 или "" пока
+    # rsync строит file list через --no-inc-recursive).
+    files_done = p.get("files_done", 0) or 0
+    files_total = p.get("files_total", 0) or 0
+    files_str = f"{files_done} / {files_total}" if files_total else str(files_done)
+    size_done = p.get("size_done") or "?"
+    size_total = p.get("size_total") or ""
+    size_str = f"{size_done} / {size_total}" if size_total else size_done
+
     rows = [
-        ("Files", f"{p.get('files_done', 0)} / {p.get('files_total', 0)}"),
-        ("Size",  f"{p.get('size_done', '?')} / {p.get('size_total', '?')}"),
+        ("Files", files_str),
+        ("Size",  size_str),
         ("Speed", p.get("speed", "?")),
         ("ETA",   p.get("eta", "?")),
     ]

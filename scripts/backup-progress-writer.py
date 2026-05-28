@@ -37,6 +37,7 @@ TMP_FILE = STATE_DIR / "backup-progress.json.tmp"
 PROGRESS_RE = re.compile(
     r"(?P<bytes>[\d.,]+[KMGT]?)\s+(?P<pct>\d+)%\s+(?P<speed>\S+)\s+(?P<eta>\d+:\d+:\d+)"
     r"(?:.*?xfr#(?P<xfr>\d+))?"
+    r"(?:.*?to-chk=(?P<tochk_left>\d+)/(?P<tochk_total>\d+))?"
 )
 
 WRITE_INTERVAL = 1.0  # секунд между записями JSON
@@ -203,10 +204,28 @@ def main():
         else:
             speed_str = m.group("speed")  # сырое значение пока не накопили
 
+        # files_done / files_total из to-chk=X/Y (more reliable than xfr#N).
+        # to-chk: left/total оставшихся к проверке. files_done = total - left.
+        # Падает в base['files_total'] (0 если writer запущен без --files-total)
+        # — обновляем динамически когда rsync сам набирает file list.
+        tochk_left = m.group("tochk_left")
+        tochk_total = m.group("tochk_total")
+        files_done_val = int(m.group("xfr") or 0)
+        files_total_val = base.get("files_total", 0)
+        if tochk_left is not None and tochk_total is not None:
+            try:
+                tl = int(tochk_left)
+                tt = int(tochk_total)
+                files_total_val = max(files_total_val, tt)
+                files_done_val = max(files_done_val, tt - tl)
+            except ValueError:
+                pass
+
         last_data = {
             **base,
+            "files_done":  files_done_val,
+            "files_total": files_total_val,
             "percent":    int(m.group("pct")),
-            "files_done": int(m.group("xfr") or 0),
             "size_done":  size_done,
             "speed":      speed_str,
             "eta":        eta_str,

@@ -1937,19 +1937,6 @@ def page_ytarchiver():
                 screen.blit(F_TINY.render(title, True, MUTED), (10, y))
                 y += 14
 
-    # === Pause/Resume backend (yt-archiver API не имеет stop-all endpoint'а,
-    # делаем через docker stop/start ytarchiver-backend) ===
-    # Кнопка контекстная: если backend running → Pause; если нет → Resume
-    yt_running = _yt_backend_running()
-    pause_lbl = "Pause downloads" if yt_running else "Resume downloads"
-    pause_act = "yt_pause" if yt_running else "yt_resume"
-    pause_col = WARN if yt_running else ACCENT
-    pause_row_y = SCREEN_H - 54 - 50  # ряд над bottom-кнопками
-    pause_btn = Btn(pause_lbl, pause_act,
-                    pygame.Rect(8, pause_row_y, SCREEN_W - 16, 38), pause_col)
-    draw_button(pause_btn)
-    btns.append(pause_btn)
-
     # Bottom: Back | Refresh — Back всегда слева
     half_w = (SCREEN_W - 28) // 2
     back = Btn("Back", "open_menu",
@@ -1959,22 +1946,6 @@ def page_ytarchiver():
     draw_button(back); draw_button(refresh)
     btns.extend([back, refresh])
     return btns
-
-
-def _yt_backend_running():
-    """True если ytarchiver-backend контейнер running."""
-    try:
-        out = subprocess.check_output(
-            ["sudo", "-n", "/usr/local/bin/docker-mgr.sh", "list"],
-            timeout=4, stderr=subprocess.DEVNULL,
-        ).decode(errors="replace")
-        projects = json.loads(out)
-        for p in projects:
-            if p.get("Name") == "ytarchiver":
-                return "running" in str(p.get("Status", "")).lower()
-    except Exception:
-        pass
-    return False
 
 
 def _disk_diag():
@@ -2789,25 +2760,6 @@ def do_action(action):
     elif action == "yt_refresh":
         c_yt.invalidate()
         toast("YT stats refreshing…", INFO)
-    elif action == "yt_pause":
-        # ytarchiver API не имеет pause-endpoint. Workaround: stop backend
-        # контейнера — yt-dlp процессы прибиваются. Состояние queue/channels
-        # в БД остаётся, после resume backend продолжит с того же места.
-        subprocess.Popen(
-            ["sudo", "-n", "/usr/local/bin/docker-mgr.sh", "stop", "ytarchiver"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            stdin=subprocess.DEVNULL, start_new_session=True,
-        )
-        c_yt.invalidate()
-        toast("Pausing YT downloads…", WARN)
-    elif action == "yt_resume":
-        subprocess.Popen(
-            ["sudo", "-n", "/usr/local/bin/docker-mgr.sh", "start", "ytarchiver"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            stdin=subprocess.DEVNULL, start_new_session=True,
-        )
-        c_yt.invalidate()
-        toast("Resuming YT downloads…", ACCENT)
     elif action == "open_system_detail":  go(PAGE_SYSTEM_DETAIL)
     elif action == "system_refresh":
         c_top_cpu.invalidate(); c_top_mem.invalidate()

@@ -109,6 +109,10 @@ if pgrep -f /usr/local/bin/travel-nas-display.py >/dev/null; then
         # `nohup ... &; disown` — тот гасился если update запущен из ssh).
         # --unit=travel-nas-display-runtime: фиксированное имя, чтобы повторный
         # запуск не плодил unit-ов.
+        # Stop+reset для повторного использования имени unit'а. Без этого
+        # `systemd-run --unit=X` фейлит если X уже зарегистрирован (даже
+        # inactive после exit'а).
+        systemctl stop travel-nas-display-runtime 2>/dev/null || true
         systemctl reset-failed travel-nas-display-runtime 2>/dev/null || true
         if systemd-run --unit=travel-nas-display-runtime --uid="$USER_LOGIN" \
             --setenv=DISPLAY=:0 --setenv=XAUTHORITY="$USER_HOME/.Xauthority" \

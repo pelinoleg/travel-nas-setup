@@ -86,6 +86,26 @@ EOF
     # Старая `@xset -dpms` ломает auto-sleep dashboard — удаляем.
     [[ -f "$AUTOSTART_FILE" ]] && sed -i '/^@xset -dpms$/d' "$AUTOSTART_FILE"
 
+    # Конфликт двух polkit-агентов: PiOS Trixie ставит и lxpolkit (LXDE)
+    # и polkit-mate-authentication-agent-1 (через mate-polkit deps от чего-то).
+    # Оба автостартуют, второй получает DBus error "An authentication agent
+    # already exists" → popup на десктопе при логине. Отключаем MATE-агента
+    # через user-уровневый XDG-override (Hidden=true).
+    POLKIT_OVERRIDE="$AUTOSTART_DIR/polkit-mate-authentication-agent-1.desktop"
+    if [[ -f /etc/xdg/autostart/polkit-mate-authentication-agent-1.desktop ]] \
+       && [[ ! -f "$POLKIT_OVERRIDE" ]]; then
+        cat > "$POLKIT_OVERRIDE" << 'EOF'
+[Desktop Entry]
+Type=Application
+Name=PolicyKit Authentication Agent (disabled by travel-nas-setup)
+Comment=Disabled — conflicts with lxpolkit (LXDE has its own agent)
+Exec=true
+Hidden=true
+X-GNOME-Autostart-enabled=false
+NoDisplay=true
+EOF
+    fi
+
     # PCManFM popup при USB → off (перехватывает фокус с dashboard).
     for PCMANFM_DIR in "$USER_HOME/.config/pcmanfm/LXDE-pi" "$USER_HOME/.config/pcmanfm/default"; do
         mkdir -p "$PCMANFM_DIR"

@@ -760,6 +760,42 @@ def _sleep_timeout():
 c_sleep = Cached(_sleep_timeout, 5)
 
 
+def _top_processes(n=5, sort="cpu"):
+    """Top N процессов по CPU или MEM. ps без sudo — видит всех."""
+    sort_key = "-pcpu" if sort == "cpu" else "-pmem"
+    try:
+        out = subprocess.check_output(
+            ["ps", "-eo", "pcpu,pmem,comm",
+             "--sort=" + sort_key, "--no-headers"],
+            timeout=2,
+        ).decode()
+    except Exception:
+        return []
+    rows = []
+    for line in out.splitlines():
+        parts = line.split(None, 2)
+        if len(parts) != 3:
+            continue
+        try:
+            cpu = float(parts[0])
+            mem = float(parts[1])
+        except ValueError:
+            continue
+        # Игнорим idle процессы (ps включает и kthread'ы с 0% — не интересно)
+        if sort == "cpu" and cpu < 0.5:
+            continue
+        if sort == "mem" and mem < 0.5:
+            continue
+        rows.append({"cpu": cpu, "mem": mem, "name": parts[2].strip()[:22]})
+        if len(rows) >= n:
+            break
+    return rows
+
+
+c_top_cpu = Cached(lambda: _top_processes(5, "cpu"), 3)
+c_top_mem = Cached(lambda: _top_processes(5, "mem"), 3)
+
+
 def _ensure_desktop_icons():
     """Создаёт/перезаписывает 2 .desktop в ~/Desktop. Идемпотентно: если уже
     есть — overwrite (никаких дублей). Дёргается при Exit to desktop, чтоб
@@ -891,6 +927,7 @@ PAGE_DAILY_SUMMARY  = "daily_summary"
 PAGE_CONFIGS        = "configs"
 PAGE_DOCKER         = "docker"
 PAGE_YTARCHIVER     = "ytarchiver"
+PAGE_SYSTEM_DETAIL  = "system_detail"
 
 state = {
     "page":        PAGE_STATUS,
@@ -1198,9 +1235,11 @@ def page_status():
     for draw_fn, h in cards:
         rect = pygame.Rect(margin, y, card_w, h)
         draw_fn(rect)
-        # Если progress-карточка — кликается → открывает детали
+        # Tappable карточки: progress (lambda) → details, system → top procs
         if draw_fn.__name__ == "<lambda>":
             btns.append(Btn("", "progress_open", rect, ACCENT))
+        elif draw_fn is _card_system:
+            btns.append(Btn("", "open_system_detail", rect, ACCENT))
         y += h + gap
 
     # Footer: SMB-клиенты — uptime теперь в top-strip, тут только активные сессии
@@ -1864,6 +1903,83 @@ def page_ytarchiver():
     return btns
 
 
+def page_system_detail():
+    """Детали системы — top CPU/RAM-процессов + текущие метрики.
+    Открывается по тапу на SYSTEM card на главной."""
+    screen.fill(BG)
+    y = draw_top_strip("System")
+    y += 8
+    btns = []
+
+    # === Главная строка: CPU temp / freq / governor ===
+    cpu_t = c_cpu_temp.get()
+    cpu_p = c_cpu_pct.get()
+    mhz   = c_cpu_max.get()
+    th    = c_throttle.get()
+    load  = c_load.get()
+    mode  = c_pmode.get()
+    cpu_c = ACCENT if (cpu_t or 0) < 65 else (WARN if (cpu_t or 0) < 75 else ERROR)
+
+    line1 = f"CPU {cpu_t or '?'}°C  ·  {mhz:.1f}GHz" if mhz else f"CPU {cpu_t or '?'}°C"
+    screen.blit(F_NORMAL.render(line1, True, cpu_c), (10, y))
+    if cpu_p is not None:
+        v = F_NORMAL.render(f"{cpu_p}%", True, FG)
+        screen.blit(v, (SCREEN_W - 10 - v.get_width(), y))
+    y += 22
+
+    sub_bits = []
+    if load is not None:  sub_bits.append(f"load {load:.2f}")
+    if mode and mode != "unknown": sub_bits.append(f"mode {mode}")
+    if th:
+        sub_bits.append(f"throttle {th[0]}")
+    screen.blit(F_SMALL.render("  ·  ".join(sub_bits), True, MUTED), (10, y))
+    y += 18
+    pygame.draw.line(screen, BTN_BG, (10, y), (SCREEN_W - 10, y), 1)
+    y += 8
+
+    # === TOP по CPU ===
+    screen.blit(F_TINY.render("TOP CPU", True, MUTED), (10, y))
+    y += 14
+    rows = c_top_cpu.get() or []
+    if not rows:
+        screen.blit(F_SMALL.render("(idle, <0.5%)", True, MUTED), (10, y))
+        y += 16
+    else:
+        for r in rows[:5]:
+            screen.blit(F_SMALL.render(r["name"], True, FG), (10, y))
+            v = F_SMALL.render(f"{r['cpu']:.1f}%", True, ACCENT if r["cpu"] < 50 else WARN)
+            screen.blit(v, (SCREEN_W - 10 - v.get_width(), y))
+            y += 16
+
+    y += 6
+    pygame.draw.line(screen, BTN_BG, (10, y), (SCREEN_W - 10, y), 1)
+    y += 8
+
+    # === TOP по RAM ===
+    screen.blit(F_TINY.render("TOP MEM", True, MUTED), (10, y))
+    y += 14
+    rows = c_top_mem.get() or []
+    if not rows:
+        screen.blit(F_SMALL.render("(<0.5%)", True, MUTED), (10, y))
+        y += 16
+    else:
+        for r in rows[:5]:
+            screen.blit(F_SMALL.render(r["name"], True, FG), (10, y))
+            v = F_SMALL.render(f"{r['mem']:.1f}%", True, INFO)
+            screen.blit(v, (SCREEN_W - 10 - v.get_width(), y))
+            y += 16
+
+    # === Bottom: Back | Refresh ===
+    half_w = (SCREEN_W - 28) // 2
+    back = Btn("Back", "back_to_status",
+               pygame.Rect(8, SCREEN_H - 54, half_w, 46), MUTED)
+    refresh = Btn("Refresh", "system_refresh",
+                  pygame.Rect(SCREEN_W - 8 - half_w, SCREEN_H - 54, half_w, 46), INFO)
+    draw_button(back); draw_button(refresh)
+    btns.extend([back, refresh])
+    return btns
+
+
 def page_configs():
     """Шпаргалка где что лежит — чтоб не забыть перед перепрошивкой."""
     screen.fill(BG)
@@ -2034,6 +2150,7 @@ PAGES = {
     PAGE_CONFIGS:        page_configs,
     PAGE_DOCKER:         page_docker,
     PAGE_YTARCHIVER:     page_ytarchiver,
+    PAGE_SYSTEM_DETAIL:  page_system_detail,
 }
 
 
@@ -2129,6 +2246,10 @@ def do_action(action):
     elif action == "yt_refresh":
         c_yt.invalidate()
         toast("YT stats refreshing…", INFO)
+    elif action == "open_system_detail":  go(PAGE_SYSTEM_DETAIL)
+    elif action == "system_refresh":
+        c_top_cpu.invalidate(); c_top_mem.invalidate()
+        toast("Refreshing…", INFO)
     elif action == "docker_refresh":
         # Сброс кеша → следующий рендер дёрнет actual data
         c_docker.last = 0

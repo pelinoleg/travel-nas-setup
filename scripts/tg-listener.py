@@ -159,6 +159,7 @@ def cmd_help(token, chat_id, args):
 `/screenshot` `/screen` — PNG-снимок текущего экрана дашборда
 `/nas` — статус NAS-бэкапов (модули, размеры, last-run)
 `/docker` — Docker-compose проекты + кнопки Stop/Start/Restart
+`/docker audit` — диагностика UID-mismatch в bind mount'ах
 `/services` — все URL установленных сервисов
 `/configs` — `/etc/travel-nas/` файлы + где что лежит
 
@@ -465,7 +466,21 @@ def _ago_short(ts):
 
 
 def cmd_docker(token, chat_id, args):
-    """Список compose-проектов с кнопками Stop/Start/Restart."""
+    """Список compose-проектов с кнопками Stop/Start/Restart.
+    `/docker audit` — диагностика прав bind mount'ов (UID-mismatch)."""
+    if args and args[0].lower() == "audit":
+        try:
+            out = subprocess.check_output(
+                ["sudo", "-n", "/usr/local/bin/docker-mgr.sh", "audit"],
+                timeout=30, stderr=subprocess.STDOUT,
+            ).decode(errors="replace").strip()
+        except Exception as e:
+            send(token, chat_id, f"❌ audit failed: {e}")
+            return
+        # Plain text — escape Markdown в выводе содержит chown/пути
+        send(token, chat_id, f"*Docker bind-mount audit*\n```\n{out[:3500]}\n```")
+        return
+
     try:
         out = subprocess.check_output(
             ["sudo", "-n", "/usr/local/bin/docker-mgr.sh", "list"],

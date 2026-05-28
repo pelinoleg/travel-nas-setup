@@ -11,6 +11,7 @@
 #   docker-mgr.sh start <name>     — docker compose up -d
 #   docker-mgr.sh stop <name>      — docker compose stop
 #   docker-mgr.sh restart <name>   — docker compose restart
+#   docker-mgr.sh audit            — диагностика UID-mismatch в bind mounts
 # =============================================================================
 
 set -u
@@ -39,8 +40,35 @@ case "$ACTION" in
             restart) docker compose -f "$CF" restart ;;
         esac
         ;;
+    audit)
+        # Текстовый отчёт mismatches между container UID и host owner для
+        # bind mount'ов. Только rw mode + non-root container внутри.
+        # ro и root-внутри пропускаем (не могут привести к 'permission denied').
+        ISSUES=0
+        for C in $(docker ps --format '{{.Names}}'); do
+            UID_IN=$(docker exec "$C" id -u 2>/dev/null || echo "")
+            [[ -z "$UID_IN" || "$UID_IN" == "0" ]] && continue
+            while IFS='|' read -r SRC DST MODE; do
+                [[ -z "$SRC" ]] && continue
+                [[ "$MODE" == "ro" || "$MODE" == *",ro"* ]] && continue
+                HOST_UID=$(stat -c "%u" "$SRC" 2>/dev/null || echo "?")
+                [[ "$UID_IN" == "$HOST_UID" ]] && continue
+                ISSUES=$((ISSUES + 1))
+                echo "⚠️  $C (uid=$UID_IN) cannot write to $SRC (owner=$HOST_UID)"
+                echo "   fix:  sudo chown -R $UID_IN:$UID_IN $SRC"
+                echo ""
+            done < <(docker inspect "$C" --format \
+                '{{range .Mounts}}{{if eq .Type "bind"}}{{.Source}}|{{.Destination}}|{{.Mode}}{{println}}{{end}}{{end}}' \
+                2>/dev/null)
+        done
+        if (( ISSUES == 0 )); then
+            echo "✓ Все running-контейнеры have matching bind-mount permissions."
+        else
+            echo "Найдено проблем: $ISSUES"
+        fi
+        ;;
     *)
-        echo "Usage: $0 [list|status|start|stop|restart] [name]" >&2
+        echo "Usage: $0 [list|status|start|stop|restart|audit] [name]" >&2
         exit 1
         ;;
 esac

@@ -234,13 +234,27 @@ def _load():
 
 
 def _throttled():
-    """vcgencmd get_throttled → ('OK'|'NOW'|'past', color)."""
+    """vcgencmd get_throttled → ('OK'|'NOW'|'past', color).
+
+    Биты:
+      0x1     under-voltage NOW
+      0x2     arm freq capped NOW
+      0x4     throttling NOW
+      0x8     soft temp limit NOW (Pi 5)
+      0x10000 under-voltage past
+      0x20000 freq capped past
+      0x40000 throttle past
+      0x80000 soft temp past (Pi 5)
+
+    NOW-биты могут мигать на доли секунды (Pi 5 быстро меняет состояние).
+    Поллинг раз в 5 сек часто не ловит — но past-бит остаётся до reboot'а,
+    так что в шапке всё равно видно что событие было."""
     out = subprocess.check_output(["vcgencmd", "get_throttled"], timeout=2).decode()
     val = int(out.strip().split("=")[1], 16)
     if val == 0:                return ("OK", ACCENT)
-    if val & 0x7:               return ("NOW", ERROR)
-    if val & 0x70000:           return ("past", WARN)
-    return ("past", WARN)
+    if val & 0xF:               return ("NOW", ERROR)
+    if val & 0xF0000:           return ("past", WARN)
+    return ("OK", ACCENT)
 
 
 _PMIC_RE = re.compile(r"\s*(\S+)_([AV])\s+\w+\(\d+\)=([\d.]+)[AV]")
@@ -868,8 +882,13 @@ def draw_top_strip(page_label=None):
     w = c_watts.get()
 
     pieces = []
+    # ⚡ для NOW (красный — событие СЕЙЧАС) и past (оранжевый — было, бит
+    # остаётся до reboot). Кратковременные просадки Pi 5 чаще ловятся только
+    # в past — иначе их не увидеть между поллингами.
     if th and th[0] == "NOW":
         pieces.append(F_SMALL.render("⚡", True, ERROR))
+    elif th and th[0] == "past":
+        pieces.append(F_SMALL.render("⚡", True, WARN))
     if pref == "auto":
         pieces.append(F_SMALL.render("A·", True, INFO))
     if mode and mode != "unknown":

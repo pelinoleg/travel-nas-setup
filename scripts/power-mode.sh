@@ -29,7 +29,10 @@ set -u
 
 PREF_FILE="/var/lib/travel-nas/power-mode-pref"
 STATE="/var/lib/travel-nas/power-mode.txt"
-LOG="/mnt/t7/_logs/power-mode.log"
+# Лог намеренно в /var/lib (на microSD), не /mnt/t7. Power-mode событие
+# может СОВПАДАТЬ с момент когда T7 моргнул (USB power dip) — попытка
+# писать в /mnt/t7/_logs/ даёт I/O error и теряет важную диагностику.
+LOG="/var/lib/travel-nas/power-mode.log"
 
 mkdir -p "$(dirname "$STATE")" "$(dirname "$LOG")" 2>/dev/null
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# fast-reboot.sh — canonical reboot, как LXDE menu
+# fast-reboot.sh — canonical reboot с pre-umount T7
 # =============================================================================
 
 set -u
@@ -15,4 +15,10 @@ fi
 pkill -TERM rsync 2>/dev/null
 systemctl stop nas-backup-runtime 2>/dev/null
 sleep 2
+
+# Pre-umount T7 (известный блокер на Pi 5)
+fuser -km /mnt/t7 2>/dev/null || true
+sync
+umount -l /mnt/t7 2>/dev/null || true
+
 exec systemctl reboot

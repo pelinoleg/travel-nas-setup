@@ -105,16 +105,24 @@ sudo curl -fsSL "https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/ma
 
 Pygame-кiosk в X11. Никаких внешних терминалов — фокус не уходит, тач всегда работает. Pages:
 
-- **Status** — Network/IP/SSID, T7 disk + bar, RAM + bar, CPU + bar, Last photo backup. Если бэкап в процессе — зелёная карточка с прогрессом. В AP-режиме автоматически показывается оранжевая AP-карточка.
-- **Menu** — секции NAS BACKUP / INFO & STATUS / SYSTEM с цветными разделителями. Run, Dry-run, Diff, NAS status, Today, Logs, Services, AP info, Force AP, Reboot, Shutdown, Exit to desktop.
-- **NAS status** — по каждому модулю: цвет-точка статуса (ok/warn/fail/absent), размер на диске, "X ago". Обновляется hourly timer + по кнопке Refresh.
-- **Today** — превью того что в 21:00 уйдёт в Telegram: uptime, CPU°C, IP, T7%, throttling/under-voltage, photo cards/files/size today, NAS today, errors, incomplete, microSD wear%, power mode.
-- **Services** — список из `/etc/travel-nas/services.conf` с подстановкой `{host}` и `{ip}`. Редактируй через `nano` или через Edit Services desktop shortcut.
+- **Status** (главная) — карточки: Network/IP/SSID (или AP с инструкцией), Storage T7 (с `NOT MOUNTED` детектом + % справа от бара), System (CPU/RAM bars), **Last NAS backup** (агрегат: local/source/%), Last photo backup. Если бэкап в процессе — зелёная карточка с прогрессом заменяет last-карточки. Сверху в плашке: `up Xh Ym` слева, `power: [A·]<mode> <freq>GHz <W>W` справа (`A·` префикс = система сама выбирает режим).
+- **Menu** — одна страница, 3 секции:
+  - **NAS**: Run/Stop backup (одна контекстная кнопка) | NAS status
+  - **INFO**: Today | Logs | Services / Configs | Docker
+  - **SYSTEM**: AP info | Force AP, Reboot | Shutdown, Normal | Saver | Auto (power modes)
+- **NAS status** — по каждому модулю: цвет-точка (ok/warn/fail/partial/absent), `local / source` размер, % при mismatch + `not fully copied` подсказка. Кнопка **Refresh** опционально запрашивает source size через `rsync --dry-run --stats` (медленно). Hourly timer обновляет local без NAS-запросов.
+- **Today** — превью daily-summary: uptime, CPU°C, IP, T7%, throttling, photos/NAS today, errors, microSD wear, power mode.
+- **Services** — список из `/etc/travel-nas/services.conf` с подстановкой `{host}` и `{ip}`.
 - **Logs** — встроенный viewer (photo-backup, nas-backup, watchdog, system-monitor, display errors).
-- **AP info / Force AP** — SSID/пароль/IP/инструкция и опасная кнопка перейти в AP-режим (с подтверждением).
-- **Reboot / Shutdown** — с двойным тапом.
+- **Docker** — все compose-проекты с inline кнопками Stop/Start/Restart.
+- **AP info / Force AP** — SSID `comitup-NNN` + URL `http://10.41.0.1:8080` (comitup-web висит на нестандартном порту чтобы не конфликтить с CasaOS nginx :80). Force AP сбрасывает текущий WiFi и стартует hotspot.
+- **Reboot / Shutdown** — с подтверждением.
 
 Auto-sleep через 5 минут неактивности (xset dpms + sysfs backlight для дисплеев которые умеют). На MHS35 lampbacklight прибита к 5V, экран чернеет но лампа горит — hardware-limit, не наш баг.
+
+### Stop NAS backup
+
+`nas-backup.sh` сам себя переоборачивает в transient systemd-unit (`nas-backup-runtime`) с собственным cgroup'ом — переживает рестарт дашборда или SSH-сессии. Кнопка **Stop backup** на NAS-странице делает `systemctl stop nas-backup-runtime` — SIGTERM всему cgroup'у. Bash trap в `nas-backup.sh` удаляет stale progress JSON при любом exit'е.
 
 ## Telegram бот
 
@@ -122,28 +130,48 @@ Auto-sleep через 5 минут неактивности (xset dpms + sysfs b
 
 | Команда | Действие |
 |---|---|
-| `/status` | Snapshot: uptime, T7, CPU, photos today, throttle, power mode |
-| `/backup` | Запустить NAS backup |
-| `/backup dry` | Dry-run |
+| `/status` `/today` | Snapshot: uptime, T7, CPU, photos today, throttle, power mode |
+| `/screenshot` `/screen` | **PNG-снимок текущего экрана дашборда** (через файловый IPC) |
+| `/nas` | Статус NAS-бэкапов (модули, размеры, last-run) |
+| `/docker` | Compose-проекты + inline кнопки Stop/Start/Restart |
+| `/services` | URLs всех установленных сервисов |
+| `/configs` | `/etc/travel-nas/` + где что лежит |
+| `/backup` `/backup dry` `/backup diff` | NAS backup / dry-run / diff |
+| `/update` | Pull свежих скриптов из GitHub + рестарт сервисов |
 | `/logs [N]` | Хвосты всех логов (default 30 строк) |
-| `/power [normal/saver/auto]` | Переключить power-mode (legacy `home/field/emergency` тоже принимаются) |
+| `/power` | Справка + текущее состояние pref/applied |
+| `/power normal` `/power saver` | Зафиксировать ручной режим |
+| `/power auto` | Дать системе самой выбирать (`A·` префикс на дашборде) |
 | `/reboot` `/shutdown` | С подтверждением `/yes` в течение 30 секунд |
-| `/help` | Список команд |
+| `/help` | Список всех команд |
 
 Авторизация: только chat_id из `TG_CHAT_ID`. Остальные сообщения игнорируются.
 
 ## Power mode
 
-Защита от просадок 5V когда работаешь от powerbank'а. Не выключает сервисы — только опускает планку CPU чтобы пиковый ток был ниже.
+Защита от просадок 5V и перегрева. Не выключает сервисы — только опускает планку CPU чтобы пиковый ток был ниже.
 
-| Режим | Когда | Что делает |
+| Режим | Тип | Что делает |
 |---|---|---|
-| `normal` | Питание нормальное (нет throttled бит) | `ondemand` governor — CPU поднимается до max по нагрузке |
-| `saver` | Под-вольтаж сейчас (`vcgencmd get_throttled & 0x7` ≠ 0) | `powersave` governor — CPU зажат на min частоте. **Всё остаётся работать, просто медленнее.** |
+| `normal` | ручной | `ondemand` governor — CPU до max 2.4 GHz по нагрузке. Не меняется сам. |
+| `saver`  | ручной | `powersave` governor — CPU зажат на min ~1.5 GHz. Не меняется сам. |
+| `auto`   | система сама | По throttled-биту и CPU temp выбирает saver/normal. На дашборде с префиксом `A·` |
 
-Триггеры авто-переключения: NetworkManager dispatcher на connect/disconnect + system-monitor когда видит throttling.
+Auto-логика (при `pref=auto`):
+- `vcgencmd get_throttled & 0x7` ≠ 0 → saver
+- CPU temp ≥ 75°C → saver
+- CPU temp < 65°C **и** throttle clear → normal (гистерезис 10°)
 
-Ручной: `power-mode.sh normal|saver|auto|status`. Legacy команды `home/field/emergency` тоже принимаются (map'ятся в `normal/normal/saver` соответственно).
+Триггеры тика:
+- **`power-mode-tick.timer`** — раз в **60 секунд** (ловит короткие пики температуры)
+- NetworkManager dispatcher на connect/disconnect
+- `system-monitor.timer` каждые 5 мин (бэкап-механизм)
+
+Файлы состояния:
+- `/var/lib/travel-nas/power-mode-pref` — выбор юзера (`normal`/`saver`/`auto`)
+- `/var/lib/travel-nas/power-mode.txt` — реально применённый governor
+
+Управление: `power-mode.sh normal|saver|auto|auto-tick|status`. На дашборде Menu → SYSTEM → Normal/Saver/Auto. Через TG: `/power <режим>`.
 
 ## photo-backup надёжность
 
@@ -158,6 +186,7 @@ Auto-sleep через 5 минут неактивности (xset dpms + sysfs b
 - **Photoview**: `http://pi.local:8000` (в UI указывай путь `/t7/usb-imports` или `/t7/media`)
 - **YT-Archiver**: `http://pi.local:8081`
 - **SSH**: `ssh oleg@pi.local`
+- **AP mode** (полевой): подключиться к WiFi `comitup-NNN` (без пароля) → `http://10.41.0.1:8080` для настройки нового WiFi
 
 > ⚠️ **Photoview** UI принимает только пути ВНУТРИ контейнера. Мы монтируем `/mnt/t7` как `/t7:ro`. То есть в Photoview указывай `/t7/usb-imports`, а **не** `/mnt/t7/usb-imports`. Иначе получишь "Server error: internal system error at initialSetupWizard".
 

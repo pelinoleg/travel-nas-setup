@@ -9,16 +9,13 @@ elif (
     set -e
     sudo mkdir -p /opt/photoview
 
-    # Photoview контейнер работает от UID 999 (photoview user). mariadb
-    # внутри тоже drops to UID 999 (mysql user). Если host-папки cache/db
-    # не принадлежат 999:999 — контейнер не может писать туда →
-    # 'mkdir /app/cache/15: permission denied' → thumbnails не генерятся
-    # → UI выдаёт 'record not found at (media)' при попытке открыть фото.
-    #
-    # Решение: явный chown перед docker compose up. install -d создаёт
-    # папку (если нет) с указанным владельцем и режимом.
-    sudo install -d -o 999 -g 999 -m 0755 /opt/photoview/cache
-    sudo install -d -o 999 -g 999 -m 0755 /opt/photoview/db
+    # cache+db живут на T7 (а не /opt/) — переустановка системы не теряет
+    # БД (1700+ scanned media, faces, favorites). Тяжёлые thumbnail-writes
+    # тоже на SSD, а не убивают microSD.
+    # UID 999 = mysql внутри mariadb / photoview user внутри photoview.
+    APPDATA="$T7_MOUNT/_appdata/photoview"
+    sudo install -d -o 999 -g 999 -m 0755 "$APPDATA/cache"
+    sudo install -d -o 999 -g 999 -m 0755 "$APPDATA/db"
 
     sudo tee /opt/photoview/docker-compose.yml > /dev/null << EOF
 # Photoview app + MariaDB
@@ -35,7 +32,7 @@ services:
       - MYSQL_PASSWORD=photoview
       - MYSQL_RANDOM_ROOT_PASSWORD=1
     volumes:
-      - /opt/photoview/db:/var/lib/mysql
+      - $APPDATA/db:/var/lib/mysql
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
@@ -60,7 +57,7 @@ services:
       - PHOTOVIEW_LISTEN_PORT=80
       - PHOTOVIEW_MEDIA_CACHE=/app/cache
     volumes:
-      - /opt/photoview/cache:/app/cache
+      - $APPDATA/cache:/app/cache
       # Весь T7 как read-only — в UI указывай /t7/usb-imports, /t7/media и т.п.
       - $T7_MOUNT:/t7:ro
 EOF

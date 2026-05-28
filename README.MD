@@ -79,9 +79,13 @@ sudo curl -fsSL "https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/ma
 │   ├── _deleted/<DD-MM-YYYY>/
 │   └── _logs/
 ├── usb-imports/          Бэкапы SD/USB (DD-MM-YYYY/HH-MM-SS_label_uuid/)
+│   ├── .photoviewignore  Skip RAW для Photoview-сканера
 │   └── *.incomplete/     Если backup был прерван (видно в Today summary)
 ├── pi-config-backups/    4 копии /etc и т.п. (автоматический Pi-backup)
-├── media/                Пользовательское (YT-Archiver, фильмы и т.п.)
+├── media/                Пользовательское (Фильмы и т.п.)
+│   └── YT-Archiver/      БД и downloads yt-archiver
+├── _appdata/             БД Docker-приложений (reinstall-safe)
+│   └── photoview/{db,cache}
 ├── sync/                 Для Syncthing (опционально)
 └── _logs/                Логи всех скриптов
 ```
@@ -231,7 +235,7 @@ sudo systemctl restart tg-listener
 
 После изменения compose-файлов:
 ```bash
-cd /opt/photoview && sudo docker compose up -d
+cd /opt/photoview && sudo docker compose up -d  # БД на T7: /mnt/t7/_appdata/photoview/
 cd /var/lib/casaos/apps/ytarchiver && sudo docker compose up -d
 ```
 

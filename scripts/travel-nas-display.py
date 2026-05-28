@@ -2862,12 +2862,12 @@ def do_action(action):
         subprocess.Popen(["sudo", "-n", "/usr/local/bin/fast-reboot.sh"],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          stdin=subprocess.DEVNULL, start_new_session=True)
-        toast("Rebooting (≤20s)…", WARN); go(PAGE_STATUS)
+        toast("Rebooting…", WARN); go(PAGE_STATUS)
     elif action == "do_shutdown":
         subprocess.Popen(["sudo", "-n", "/usr/local/bin/fast-shutdown.sh"],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          stdin=subprocess.DEVNULL, start_new_session=True)
-        toast("Shutting down (≤20s)…", ERROR); go(PAGE_STATUS)
+        toast("Shutting down…", ERROR); go(PAGE_STATUS)
 
     elif action == "nas_run":   _spawn_nas("--run",     "NAS backup started", ACCENT)
     elif action == "nas_dry":   _spawn_nas("--dry-run", "Dry-run started",    INFO)

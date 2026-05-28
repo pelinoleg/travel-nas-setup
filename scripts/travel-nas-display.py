@@ -984,58 +984,80 @@ def _card_last_backup(rect):
     screen.blit(F_SMALL.render(nm, True, MUTED), (inner.x, inner.y + 22))
 
 
-def _last_nas_module():
-    """Самый свежий модуль из NAS_STATUS_JSON (последний backup)."""
+def _nas_aggregate():
+    """Aggregate NAS backup state — без привязки к конкретной папке.
+    Возвращает: total_local_bytes, total_nas_bytes, last_run (max), worst_status."""
     data = _load_json(NAS_STATUS_JSON)
     if not data:
         return None
-    mods = [m for m in (data.get("modules") or [])
-            if m.get("exists") and m.get("last_run")]
-    if not mods:
-        return None
-    return max(mods, key=lambda m: m.get("last_run") or 0)
+    mods = data.get("modules") or []
+    total_local = 0.0
+    total_nas   = 0.0
+    last_run    = 0
+    statuses    = set()
+    for m in mods:
+        if m.get("exists"):
+            sz = _parse_size(m.get("size"))
+            if sz: total_local += sz
+            st = m.get("status")
+            if st: statuses.add(st)
+            lr = m.get("last_run") or 0
+            if lr > last_run: last_run = lr
+        ns = _parse_size(m.get("nas_size"))
+        if ns: total_nas += ns
+    # Worst-of: fail > partial/warn > ok
+    if "fail" in statuses:    worst = "fail"
+    elif "partial" in statuses: worst = "partial"
+    elif "warn" in statuses:    worst = "warn"
+    elif "ok" in statuses:      worst = "ok"
+    else:                       worst = None
+    return {
+        "local_bytes": total_local,
+        "nas_bytes":   total_nas,
+        "last_run":    last_run or None,
+        "status":      worst,
+    }
 
 
-c_last_nas = Cached(_last_nas_module, 30)
+c_last_nas = Cached(_nas_aggregate, 30)
 
 
 def _card_last_nas_backup(rect):
     inner = _card(rect, "LAST NAS BACKUP")
-    m = c_last_nas.get()
-    if not m:
+    agg = c_last_nas.get()
+    if not agg or (agg["local_bytes"] == 0 and agg["nas_bytes"] == 0):
         screen.blit(F_NORMAL.render("none yet", True, MUTED), (inner.x, inner.y))
         return
-    name   = m.get("name", "?")
-    size   = m.get("size") or "?"
-    nas_sz = m.get("nas_size")
-    status = m.get("status") or "?"
-    last_r = m.get("last_run")
+    local_h = human_bytes(int(agg["local_bytes"])) if agg["local_bytes"] else "0B"
+    nas_h   = human_bytes(int(agg["nas_bytes"]))   if agg["nas_bytes"]   else "?"
+    pct     = (agg["local_bytes"] / agg["nas_bytes"] * 100) if agg["nas_bytes"] else None
+    status  = agg["status"]
+    last_r  = agg["last_run"]
 
-    # Цвет точки/статуса
-    if status == "ok":     dot = ACCENT
-    elif status == "warn": dot = WARN
-    elif status == "fail": dot = ERROR
-    elif status == "partial": dot = WARN
-    else: dot = MUTED
+    incomplete = pct is not None and pct < 95
+    if status == "ok" and not incomplete: dot = ACCENT
+    elif status == "fail":                dot = ERROR
+    elif status in ("partial", "warn"):   dot = WARN
+    elif incomplete:                      dot = WARN
+    else:                                 dot = MUTED
 
-    # Строка 1: точка + name слева, size справа (если incomplete — local/source)
+    # Строка 1: точка + size totals слева, % справа
     pygame.draw.circle(screen, dot, (inner.x + 5, inner.y + 9), 5)
-    screen.blit(F_NORMAL.render(name, True, FG), (inner.x + 16, inner.y))
-    if nas_sz and _size_lt(size, nas_sz):
-        # incomplete: жёлтый цвет всей строки
-        sz_s = F_NORMAL.render(f"{size} / {nas_sz}", True, WARN)
-    else:
-        sz_s = F_NORMAL.render(size, True, FG)
-    screen.blit(sz_s, (inner.right - sz_s.get_width(), inner.y))
+    main_col = WARN if incomplete else FG
+    sz_text = f"{local_h} / {nas_h}"
+    screen.blit(F_NORMAL.render(sz_text, True, main_col), (inner.x + 16, inner.y))
+    if pct is not None:
+        pct_s = F_NORMAL.render(f"{pct:.0f}%", True, main_col)
+        screen.blit(pct_s, (inner.right - pct_s.get_width(), inner.y))
 
-    # Строка 2: time ago · status
-    sub = f"{_ago(last_r)}  ·  {status}"
-    if nas_sz and _size_lt(size, nas_sz):
-        sub += "  ·  not fully copied"
-        sub_col = WARN
-    else:
-        sub_col = MUTED
-    screen.blit(F_SMALL.render(sub, True, sub_col), (inner.x + 16, inner.y + 20))
+    # Строка 2: time ago · status (или подсказка про incomplete)
+    parts = []
+    if last_r: parts.append(_ago(last_r))
+    if status: parts.append(status)
+    if incomplete: parts.append("not fully copied")
+    sub_col = WARN if incomplete or status in ("partial", "warn", "fail") else MUTED
+    screen.blit(F_SMALL.render("  ·  ".join(parts), True, sub_col),
+                (inner.x + 16, inner.y + 20))
 
 
 def page_status():

@@ -63,6 +63,13 @@ CONFIG="/etc/travel-nas/nas-backup.conf"
 TG_NOTIFY="/usr/local/bin/tg-notify.sh"
 DEFAULT_DEST="/mnt/t7/nas-backup"
 
+# Cleanup progress JSON при любом exit'е, включая SIGTERM от `systemctl stop`.
+# Bash-trap отрабатывает на сигналы надёжно (Python finally — нет, когда
+# процесс убит). Без этого после Stop дашборд показывает stale карточку
+# с прогрессом последнего успешного backup'а — юзер думает что всё ещё идёт.
+PROGRESS_JSON="/var/run/travel-nas/backup-progress.json"
+trap 'rm -f "$PROGRESS_JSON" 2>/dev/null' EXIT TERM INT
+
 # Цвета
 RED='\033[0;31m'
 GREEN='\033[0;32m'

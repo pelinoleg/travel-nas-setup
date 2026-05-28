@@ -2292,15 +2292,23 @@ def page_photo_backups():
             # Цвет/иконка для incomplete
             icon_col = WARN if r["incomplete"] else MUTED
             pygame.draw.circle(screen, icon_col, (16, y + 9), 4)
-            # date · label
+            # Compact format: date без года + HH:MM + source type.
+            # Полное имя `17-43-21_USB_dev-sdb1` → `17:43 USB` (убираем
+            # секунды + device path — они не помогают визуально различать).
+            date_short = r["date"][:5] if len(r["date"]) >= 5 else r["date"]  # DD-MM
             label = r["label"]
-            if len(label) > 22: label = label[:20] + "…"
-            text = f"{r['date']} · {label}"
+            # Парсим HH-MM-SS_<source>_<dev-sdX>
+            m = re.match(r"^(\d{2})-(\d{2})-\d{2}_([^_]+)", label)
+            if m:
+                short = f"{m.group(1)}:{m.group(2)} {m.group(3)}"[:16]
+            else:
+                short = label[:16] + ("…" if len(label) > 16 else "")
+            text = f"{date_short} {short}"
             screen.blit(F_SMALL.render(text, True, FG), (28, y))
             # files+size справа
             right = f"{r['files']}f · {human_bytes(r['size'])}"
             if r["incomplete"]:
-                right = "INC · " + right
+                right = "✗ " + right
             rt = F_TINY.render(right, True, WARN if r["incomplete"] else MUTED)
             screen.blit(rt, (SCREEN_W - 10 - rt.get_width(), y + 2))
             y += 18

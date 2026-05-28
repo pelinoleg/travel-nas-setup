@@ -41,6 +41,59 @@ PROGRESS_RE = re.compile(
 
 WRITE_INTERVAL = 1.0  # секунд между записями JSON
 
+# rsync ETA скачет: 20 мин → 16 ч → 8 мин, потому что:
+#  - --no-inc-recursive сканирует список параллельно (total bytes растёт)
+#  - speed зависит от типа файлов (мелкие = много syscall'ов = медленнее)
+# Сглаживаем median'ом по последним SMOOTH_WINDOW значениям.
+SMOOTH_WINDOW = 15
+
+
+def _parse_eta(s):
+    """rsync ETA вид '0:01:23' или '16:33:37' → секунды. None если не парсится."""
+    if not s: return None
+    parts = s.split(":")
+    if len(parts) != 3: return None
+    try:
+        h, m, sec = (int(p) for p in parts)
+        return h * 3600 + m * 60 + sec
+    except ValueError:
+        return None
+
+
+def _format_eta(seconds):
+    """Секунды → 'Xh Ym' или 'Xm Ys' для компактного отображения."""
+    if seconds is None or seconds < 0:
+        return "?"
+    if seconds < 60:
+        return f"{seconds}s"
+    if seconds < 3600:
+        return f"{seconds // 60}m {seconds % 60}s"
+    h = seconds // 3600
+    m = (seconds % 3600) // 60
+    return f"{h}h {m}m"
+
+
+def _parse_speed(s):
+    """'12.34MB/s' → bytes/sec. None если не парсится."""
+    if not s: return None
+    m = re.match(r"([\d.]+)\s*([KMGT]?)B?/s", s, re.I)
+    if not m: return None
+    units = {"": 1, "K": 1024, "M": 1024**2, "G": 1024**3, "T": 1024**4}
+    try:
+        return float(m.group(1)) * units.get(m.group(2).upper(), 1)
+    except (ValueError, KeyError):
+        return None
+
+
+def _format_speed(bytes_per_sec):
+    if bytes_per_sec is None or bytes_per_sec < 0:
+        return "?"
+    for u in ("B", "K", "M", "G"):
+        if bytes_per_sec < 1024:
+            return f"{bytes_per_sec:.1f}{u}/s" if u != "B" else f"{int(bytes_per_sec)}B/s"
+        bytes_per_sec /= 1024
+    return f"{bytes_per_sec:.1f}T/s"
+
 # Debug log — позволяет понять что приходит от rsync и почему JSON не движется.
 # Если установлена env BACKUP_WRITER_DEBUG=1 — пишем каждую распарсенную строку.
 DEBUG_LOG = Path("/tmp/backup-progress-writer.debug.log")
@@ -97,6 +150,9 @@ def main():
 
     last_write = 0.0
     last_data = None
+    # Rolling buffers — median сглаживает jitter от rsync (см. SMOOTH_WINDOW)
+    eta_buf   = []
+    speed_buf = []
 
     # Сразу пишем "0%" чтобы dashboard переключился на progress-страницу
     atomic_write({**base, "percent": 0, "files_done": 0,
@@ -115,8 +171,6 @@ def main():
             return
         last_write = now
         raw_bytes = m.group("bytes")
-        # Если уже human (32.77K / 603.60M / 1.2G) — оставляем как есть.
-        # Иначе пробуем парсить как чистые байты с запятыми и форматируем сами.
         if raw_bytes and raw_bytes[-1] in "KMGT":
             size_done = raw_bytes
         else:
@@ -125,17 +179,41 @@ def main():
                 size_done = human_bytes(bd)
             except ValueError:
                 size_done = raw_bytes
+
+        # === Smoothing: median последних SMOOTH_WINDOW значений ===
+        raw_eta_s = _parse_eta(m.group("eta"))
+        if raw_eta_s is not None:
+            eta_buf.append(raw_eta_s)
+            if len(eta_buf) > SMOOTH_WINDOW: eta_buf.pop(0)
+        raw_spd = _parse_speed(m.group("speed"))
+        if raw_spd is not None:
+            speed_buf.append(raw_spd)
+            if len(speed_buf) > SMOOTH_WINDOW: speed_buf.pop(0)
+
+        # Median — устойчивее к выбросам чем mean. "calculating…" пока буфер
+        # маленький (< 3 — слишком мало данных чтобы доверять).
+        if len(eta_buf) >= 3:
+            sorted_eta = sorted(eta_buf)
+            eta_str = _format_eta(sorted_eta[len(sorted_eta) // 2])
+        else:
+            eta_str = "calculating…"
+        if len(speed_buf) >= 3:
+            sorted_spd = sorted(speed_buf)
+            speed_str = _format_speed(sorted_spd[len(sorted_spd) // 2])
+        else:
+            speed_str = m.group("speed")  # сырое значение пока не накопили
+
         last_data = {
             **base,
             "percent":    int(m.group("pct")),
             "files_done": int(m.group("xfr") or 0),
             "size_done":  size_done,
-            "speed":      m.group("speed"),
-            "eta":        m.group("eta"),
+            "speed":      speed_str,
+            "eta":        eta_str,
             "updated":    int(now),
         }
         atomic_write(last_data)
-        debug(f"WROTE: pct={last_data['percent']} size_done={size_done}")
+        debug(f"WROTE: pct={last_data['percent']} eta={eta_str} (raw {m.group('eta')}, buf {len(eta_buf)})")
 
     # rsync --info=progress2 обновляет процент через \r (без \n) —
     # text-mode `for line in sys.stdin` буферится и отдаёт только финальную

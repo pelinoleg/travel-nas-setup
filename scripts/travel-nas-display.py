@@ -730,15 +730,17 @@ def _card_network(rect):
 
 
 def _card_ap(rect):
-    """AP MODE card — заменяет network когда мы в AP-режиме."""
-    inner = _card(rect, "AP MODE — connect to setup WiFi", WARN,
+    """AP MODE card — крупная инструкция чтоб не забыть как зайти."""
+    inner = _card(rect, "AP MODE — setup WiFi here", WARN,
                   bg=PANEL_WARN, border=WARN)
-    # comitup создаёт AP с именем <hostname>-XXXX (где XXXX = первые 4
-    # символа hash или MAC, зависит от версии). Берём текущий hostname.
+    # comitup создаёт AP с именем <hostname>-XXXX.
     ap_name = f"{socket.gethostname()}-XXXX"
-    screen.blit(F_MED.render(ap_name, True, FG), (inner.x, inner.y))
-    screen.blit(F_SMALL.render("open network · no password", True, MUTED), (inner.x, inner.y + 24))
-    screen.blit(F_SMALL.render("then open: http://10.41.0.1", True, INFO), (inner.x, inner.y + 42))
+    # 1) что подключить
+    screen.blit(F_SMALL.render("WiFi (no password):", True, MUTED), (inner.x, inner.y))
+    screen.blit(F_MED.render(ap_name, True, FG), (inner.x, inner.y + 14))
+    # 2) куда зайти — крупно и ярко, чтоб видно даже мельком
+    screen.blit(F_SMALL.render("then open in browser:", True, MUTED), (inner.x, inner.y + 40))
+    screen.blit(F_MED.render("http://10.41.0.1", True, INFO), (inner.x, inner.y + 54))
 
 
 def _card_storage(rect):
@@ -873,14 +875,14 @@ def page_status():
     if p:
         # Активный бэкап — главное, last-backup не показываем (он же сейчас идёт)
         cards = [
-            (_card_ap if in_ap else _card_network,  80 if in_ap else 66),
+            (_card_ap if in_ap else _card_network,  96 if in_ap else 66),
             (lambda r: _card_backup_progress(r, p), 84),
             (_card_storage,                         68),
             (_card_system,                        110),
         ]
     else:
         cards = [
-            (_card_ap if in_ap else _card_network,  82 if in_ap else 68),
+            (_card_ap if in_ap else _card_network,  96 if in_ap else 68),
             (_card_storage,                         74),
             (_card_system,                        124),
             (_card_last_backup,                     62),
@@ -1520,14 +1522,16 @@ def page_ap_confirm():
     return _draw_confirm(
         "Force AP",
         [
-            "Deletes current WiFi",
-            "and starts comitup AP.",
+            "Drops WiFi + stops",
+            "CasaOS-gateway to free",
+            "port 80 for comitup-web.",
             "",
-            "WiFi password will be",
-            "forgotten — re-enter via",
-            "captive portal:",
+            "Connect to:",
             f"  {socket.gethostname()}-XXXX",
             "  http://10.41.0.1",
+            "",
+            "After setup: sudo reboot",
+            "to restore CasaOS.",
         ],
         "do_force_ap", "Force AP", WARN,
     )
@@ -1706,11 +1710,16 @@ def do_action(action):
         # Документированный (см. comitup-cli.8) способ переключения в HOTSPOT:
         # `comitup-cli d` — удаляет текущий NM-connection профиль; comitup
         # daemon ловит это через D-Bus и тут же стартует AP.
-        # Destructive: пароль домашнего WiFi пропадёт из NetworkManager,
-        # юзер перезаходит через captive portal на 10.41.0.1.
+        # CasaOS gateway держит порт 80, не давая comitup-web запуститься —
+        # останавливаем его до начала AP. Восстановится при ребуте автоматом.
         if not Path("/usr/sbin/comitup-cli").exists():
             toast("comitup not installed", ERROR)
         else:
+            subprocess.Popen(
+                ["sudo", "-n", "/usr/bin/systemctl", "stop", "casaos-gateway"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL, start_new_session=True,
+            )
             subprocess.Popen(
                 ["sudo", "-n", "/usr/sbin/comitup-cli", "d"],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,

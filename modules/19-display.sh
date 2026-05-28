@@ -47,6 +47,7 @@ $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/sbin/comitup-cli
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/nmcli connection down *
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/systemctl restart comitup
+$DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/systemctl stop casaos-gateway
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/sbin/smartctl
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/smbstatus
 EOF

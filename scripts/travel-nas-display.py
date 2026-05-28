@@ -1806,7 +1806,11 @@ def page_ytarchiver():
             for d in dls[:3]:
                 ch_name = d.get("channel", "")[:18]
                 title   = (d.get("title") or "")[:28]
-                pct     = int(d.get("progress") or 0)
+                # progress приходит как string "38.6", не число. float() сначала.
+                try:
+                    pct = int(float(d.get("progress") or 0))
+                except (TypeError, ValueError):
+                    pct = 0
                 screen.blit(F_SMALL.render(f"{ch_name} — {pct}%", True, FG), (10, y))
                 y += 16
                 # bar

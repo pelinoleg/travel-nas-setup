@@ -116,26 +116,45 @@ apply_governor() {
     echo "  governor=$gov applied to $count CPUs"
 }
 
+# target_governor_for "saver" → "powersave"; "normal" → "ondemand"
+target_governor_for() {
+    case "$1" in
+        normal) echo "ondemand" ;;
+        saver)  echo "powersave" ;;
+        *)      return 1 ;;
+    esac
+}
+
+# current_governor — что РЕАЛЬНО стоит в kernel (а не наш state-file).
+current_governor() {
+    cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null
+}
+
 apply_mode() {
     local mode="$1"
     local reason="${2:-manual}"
+    local target_gov
+    target_gov=$(target_governor_for "$mode") || {
+        echo "Unknown mode: $mode" >&2
+        return 1
+    }
     case "$mode" in
-        normal)
-            echo "→ NORMAL mode (ondemand governor) — $reason"
-            apply_governor ondemand
-            ;;
-        saver)
-            echo "→ SAVER mode (powersave governor) — $reason"
-            echo "  Все сервисы работают, просто медленнее."
-            apply_governor powersave
-            ;;
-        *)
-            echo "Unknown mode: $mode" >&2
-            return 1
-            ;;
+        normal) echo "→ NORMAL mode (ondemand governor) — $reason" ;;
+        saver)  echo "→ SAVER mode (powersave governor) — $reason"
+                echo "  Все сервисы работают, просто медленнее." ;;
     esac
+    apply_governor "$target_gov"
+
+    # Verify: kernel actually accepted our request. Если нет —
+    # state файл НЕ пишем (иначе соврём что saver когда реально ondemand).
+    local now_gov
+    now_gov=$(current_governor)
+    if [[ "$now_gov" != "$target_gov" ]]; then
+        log_msg "ERR: apply_mode '$mode' failed — kernel says gov='$now_gov' (хотели '$target_gov')"
+        return 1
+    fi
     echo "$mode" | sudo tee "$STATE" >/dev/null
-    log_msg "applied: mode=$mode reason=$reason"
+    log_msg "applied: mode=$mode reason=$reason gov=$target_gov"
 }
 
 # legacy aliases для совместимости со старыми скриптами/командами
@@ -149,7 +168,7 @@ map_legacy() {
 
 do_auto_tick() {
     # auto-tick вызывается по таймеру/dispatcher'у. НЕ меняет pref.
-    # Читает текущий pref → действует.
+    # Читает текущий pref → проверяет РЕАЛЬНЫЙ governor → действует.
     local pref
     pref=$(read_pref)
     local prev=""
@@ -157,12 +176,18 @@ do_auto_tick() {
 
     case "$pref" in
         normal|saver)
-            # Юзер фиксанул — просто гарантируем что governor совпадает
-            if [[ "$prev" != "$pref" ]]; then
-                apply_mode "$pref" "tick:pref=$pref"
+            # КРИТИЧНО: проверяем что kernel реально на нужном governor'е.
+            # Не доверяем state-file — после reboot/внешнего сервиса governor
+            # может быть ondemand хотя state="saver" с прошлой сессии. Раньше
+            # tick говорил "no-op (already saver)" и оставался ondemand —
+            # дашборд показывал 'saver' при 2.4GHz. Гарантируем enforcement.
+            local target_gov now_gov
+            target_gov=$(target_governor_for "$pref")
+            now_gov=$(current_governor)
+            if [[ "$now_gov" != "$target_gov" ]]; then
+                apply_mode "$pref" "tick:enforce was=$now_gov want=$target_gov"
             else
-                # Тихий no-op, но запишем в лог для отладки
-                log_msg "tick: pref=$pref already applied (no-op)"
+                log_msg "tick: pref=$pref gov=$now_gov ✓"
             fi
             ;;
         auto|"")

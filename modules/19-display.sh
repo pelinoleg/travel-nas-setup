@@ -14,6 +14,8 @@ if (
     fetch_script "travel-nas-display.py"     "$SCRIPT_DIR/travel-nas-display.py"
     fetch_script "backup-progress-writer.py" "$SCRIPT_DIR/backup-progress-writer.py"
     fetch_script "touch-calibrate.sh"        "$SCRIPT_DIR/touch-calibrate.sh"
+    fetch_script "fast-shutdown.sh"          "$SCRIPT_DIR/fast-shutdown.sh"
+    fetch_script "fast-reboot.sh"            "$SCRIPT_DIR/fast-reboot.sh"
 
     # xinput-calibrator — для touch-calibrate.sh (резистивные сенсоры
     # требуют per-device калибровки чтобы тап попадал в визуальную точку).
@@ -54,6 +56,8 @@ $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/docker-mgr.sh
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/sbin/comitup-cli
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/nmcli connection down *
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff
+$DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/fast-shutdown.sh
+$DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/fast-reboot.sh
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/systemctl restart comitup
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/systemctl stop nas-backup-runtime
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/touch-calibrate.sh

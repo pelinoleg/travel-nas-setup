@@ -53,6 +53,8 @@ declare -A SCRIPTS=(
     [backup-progress-writer.py]=/usr/local/bin/backup-progress-writer.py
     [99-travel-nas-power]=/etc/NetworkManager/dispatcher.d/99-travel-nas-power
     [touch-calibrate.sh]=/usr/local/bin/touch-calibrate.sh
+    [fast-shutdown.sh]=/usr/local/bin/fast-shutdown.sh
+    [fast-reboot.sh]=/usr/local/bin/fast-reboot.sh
 )
 
 # Cache-buster на случай если CDN отдаёт стейл
@@ -155,6 +157,8 @@ REQUIRED_CMDS=(
     "/usr/bin/systemctl restart comitup"
     "/usr/bin/systemctl stop nas-backup-runtime"
     "/usr/local/bin/touch-calibrate.sh"
+    "/usr/local/bin/fast-shutdown.sh"
+    "/usr/local/bin/fast-reboot.sh"
     "/usr/sbin/smartctl"
     "/usr/bin/smbstatus"
 )

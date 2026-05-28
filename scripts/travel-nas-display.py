@@ -2017,18 +2017,37 @@ def _disk_diag():
     except Exception:
         info["smart_msg"] = "n/a"
 
-    # 7) Модель / Vendor
+    # 7) Модель / Vendor. smartctl -i работает не для всех USB-bridge'ей.
+    # Fallback цепочка: smartctl → /sys/block/.../model → /sys/block/.../vendor.
     try:
         out = subprocess.check_output(
             ["sudo", "-n", "/usr/sbin/smartctl", "-i", "-d", "sat", src],
             timeout=5, stderr=subprocess.DEVNULL,
         ).decode(errors="replace")
         for line in out.splitlines():
-            if line.startswith("Model Number:") or line.startswith("Device Model:"):
+            if (line.startswith("Model Number:")
+                    or line.startswith("Device Model:")
+                    or line.startswith("Model Family:")
+                    or line.startswith("Product:")):
                 info["model"] = line.split(":", 1)[1].strip()[:30]
                 break
     except Exception:
         pass
+    if info["model"] == "?":
+        # Fallback через sysfs — kernel всегда знает USB inquiry data
+        # source = "/dev/sda1", нам нужен base "/sys/block/sda"
+        m = re.match(r"/dev/([a-z]+)\d*$", src or "")
+        if m:
+            base = f"/sys/block/{m.group(1)}/device"
+            parts = []
+            for f in ("vendor", "model"):
+                try:
+                    p = Path(f"{base}/{f}").read_text().strip()
+                    if p: parts.append(p)
+                except Exception:
+                    pass
+            if parts:
+                info["model"] = " ".join(parts)[:30]
 
     # 8) dmesg-ошибки (последний час)
     try:
@@ -2662,15 +2681,17 @@ def do_action(action):
             toast("Dropping WiFi → AP… (5-15 сек)", WARN)
             go(PAGE_STATUS)
     elif action == "do_reboot":
-        subprocess.Popen(["sudo", "-n", "/usr/bin/systemctl", "reboot"],
+        # fast-reboot.sh: docker stop + nas-backup stop + systemctl reboot --force
+        # + 20-сек hard fallback через SysRq. Юзер просил гарантированно.
+        subprocess.Popen(["sudo", "-n", "/usr/local/bin/fast-reboot.sh"],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          stdin=subprocess.DEVNULL, start_new_session=True)
-        toast("Rebooting…", WARN); go(PAGE_STATUS)
+        toast("Rebooting (≤20s)…", WARN); go(PAGE_STATUS)
     elif action == "do_shutdown":
-        subprocess.Popen(["sudo", "-n", "/usr/bin/systemctl", "poweroff"],
+        subprocess.Popen(["sudo", "-n", "/usr/local/bin/fast-shutdown.sh"],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          stdin=subprocess.DEVNULL, start_new_session=True)
-        toast("Shutting down…", ERROR); go(PAGE_STATUS)
+        toast("Shutting down (≤20s)…", ERROR); go(PAGE_STATUS)
 
     elif action == "nas_run":   _spawn_nas("--run",     "NAS backup started", ACCENT)
     elif action == "nas_dry":   _spawn_nas("--dry-run", "Dry-run started",    INFO)

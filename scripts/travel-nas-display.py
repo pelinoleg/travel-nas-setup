@@ -450,6 +450,22 @@ def _system_busy():
 c_busy     = Cached(_system_busy,     4)
 
 
+def _nas_backup_active():
+    """True если systemd-unit `nas-backup-runtime` сейчас живой (бэкап идёт).
+    Используется на странице NAS чтоб показать кнопку Stop."""
+    try:
+        r = subprocess.run(
+            ["systemctl", "is-active", "--quiet", "nas-backup-runtime"],
+            timeout=2,
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+c_nas_run  = Cached(_nas_backup_active, 3)
+
+
 def human_bytes(n):
     if n is None: return "?"
     n = float(n)
@@ -735,6 +751,7 @@ def draw_top_strip(page_label=None):
 # =============================================================================
 PAGE_STATUS         = "status"
 PAGE_MENU           = "menu"
+PAGE_MENU_NAS       = "menu_nas"
 PAGE_MENU_INFO      = "menu_info"
 PAGE_MENU_SYSTEM    = "menu_system"
 PAGE_PROGRESS       = "progress"
@@ -1057,9 +1074,8 @@ def _menu_helpers(btns):
 
 
 def page_menu():
-    """Hub-страница меню. Самое нужное (Run backup, Power) — здесь.
-    Остальное — в Info▸ / System▸ под-страницах. До этого все 16 пунктов
-    были в одной page_menu, которая overflow'ила экран в 320px высоты."""
+    """Hub-страница меню. NAS (Run/Dry/Diff/Status) собрано на отдельной
+    под-странице чтобы не разбрасывалось. Power на hub'е — частая операция."""
     screen.fill(BG)
     y0 = draw_top_strip("Menu") + 6
     btns = []
@@ -1067,10 +1083,7 @@ def page_menu():
      ) = _menu_helpers(btns)
     set_y(y0)
 
-    section("NAS BACKUP", ACCENT)
-    row_full("Run backup", "nas_run", ACCENT, primary=True)
-
-    # POWER — здесь же, потому что юзер часто переключает.
+    # POWER первым — частое + 1 ряд
     section("POWER", WARN)
     pref = c_ppref.get()
     row_triple([
@@ -1079,7 +1092,11 @@ def page_menu():
         ("Auto",   "pwr_auto",   INFO,   pref == "auto"),
     ])
 
-    # Навигация в под-меню — Info (всё что читаем) + System (всё рискованное).
+    # NAS — главная цель устройства, primary на hub'е чтоб 2 тапа было
+    section("MAIN", ACCENT)
+    row_full("NAS ▸", "open_menu_nas", ACCENT, primary=True)
+
+    # Прочая навигация
     section("MORE", MUTED)
     row_pair("Info ▸",   "open_menu_info",   INFO,
              "System ▸", "open_menu_system", WARN)
@@ -1089,26 +1106,54 @@ def page_menu():
     return btns
 
 
-def page_menu_info():
-    """Sub-page: всё про чтение состояния + второстепенные backup-actions."""
+def page_menu_nas():
+    """Все NAS-кнопки в одном месте: Run, Dry-run, Diff, NAS status, Stop.
+    Stop появляется только когда backup активен (systemd-unit nas-backup-runtime
+    is-active). Юзер просил: 'все кнопки связанные с NAS на одну страницу'."""
     screen.fill(BG)
-    y0 = draw_top_strip("Menu › Info") + 6
+    y0 = draw_top_strip("Menu › NAS") + 6
     btns = []
-    (set_y, _g, section, _f, row_pair, _t, bottom_pair
+    (set_y, _g, section, row_full, row_pair, _t, bottom_pair
      ) = _menu_helpers(btns)
     set_y(y0)
 
-    section("STATUS", INFO)
-    row_pair("NAS status", "open_nas_status", INFO,
-             "Today",      "open_daily",      INFO)
-    row_pair("Logs",       "open_logs",       INFO,
-             "Services",   "open_services",   INFO)
-    row_pair("Configs",    "open_configs",    INFO,
-             "Docker",     "open_docker",     INFO)
+    running = c_nas_run.get()
 
     section("BACKUP", ACCENT)
-    row_pair("Dry-run", "nas_dry",  INFO,
-             "Diff",    "nas_diff", INFO)
+    if running:
+        # Backup идёт — главная кнопка теперь Stop. Run спрятан чтобы юзер
+        # не запускал ещё один (всё равно systemd-run --unit= тот же).
+        row_full("Stop backup", "nas_stop", ERROR, primary=True)
+        row_pair("Progress", "progress_open", INFO,
+                 "NAS status", "open_nas_status", INFO)
+    else:
+        row_full("Run backup", "nas_run", ACCENT, primary=True)
+        row_pair("Dry-run", "nas_dry",  INFO,
+                 "Diff",    "nas_diff", INFO)
+        section("STATUS", INFO)
+        row_full("NAS status", "open_nas_status", INFO)
+
+    bottom_pair("Back", "open_menu",
+                "Status", "back_to_status")
+    return btns
+
+
+def page_menu_info():
+    """Sub-page: всё про чтение состояния системы. NAS вынесен в page_menu_nas
+    (юзер: 'все NAS-кнопки на одну страницу')."""
+    screen.fill(BG)
+    y0 = draw_top_strip("Menu › Info") + 6
+    btns = []
+    (set_y, _g, section, row_full, row_pair, _t, bottom_pair
+     ) = _menu_helpers(btns)
+    set_y(y0)
+
+    section("INFO", INFO)
+    row_pair("Today",     "open_daily",     INFO,
+             "Logs",      "open_logs",      INFO)
+    row_pair("Services",  "open_services",  INFO,
+             "Configs",   "open_configs",   INFO)
+    row_full("Docker",    "open_docker",    INFO)
 
     bottom_pair("Back", "open_menu",
                 "Status", "back_to_status")
@@ -1718,6 +1763,7 @@ def page_off_confirm():
 PAGES = {
     PAGE_STATUS:         page_status,
     PAGE_MENU:           page_menu,
+    PAGE_MENU_NAS:       page_menu_nas,
     PAGE_MENU_INFO:      page_menu_info,
     PAGE_MENU_SYSTEM:    page_menu_system,
     PAGE_PROGRESS:       page_progress,
@@ -1794,6 +1840,7 @@ def _spawn_nas(action_arg, msg, color):
 
 def do_action(action):
     if action == "open_menu":           go(PAGE_MENU)
+    elif action == "open_menu_nas":     go(PAGE_MENU_NAS)
     elif action == "open_menu_info":    go(PAGE_MENU_INFO)
     elif action == "open_menu_system":  go(PAGE_MENU_SYSTEM)
     elif action == "back_to_status":    go(PAGE_STATUS)
@@ -1909,6 +1956,18 @@ def do_action(action):
     elif action == "nas_run":   _spawn_nas("--run",     "NAS backup started", ACCENT)
     elif action == "nas_dry":   _spawn_nas("--dry-run", "Dry-run started",    INFO)
     elif action == "nas_diff":  _spawn_nas("--diff",    "Diff started",       INFO)
+    elif action == "nas_stop":
+        # systemctl stop кладёт SIGTERM на cgroup unit'а — рssync и
+        # backup-progress-writer завершаются. JSON-файл прогресса rsync не
+        # успеет дописать, но это ок: следующий чек по systemctl is-active
+        # вернёт false и Stop-кнопка исчезнет.
+        subprocess.Popen(
+            ["sudo", "-n", "/usr/bin/systemctl", "stop", "nas-backup-runtime"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL, start_new_session=True,
+        )
+        c_nas_run.invalidate()
+        toast("Stopping NAS backup…", WARN)
 
 
 # =============================================================================

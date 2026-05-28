@@ -152,6 +152,7 @@ REQUIRED_CMDS=(
     "/usr/bin/nmcli connection down *"
     "/usr/bin/systemctl reboot, /usr/bin/systemctl poweroff"
     "/usr/bin/systemctl restart comitup"
+    "/usr/bin/systemctl stop nas-backup-runtime"
     "/usr/sbin/smartctl"
     "/usr/bin/smbstatus"
 )

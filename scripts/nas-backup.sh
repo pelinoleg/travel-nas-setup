@@ -35,11 +35,19 @@ if [[ -z "${NAS_BACKUP_DETACHED:-}" ]] && \
    [[ "${1:-}" == "--run" || "${1:-}" == "--dry-run" || "${1:-}" == "--diff" ]] && \
    command -v systemd-run >/dev/null 2>&1 && \
    [[ "$EUID" -eq 0 ]]; then
-    UNIT="nas-backup-runtime-$$"
+    # Фиксированное имя unit'а — дашборд может стопить через
+    # `systemctl stop nas-backup-runtime`. Минус: нельзя крутить два
+    # backup'а параллельно (--run + --dry-run одновременно). Это норм:
+    # рssync на одних и тех же путях параллельно ни к чему хорошему.
+    UNIT="nas-backup-runtime"
+    # stop+reset на случай предыдущего висящего/failed-стейта
+    systemctl stop "$UNIT" 2>/dev/null
+    systemctl reset-failed "$UNIT" 2>/dev/null
     if [[ -t 1 ]]; then
         echo "[INFO] Detached as systemd unit: $UNIT"
         echo "[INFO] Progress: /var/run/travel-nas/backup-progress.json"
         echo "[INFO] Log:      /mnt/t7/nas-backup/_logs/"
+        echo "[INFO] Stop:     sudo systemctl stop $UNIT"
         echo "[INFO] Live:     sudo journalctl -fu $UNIT"
     fi
     # --collect: после exit'а unit очищается, не оставляет inactive trail

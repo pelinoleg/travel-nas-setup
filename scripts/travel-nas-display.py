@@ -1559,14 +1559,14 @@ def page_nas_status():
             screen.blit(F_SMALL.render(sub, True, sub_col), (28, y + 20))
             y += row_h
 
-    # Buttons: Refresh | Back
+    # Buttons: Back | Refresh — Back всегда слева (как в браузере)
     half_w = (SCREEN_W - 28) // 2
-    refresh = Btn("Refresh", "nas_status_refresh",
-                  pygame.Rect(8, SCREEN_H - 54, half_w, 46), INFO)
     back    = Btn("Back",    "open_menu",
-                  pygame.Rect(SCREEN_W - 8 - half_w, SCREEN_H - 54, half_w, 46), MUTED)
-    draw_button(refresh); draw_button(back)
-    return [refresh, back]
+                  pygame.Rect(8, SCREEN_H - 54, half_w, 46), MUTED)
+    refresh = Btn("Refresh", "nas_status_refresh",
+                  pygame.Rect(SCREEN_W - 8 - half_w, SCREEN_H - 54, half_w, 46), INFO)
+    draw_button(back); draw_button(refresh)
+    return [back, refresh]
 
 
 def page_daily_summary():
@@ -1659,12 +1659,12 @@ def page_daily_summary():
             kv("Power mode", pm, pm_col)
 
     half_w = (SCREEN_W - 28) // 2
-    refresh = Btn("Refresh", "daily_refresh",
-                  pygame.Rect(8, SCREEN_H - 54, half_w, 46), INFO)
     back    = Btn("Back",    "open_menu",
-                  pygame.Rect(SCREEN_W - 8 - half_w, SCREEN_H - 54, half_w, 46), MUTED)
-    draw_button(refresh); draw_button(back)
-    return [refresh, back]
+                  pygame.Rect(8, SCREEN_H - 54, half_w, 46), MUTED)
+    refresh = Btn("Refresh", "daily_refresh",
+                  pygame.Rect(SCREEN_W - 8 - half_w, SCREEN_H - 54, half_w, 46), INFO)
+    draw_button(back); draw_button(refresh)
+    return [back, refresh]
 
 
 def page_services():
@@ -1767,14 +1767,14 @@ def page_docker():
             btns.append(Btn(btn_label, f"{action}:{name}", btn_rect, btn_color))
             y += 32
 
-    # Bottom: Refresh | Back
+    # Bottom: Back | Refresh — Back всегда слева
     half_w = (SCREEN_W - 28) // 2
-    refresh = Btn("Refresh", "docker_refresh",
-                  pygame.Rect(8, SCREEN_H - 54, half_w, 46), INFO)
     back = Btn("Back", "open_menu",
-               pygame.Rect(SCREEN_W - 8 - half_w, SCREEN_H - 54, half_w, 46), MUTED)
-    draw_button(refresh); draw_button(back)
-    btns.extend([refresh, back])
+               pygame.Rect(8, SCREEN_H - 54, half_w, 46), MUTED)
+    refresh = Btn("Refresh", "docker_refresh",
+                  pygame.Rect(SCREEN_W - 8 - half_w, SCREEN_H - 54, half_w, 46), INFO)
+    draw_button(back); draw_button(refresh)
+    btns.extend([back, refresh])
     return btns
 
 
@@ -1851,14 +1851,14 @@ def page_ytarchiver():
                 screen.blit(F_TINY.render(title, True, MUTED), (10, y))
                 y += 14
 
-    # Bottom: Refresh | Back
+    # Bottom: Back | Refresh — Back всегда слева
     half_w = (SCREEN_W - 28) // 2
-    refresh = Btn("Refresh", "yt_refresh",
-                  pygame.Rect(8, SCREEN_H - 54, half_w, 46), INFO)
     back = Btn("Back", "open_menu",
-               pygame.Rect(SCREEN_W - 8 - half_w, SCREEN_H - 54, half_w, 46), MUTED)
-    draw_button(refresh); draw_button(back)
-    btns.extend([refresh, back])
+               pygame.Rect(8, SCREEN_H - 54, half_w, 46), MUTED)
+    refresh = Btn("Refresh", "yt_refresh",
+                  pygame.Rect(SCREEN_W - 8 - half_w, SCREEN_H - 54, half_w, 46), INFO)
+    draw_button(back); draw_button(refresh)
+    btns.extend([back, refresh])
     return btns
 
 

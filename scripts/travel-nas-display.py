@@ -2245,6 +2245,34 @@ def page_storage_detail():
     screen.blit(F_SMALL.render(f"USB disconnects: {usb_d}", True, err_col), (10, y)); y += 16
     screen.blit(F_SMALL.render(f"USB resets:      {usb_r}", True, err_col), (10, y)); y += 16
 
+    # === Last verify (bit-rot/IO scrub) ===
+    v = c_verify.get() or {}
+    if v.get("last_run"):
+        y += 6
+        pygame.draw.line(screen, BTN_BG, (10, y), (SCREEN_W - 10, y), 1)
+        y += 4
+        screen.blit(F_TINY.render("Last verify", True, MUTED), (10, y))
+        ok = v.get("status") == "ok"
+        state_txt = "✓ ok" if ok else "✗ alert"
+        state_col = ACCENT if ok else ERROR
+        s = F_SMALL.render(state_txt, True, state_col)
+        screen.blit(s, (SCREEN_W - 10 - s.get_width(), y - 1))
+        y += 18
+        # Parse last_run "YYYYMMDD-HHMMSS" → relative days
+        try:
+            from datetime import datetime, timezone
+            t_run = datetime.strptime(v["last_run"], "%Y%m%d-%H%M%S")
+            days_ago = (datetime.now() - t_run).days
+            ago_txt = "today" if days_ago == 0 else (
+                f"{days_ago}d ago" if days_ago < 30 else f"{days_ago // 30}mo ago")
+            screen.blit(F_TINY.render(ago_txt, True, MUTED), (10, y))
+        except Exception:
+            screen.blit(F_TINY.render(v["last_run"], True, MUTED), (10, y))
+        files_txt = f"{v.get('total_files', 0)} files · {v.get('bitrot', 0)} bit-rot"
+        bf = F_TINY.render(files_txt, True, MUTED)
+        screen.blit(bf, (SCREEN_W - 10 - bf.get_width(), y))
+        y += 14
+
     # === Bottom: Back | Refresh ===
     half_w = (SCREEN_W - 28) // 2
     back = Btn("Back", "back_to_status",
@@ -2454,6 +2482,21 @@ def _tailscale_info():
 
 
 c_tailscale = Cached(_tailscale_info, 15)
+
+
+def _verify_status():
+    """Читает /var/lib/travel-nas/verify-status.json (последний scrub).
+    {} если файла нет (verify ещё не запускался)."""
+    try:
+        p = Path("/var/lib/travel-nas/verify-status.json")
+        if not p.exists():
+            return {}
+        return json.loads(p.read_text())
+    except Exception:
+        return {}
+
+
+c_verify = Cached(_verify_status, 60)
 
 
 def _net_diag():
@@ -2931,7 +2974,7 @@ def do_action(action):
         toast("Refreshing…", INFO)
     elif action == "open_storage_detail":  go(PAGE_STORAGE_DETAIL)
     elif action == "storage_refresh":
-        c_disk_diag.invalidate(); c_disk.invalidate()
+        c_disk_diag.invalidate(); c_disk.invalidate(); c_verify.invalidate()
         toast("Refreshing storage…", INFO)
     elif action == "open_network_detail":  go(PAGE_NETWORK_DETAIL)
     elif action == "net_refresh":

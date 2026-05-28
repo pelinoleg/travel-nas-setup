@@ -164,6 +164,7 @@ def cmd_help(token, chat_id, args):
 `/services` — все URL установленных сервисов
 `/configs` — `/etc/travel-nas/` файлы + где что лежит
 `/tailscale` `/ts` — статус Tailscale VPN + peers
+`/verify` — последний bit-rot/IO scrub T7 (`/verify run` чтоб запустить сейчас)
 
 🔄 *Действия*
 `/backup` — NAS backup
@@ -662,6 +663,59 @@ def cmd_sleep(token, chat_id, args):
     send(token, chat_id, f"💤 Auto-sleep → `{_format_sleep(secs)}`\n_(применяется в течение 5 сек)_")
 
 
+def cmd_verify(token, chat_id, args):
+    """Backup verify scrub: status или run.
+    `/verify` — последний статус (JSON из /var/lib/travel-nas/verify-status.json)
+    `/verify run` — запустить scrub сейчас в фоне (sudo systemctl start nas-verify.service)"""
+    if args and args[0].lower() in ("run", "start", "now"):
+        try:
+            subprocess.run(
+                ["sudo", "-n", "systemctl", "start", "--no-block", "nas-verify.service"],
+                timeout=10, check=True,
+            )
+            send(token, chat_id, """🔍 *Verify запущен.*
+
+Сканирует T7 (~30-60 мин на ~600GB). Алёрт придёт автоматически если что-то нашёл; иначе тишина.
+
+Текущий прогресс смотри в `journalctl -u nas-verify.service -f` или через `/logs verify`.""")
+        except Exception as e:
+            send(token, chat_id, f"❌ не смог запустить: `{e}`")
+        return
+
+    p = Path("/var/lib/travel-nas/verify-status.json")
+    if not p.exists():
+        send(token, chat_id,
+             "_Verify ни разу не запускался._\n\n"
+             "`/verify run` — запустить сейчас\n"
+             "Авто-запуск раз в месяц по systemd-timer (если включён модуль VERIFY).")
+        return
+    try:
+        d = json.loads(p.read_text())
+    except Exception as e:
+        send(token, chat_id, f"❌ verify-status.json повреждён: `{e}`")
+        return
+
+    icon = "✅" if d.get("status") == "ok" else "🔴"
+    bytes_gb = (d.get("bytes_read") or 0) / (1024 ** 3)
+    elapsed_min = (d.get("elapsed_sec") or 0) // 60
+    sample = "\n".join(f"  • `{p}`" for p in (d.get("bitrot_sample") or []))
+    if sample:
+        sample = f"\n\n*Bit-rot файлы (sample):*\n{sample}"
+
+    send(token, chat_id, f"""*Verify status* {icon} `{d.get('status', '?')}`
+
+Last run:    `{d.get('last_run', '?')}` ({elapsed_min} min)
+Files:       {d.get('total_files', 0)} ({bytes_gb:.1f} GiB)
+Added:       {d.get('added', 0)}
+Deleted:     {d.get('deleted', 0)}
+Changed ok:  {d.get('changed_normal', 0)}
+🔴 Bit-rot:   {d.get('bitrot', 0)}
+🔴 Read fail: {d.get('read_failures', 0)}
+🔴 I/O dmesg: {d.get('io_errors', 0)}{sample}
+
+`/verify run` — запустить scrub сейчас""")
+
+
 def cmd_tailscale(token, chat_id, args):
     """Статус Tailscale: установлен / online / IP / magic DNS / peers.
     Без аргументов — текущий status. Аргументы зарезервированы (на будущее)."""
@@ -765,6 +819,7 @@ COMMANDS = {
     "/sleep":    cmd_sleep,
     "/tailscale": cmd_tailscale,
     "/ts":       cmd_tailscale,
+    "/verify":   cmd_verify,
 }
 
 

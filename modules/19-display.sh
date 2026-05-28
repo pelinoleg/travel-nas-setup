@@ -69,6 +69,7 @@ $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/fast-shutdown.sh
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/fast-reboot.sh
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/systemctl restart comitup
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/systemctl stop nas-backup-runtime
+$DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/systemctl start --no-block nas-verify.service
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/touch-calibrate.sh
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/sbin/smartctl
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/smbstatus

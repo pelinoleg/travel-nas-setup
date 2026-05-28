@@ -79,6 +79,7 @@ MODULES=(
     19-display
     20-desktop
     21-tailscale
+    22-verify
 )
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
@@ -122,7 +123,7 @@ export SETUP_REPO_ROOT="$REPO_ROOT"
 
 ALL_COMPONENTS="UPDATE UTILS HOSTNAME T7_MOUNT TG_NOTIFY SAMBA PI_BACKUP \
 PHOTO_BACKUP NAS_BACKUP WATCHDOG SYS_MONITOR POWER_MODE TG_LISTENER DAILY_SUM \
-LOG2RAM ZRAM COMITUP CASAOS PHOTOVIEW YTARCHIVER DISPLAY DESKTOP TAILSCALE"
+LOG2RAM ZRAM COMITUP CASAOS PHOTOVIEW YTARCHIVER DISPLAY DESKTOP TAILSCALE VERIFY"
 
 if [[ "${1:-}" == "--all" ]]; then
     SELECTED="$ALL_COMPONENTS"
@@ -158,6 +159,7 @@ Components:
   DISPLAY        MHS35 + Python dashboard (X11 kiosk)
   DESKTOP        Ярлыки на десктоп (Dashboard, Setup, T7 Files, ...)
   TAILSCALE      Zero-config VPN — доступ к Pi из любой сети мира
+  VERIFY         Ежемесячный bit-rot/IO scrub T7 (sha256 manifest)
 EOF
     exit 0
 else
@@ -186,6 +188,7 @@ else
         "DISPLAY"      "MHS35 + dashboard"                                ON \
         "DESKTOP"      "Ярлыки на десктоп"                                ON \
         "TAILSCALE"    "Tailscale VPN (доступ к Pi из любой сети)"        ON \
+        "VERIFY"       "Ежемесячный bit-rot/IO scrub T7"                  ON \
         3>&1 1>&2 2>&3) || exit 0
 fi
 

@@ -80,6 +80,20 @@ if [[ -n "$T7_DEV" ]]; then
         set -e
         T7_UUID=$(sudo blkid -s UUID -o value "$T7_DEV")
         sudo mkdir -p "$T7_MOUNT" "$CONFIG_DIR"
+
+        # Pi 5 USB power: без флага usb_max_current_enable=1 kernel зажимает
+        # суммарный USB ток до 600mA (пока PSU не сообщит 5V/5A profile, что
+        # делает только официальный Pi 27W PSU). T7 SSD при rsync-пиках
+        # упирается в лимит → дисконнект / throttling. С нормальной 30W+ PD
+        # зарядкой риска под-вольтажа нет (kernel сам поймает через
+        # vcgencmd get_throttled и переключится в saver-mode).
+        BOOT_CFG=/boot/firmware/config.txt
+        if [[ -f "$BOOT_CFG" ]] && ! grep -qE '^usb_max_current_enable=1' "$BOOT_CFG"; then
+            echo "" | sudo tee -a "$BOOT_CFG" >/dev/null
+            echo "# travel-nas-setup: разрешить полный USB ток для T7 SSD" | sudo tee -a "$BOOT_CFG" >/dev/null
+            echo "usb_max_current_enable=1" | sudo tee -a "$BOOT_CFG" >/dev/null
+            info "usb_max_current_enable=1 добавлен в $BOOT_CFG (применится после reboot)"
+        fi
         if ! grep -q "$T7_UUID" /etc/fstab; then
             echo "UUID=$T7_UUID $T7_MOUNT ext4 defaults,nofail,noatime 0 2" | sudo tee -a /etc/fstab > /dev/null
         fi

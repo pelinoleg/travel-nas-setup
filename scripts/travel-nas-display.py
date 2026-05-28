@@ -288,6 +288,11 @@ def _t7_temp():
 
 
 def _disk_info():
+    # Без проверки mountpoint df вернёт цифры корневого раздела (когда /mnt/t7
+    # существует как пустой каталог без mount) — выглядело бы как «всё ОК».
+    # Path.is_mount() = pure mountpoint check, не лезет в IO.
+    if not Path(T7_MOUNT).is_mount():
+        return None
     out = subprocess.check_output(
         ["df", "-h", "--output=used,avail,size,pcent", T7_MOUNT], timeout=2
     ).decode().splitlines()
@@ -684,6 +689,8 @@ def draw_top_strip(page_label=None):
 # =============================================================================
 PAGE_STATUS         = "status"
 PAGE_MENU           = "menu"
+PAGE_MENU_INFO      = "menu_info"
+PAGE_MENU_SYSTEM    = "menu_system"
 PAGE_PROGRESS       = "progress"
 PAGE_LOGS           = "logs"
 PAGE_LOG_VIEW       = "log_view"
@@ -771,11 +778,17 @@ def _card_storage(rect):
     disk = c_disk.get()
     t7t = c_t7_temp.get()
     if not disk:
-        screen.blit(F_MED.render("not mounted", True, ERROR), (inner.x, inner.y))
+        # /mnt/t7 не примонтирован — большое предупреждение по центру.
+        # Без этого карточка показывала бы цифры корневого раздела (df fallback),
+        # выглядело как «всё ОК» при недоступном NAS-диске.
+        msg = F_MED.render("NOT MOUNTED", True, ERROR)
+        screen.blit(msg, msg.get_rect(center=(inner.centerx, inner.centery)))
+        hint = F_TINY.render("plug T7 / check /mnt/t7", True, MUTED)
+        screen.blit(hint, hint.get_rect(midtop=(inner.centerx, inner.centery + 12)))
         return
     col = ACCENT if disk["pct"] < 80 else (WARN if disk["pct"] < 90 else ERROR)
 
-    # Главная строка: used / total | t°C
+    # Главная строка: used/total слева, t°C + free справа
     main = F_MED.render(f"{disk['used']} / {disk['total']}", True, FG)
     screen.blit(main, (inner.x, inner.y))
     right_parts = []
@@ -784,11 +797,14 @@ def _card_storage(rect):
     rt = F_SMALL.render(" · ".join(right_parts), True, MUTED)
     screen.blit(rt, (inner.right - rt.get_width(), inner.y + 4))
 
-    # Бар + % внутри
+    # Bar внизу + % справа в КОНЦЕ строки (а не на самом баре — не сливается)
+    pct_s = F_SMALL.render(f"{disk['pct']}%", True, col)
+    pct_w = pct_s.get_width() + 6
     bar_y = inner.bottom - 14
-    draw_bar(inner.x, bar_y, inner.w, 12, disk["pct"], col)
-    pct = F_TINY.render(f"{disk['pct']}%", True, BG if disk['pct'] > 12 else FG)
-    screen.blit(pct, (inner.x + 6, bar_y))
+    bar_w = inner.w - pct_w
+    draw_bar(inner.x, bar_y, bar_w, 12, disk["pct"], col)
+    screen.blit(pct_s, (inner.right - pct_s.get_width(),
+                       bar_y + (12 - pct_s.get_height()) // 2))
 
 
 def _card_system(rect):
@@ -935,14 +951,9 @@ def page_status():
     return btns
 
 
-def page_menu():
-    """Меню разбито на 3 секции (NAS / INFO / SYSTEM) с заголовками-капсами
-    и цветной полоской — чтобы понятно было что к чему относится."""
-    screen.fill(BG)
-    y = draw_top_strip("Menu")
-    y += 6
-    btns = []
-
+def _menu_helpers(btns):
+    """Shared layout helpers для всех меню-страниц. Возвращает (margin, full_w,
+    half_w, btn_h, gap_row, sect_h, section, row_full, row_pair, row_triple)."""
     margin   = 8
     full_w   = SCREEN_W - margin * 2
     half_w   = (SCREEN_W - margin * 2 - 10) // 2
@@ -950,57 +961,70 @@ def page_menu():
     gap_row  = 6
     sect_h   = 16
 
+    # Closures используют y из вызывающей page (через mutable список).
+    state_y = [0]
+
+    def set_y(v): state_y[0] = v
+    def get_y():  return state_y[0]
+
     def section(title, color):
-        nonlocal y
-        screen.blit(F_SMALL.render(title, True, color), (margin, y))
+        screen.blit(F_SMALL.render(title, True, color), (margin, get_y()))
         pygame.draw.line(screen, color,
-                         (margin, y + 14), (SCREEN_W - margin, y + 14), 1)
-        y += sect_h
+                         (margin, get_y() + 14),
+                         (SCREEN_W - margin, get_y() + 14), 1)
+        set_y(get_y() + sect_h)
 
     def row_full(label, action, color, primary=False):
-        nonlocal y
-        r = pygame.Rect(margin, y, full_w, btn_h)
+        r = pygame.Rect(margin, get_y(), full_w, btn_h)
         b = Btn(label, action, r, color, primary=primary)
         btns.append(b); draw_button(b)
-        y += btn_h + gap_row
+        set_y(get_y() + btn_h + gap_row)
 
     def row_pair(l1, a1, c1, l2, a2, c2):
-        nonlocal y
-        r1 = pygame.Rect(margin, y, half_w, btn_h)
-        r2 = pygame.Rect(SCREEN_W - margin - half_w, y, half_w, btn_h)
+        r1 = pygame.Rect(margin, get_y(), half_w, btn_h)
+        r2 = pygame.Rect(SCREEN_W - margin - half_w, get_y(), half_w, btn_h)
         b1 = Btn(l1, a1, r1, c1); b2 = Btn(l2, a2, r2, c2)
         btns.extend([b1, b2])
         draw_button(b1); draw_button(b2)
-        y += btn_h + gap_row
+        set_y(get_y() + btn_h + gap_row)
 
     def row_triple(items):
         """3 кнопки в ряд: items = [(label, action, color, primary), ...]."""
-        nonlocal y
         third_w = (SCREEN_W - margin * 2 - 12) // 3
         for i, (lbl, act, col, prim) in enumerate(items):
             x = margin + i * (third_w + 6)
-            r = pygame.Rect(x, y, third_w, btn_h)
+            r = pygame.Rect(x, get_y(), third_w, btn_h)
             b = Btn(lbl, act, r, col, primary=prim)
             btns.append(b); draw_button(b)
-        y += btn_h + gap_row
+        set_y(get_y() + btn_h + gap_row)
 
-    # === NAS BACKUP ===
+    def bottom_pair(l1, a1, l2, a2):
+        bot_y = SCREEN_H - btn_h - 8
+        b1 = Btn(l1, a1, pygame.Rect(margin, bot_y, half_w, btn_h), MUTED)
+        b2 = Btn(l2, a2,
+                 pygame.Rect(SCREEN_W - margin - half_w, bot_y, half_w, btn_h),
+                 MUTED)
+        draw_button(b1); draw_button(b2)
+        btns.extend([b1, b2])
+
+    return set_y, get_y, section, row_full, row_pair, row_triple, bottom_pair
+
+
+def page_menu():
+    """Hub-страница меню. Самое нужное (Run backup, Power) — здесь.
+    Остальное — в Info▸ / System▸ под-страницах. До этого все 16 пунктов
+    были в одной page_menu, которая overflow'ила экран в 320px высоты."""
+    screen.fill(BG)
+    y0 = draw_top_strip("Menu") + 6
+    btns = []
+    (set_y, _get, section, row_full, _, row_triple, bottom_pair
+     ) = _menu_helpers(btns)
+    set_y(y0)
+
     section("NAS BACKUP", ACCENT)
-    row_full("Run", "nas_run", ACCENT, primary=True)
-    row_pair("Dry-run", "nas_dry",  INFO,
-             "Diff",    "nas_diff", INFO)
+    row_full("Run backup", "nas_run", ACCENT, primary=True)
 
-    # === INFO & STATUS ===
-    section("INFO & STATUS", INFO)
-    row_pair("NAS status", "open_nas_status", INFO,
-             "Today",      "open_daily",      INFO)
-    row_pair("Logs",       "open_logs",       INFO,
-             "Services",   "open_services",   INFO)
-    row_pair("Configs",    "open_configs",    INFO,
-             "Docker",     "open_docker",     INFO)
-
-    # === POWER ===
-    # 3 кнопки: подсвечена = выбранный режим. Auto = система сама решает.
+    # POWER — здесь же, потому что юзер часто переключает.
     section("POWER", WARN)
     pref = c_ppref.get()
     row_triple([
@@ -1009,21 +1033,62 @@ def page_menu():
         ("Auto",   "pwr_auto",   INFO,   pref == "auto"),
     ])
 
-    # === SYSTEM ===
-    section("SYSTEM", WARN)
-    row_pair("AP info",    "open_ap_info",    INFO,
-             "Force AP",   "open_ap_confirm", WARN)
-    row_pair("Reboot",     "open_reboot",     WARN,
-             "Shutdown",   "open_off",        ERROR)
+    # Навигация в под-меню — Info (всё что читаем) + System (всё рискованное).
+    section("MORE", MUTED)
+    row_pair("Info ▸",   "open_menu_info",   INFO,
+             "System ▸", "open_menu_system", WARN)
 
-    # Bottom row: Back | Exit to desktop
-    bot_y = SCREEN_H - btn_h - 8
-    back = Btn("Back", "back_to_status",
-               pygame.Rect(margin, bot_y, half_w, btn_h), MUTED)
-    exit_b = Btn("Exit to desktop", "exit_to_desktop",
-                 pygame.Rect(SCREEN_W - margin - half_w, bot_y, half_w, btn_h), MUTED)
-    draw_button(back); draw_button(exit_b)
-    btns.extend([back, exit_b])
+    bottom_pair("Back", "back_to_status",
+                "Exit to desktop", "exit_to_desktop")
+    return btns
+
+
+def page_menu_info():
+    """Sub-page: всё про чтение состояния + второстепенные backup-actions."""
+    screen.fill(BG)
+    y0 = draw_top_strip("Menu › Info") + 6
+    btns = []
+    (set_y, _g, section, _f, row_pair, _t, bottom_pair
+     ) = _menu_helpers(btns)
+    set_y(y0)
+
+    section("STATUS", INFO)
+    row_pair("NAS status", "open_nas_status", INFO,
+             "Today",      "open_daily",      INFO)
+    row_pair("Logs",       "open_logs",       INFO,
+             "Services",   "open_services",   INFO)
+    row_pair("Configs",    "open_configs",    INFO,
+             "Docker",     "open_docker",     INFO)
+
+    section("BACKUP", ACCENT)
+    row_pair("Dry-run", "nas_dry",  INFO,
+             "Diff",    "nas_diff", INFO)
+
+    bottom_pair("Back", "open_menu",
+                "Status", "back_to_status")
+    return btns
+
+
+def page_menu_system():
+    """Sub-page: AP/wifi/power-off. Всё рискованное — на отдельный экран
+    чтобы не нажать случайно когда лезешь за NAS status."""
+    screen.fill(BG)
+    y0 = draw_top_strip("Menu › System") + 6
+    btns = []
+    (set_y, _g, section, _f, row_pair, _t, bottom_pair
+     ) = _menu_helpers(btns)
+    set_y(y0)
+
+    section("WIFI", INFO)
+    row_pair("AP info",   "open_ap_info",    INFO,
+             "Force AP",  "open_ap_confirm", WARN)
+
+    section("DANGER", ERROR)
+    row_pair("Reboot",    "open_reboot", WARN,
+             "Shutdown",  "open_off",    ERROR)
+
+    bottom_pair("Back", "open_menu",
+                "Status", "back_to_status")
     return btns
 
 
@@ -1607,6 +1672,8 @@ def page_off_confirm():
 PAGES = {
     PAGE_STATUS:         page_status,
     PAGE_MENU:           page_menu,
+    PAGE_MENU_INFO:      page_menu_info,
+    PAGE_MENU_SYSTEM:    page_menu_system,
     PAGE_PROGRESS:       page_progress,
     PAGE_LOGS:           page_logs,
     PAGE_LOG_VIEW:       page_log_view,
@@ -1681,6 +1748,8 @@ def _spawn_nas(action_arg, msg, color):
 
 def do_action(action):
     if action == "open_menu":           go(PAGE_MENU)
+    elif action == "open_menu_info":    go(PAGE_MENU_INFO)
+    elif action == "open_menu_system":  go(PAGE_MENU_SYSTEM)
     elif action == "back_to_status":    go(PAGE_STATUS)
     elif action == "back_to_prev":
         prev = state["prev_page"]

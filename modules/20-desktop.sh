@@ -10,10 +10,17 @@ info "=== Desktop shortcuts ==="
 if (
     set -e
     USER_HOME="/home/$(whoami)"
+    # На свежей системе ~/Desktop может не существовать (xdg-user-dirs-update
+    # ещё не сработал — он триггерится на первом GUI-логине). Раньше модуль
+    # выкидывал ошибку и не создавал ярлыки → пользователь после reinstall'а
+    # не получал кнопок. Создаём папку сами и идём дальше.
     DESKTOP_DIR="$USER_HOME/Desktop"
     if [[ ! -d "$DESKTOP_DIR" ]]; then
-        echo "Desktop folder not found"
-        exit 1
+        mkdir -p "$DESKTOP_DIR"
+        # На случай если xdg user-dirs выключен — пишем явно
+        if command -v xdg-user-dirs-update &>/dev/null; then
+            xdg-user-dirs-update --set DESKTOP "$DESKTOP_DIR" 2>/dev/null || true
+        fi
     fi
 
     cat > "$DESKTOP_DIR/Travel-NAS-Dashboard.desktop" << 'EOF'
@@ -69,6 +76,12 @@ EOF
         sed -i 's/^desktop_icon_size=.*/desktop_icon_size=36/' "$DCFG"
     else
         echo "desktop_icon_size=36" >> "$DCFG"
+    fi
+
+    # Пинаем pcmanfm-desktop чтобы подхватил новые .desktop без релогина.
+    # Без этого ярлыки появятся только после следующего входа в LXDE.
+    if pgrep -x pcmanfm >/dev/null 2>&1; then
+        pcmanfm --reconfigure 2>/dev/null || true
     fi
 ); then
     mark_ok "DESKTOP" "2 ярлыка, icon size 36"

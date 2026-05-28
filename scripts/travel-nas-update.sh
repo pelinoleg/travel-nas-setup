@@ -173,6 +173,58 @@ if [[ -f "$SUDOERS_FILE" ]]; then
     fi
 fi
 
+# =============================================================================
+# Desktop shortcuts — самовосстановление если иконки не создались (например,
+# модуль 20-desktop отрабатывал до того как был ~/Desktop)
+# =============================================================================
+DESKTOP_USER="${SUDO_USER:-$(logname 2>/dev/null || echo "")}"
+if [[ -n "$DESKTOP_USER" ]]; then
+    USER_HOME_D="/home/$DESKTOP_USER"
+    DESKTOP_DIR="$USER_HOME_D/Desktop"
+    if [[ ! -d "$DESKTOP_DIR" ]]; then
+        sudo -u "$DESKTOP_USER" mkdir -p "$DESKTOP_DIR"
+    fi
+    ADDED_ICONS=0
+    if [[ ! -f "$DESKTOP_DIR/Travel-NAS-Dashboard.desktop" ]]; then
+        sudo -u "$DESKTOP_USER" tee "$DESKTOP_DIR/Travel-NAS-Dashboard.desktop" >/dev/null << 'EOF'
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Dashboard
+Comment=Re-open the kiosk dashboard
+Exec=/usr/bin/python3 /usr/local/bin/travel-nas-display.py
+Icon=display
+Terminal=false
+Categories=System;
+EOF
+        chmod +x "$DESKTOP_DIR/Travel-NAS-Dashboard.desktop"
+        ADDED_ICONS=$((ADDED_ICONS + 1))
+    fi
+    if [[ ! -f "$DESKTOP_DIR/Travel-NAS-Update.desktop" ]]; then
+        sudo -u "$DESKTOP_USER" tee "$DESKTOP_DIR/Travel-NAS-Update.desktop" >/dev/null << 'EOF'
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Update
+Comment=Pull latest scripts from GitHub
+Exec=lxterminal --geometry=100x30 -e bash -c "travel-nas-update; echo; echo 'Готово. Нажми Enter чтобы закрыть.'; read"
+Icon=system-software-update
+Terminal=false
+Categories=System;
+EOF
+        chmod +x "$DESKTOP_DIR/Travel-NAS-Update.desktop"
+        ADDED_ICONS=$((ADDED_ICONS + 1))
+    fi
+    if (( ADDED_ICONS > 0 )); then
+        echo ""
+        echo "→ Восстановил $ADDED_ICONS ярлык(а) на ~/Desktop"
+        # Перечитать рабочий стол без релогина
+        if sudo -u "$DESKTOP_USER" pgrep -x pcmanfm >/dev/null 2>&1; then
+            sudo -u "$DESKTOP_USER" -H env DISPLAY=:0 pcmanfm --reconfigure 2>/dev/null || true
+        fi
+    fi
+fi
+
 echo ""
 echo "Done. Configs in /etc/travel-nas/ untouched."
 if [[ ${#RESTARTED[@]} -gt 0 ]]; then

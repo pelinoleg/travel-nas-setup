@@ -78,6 +78,41 @@ def tg_request(token, method, params=None, timeout=35):
     return None
 
 
+def send_photo(token, chat_id, photo_path, caption=""):
+    """Telegram sendPhoto через multipart/form-data. Без requests (stdlib only)."""
+    boundary = "----TG" + os.urandom(8).hex()
+    body = []
+    def field(name, value):
+        body.append(f"--{boundary}\r\n".encode())
+        body.append(f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode())
+        body.append(f"{value}\r\n".encode())
+    field("chat_id", str(chat_id))
+    if caption:
+        field("caption", caption[:1000])
+    body.append(f"--{boundary}\r\n".encode())
+    body.append(b'Content-Disposition: form-data; name="photo"; filename="dashboard.png"\r\n')
+    body.append(b'Content-Type: image/png\r\n\r\n')
+    with open(photo_path, "rb") as f:
+        body.append(f.read())
+    body.append(b"\r\n")
+    body.append(f"--{boundary}--\r\n".encode())
+    data = b"".join(body)
+    req = urllib.request.Request(
+        f"https://api.telegram.org/bot{token}/sendPhoto",
+        data=data,
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        print(f"sendPhoto HTTPError {e.code}: {e.read().decode(errors='replace')}", file=sys.stderr)
+    except (urllib.error.URLError, TimeoutError, ConnectionResetError) as e:
+        print(f"sendPhoto network error: {e}", file=sys.stderr)
+    return None
+
+
 def send_kbd(token, chat_id, text, keyboard, parse_mode="Markdown"):
     """sendMessage с inline-клавиатурой.
     keyboard: список рядов, каждый ряд — list of (label, callback_data)."""
@@ -121,6 +156,7 @@ def cmd_help(token, chat_id, args):
 
 📊 *Статус*
 `/status` `/today` — snapshot (uptime, CPU, T7, throttle)
+`/screenshot` `/screen` — PNG-снимок текущего экрана дашборда
 `/nas` — статус NAS-бэкапов (модули, размеры, last-run)
 `/docker` — Docker-compose проекты + кнопки Stop/Start/Restart
 `/services` — все URL установленных сервисов
@@ -514,6 +550,37 @@ def cmd_nas(token, chat_id, args):
     send(token, chat_id, "\n".join(lines))
 
 
+SCREENSHOT_REQ = Path("/var/run/travel-nas/screenshot-req")
+SCREENSHOT_PNG = Path("/var/run/travel-nas/dashboard.png")
+
+
+def cmd_screenshot(token, chat_id, args):
+    """Запрашивает у dashboard'а скриншот текущего экрана и отправляет в TG.
+    Механика: touch SCREENSHOT_REQ → dashboard на следующем тике main loop'а
+    (≤ ~1 сек при FPS=30) сохраняет screen в SCREENSHOT_PNG и убирает флаг."""
+    if not SCREENSHOT_REQ.parent.exists():
+        send(token, chat_id, "❌ /var/run/travel-nas/ не существует — дашборд запущен?")
+        return
+    # Чтобы не отдать старый PNG: убираем стейл-файл, затем запрашиваем новый
+    old_mtime = SCREENSHOT_PNG.stat().st_mtime if SCREENSHOT_PNG.exists() else 0
+    SCREENSHOT_REQ.touch()
+    # Ждём до 5 сек пока dashboard перепишет PNG (mtime изменится)
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        if SCREENSHOT_PNG.exists() and SCREENSHOT_PNG.stat().st_mtime > old_mtime:
+            break
+        time.sleep(0.2)
+    else:
+        # Не дождались — флаг убираем чтобы не накапливалось
+        try: SCREENSHOT_REQ.unlink()
+        except Exception: pass
+        send(token, chat_id, "❌ dashboard не ответил за 5 сек — возможно не запущен")
+        return
+    r = send_photo(token, chat_id, SCREENSHOT_PNG)
+    if not r or not r.get("ok"):
+        send(token, chat_id, "❌ sendPhoto failed")
+
+
 COMMANDS = {
     "/help":     cmd_help,
     "/start":    cmd_help,
@@ -530,6 +597,8 @@ COMMANDS = {
     "/reboot":   cmd_reboot,
     "/shutdown": cmd_shutdown,
     "/yes":      cmd_yes,
+    "/screenshot": cmd_screenshot,
+    "/screen":   cmd_screenshot,
 }
 
 

@@ -37,7 +37,9 @@ TOUCH_DEDUP_WINDOW = 0.12      # игнорируем дубль touch+mouse в 
 FORCE_ABOVE_INTERVAL = 3       # cheap re-assert: ловит pcmanfm/udev попапы быстро
 
 STATE_DIR = Path("/var/run/travel-nas")
-PROGRESS_FILE = STATE_DIR / "backup-progress.json"
+PROGRESS_FILE   = STATE_DIR / "backup-progress.json"
+SCREENSHOT_REQ  = STATE_DIR / "screenshot-req"  # touch = запросить снимок
+SCREENSHOT_OUT  = STATE_DIR / "dashboard.png"   # дашборд сюда сохраняет
 ERROR_LOG = Path("/tmp/travel-nas-display.error.log")
 
 T7_MOUNT = "/mnt/t7"
@@ -2115,6 +2117,17 @@ def main():
             draw_toast()
             draw_touch_flash()
             pygame.display.flip()
+
+        # Screenshot-on-demand для /screenshot из tg-listener. Дёшево: один
+        # Path.exists() за тик. Когда tg-listener тапает SCREENSHOT_REQ —
+        # сохраняем текущий экран и удаляем флаг.
+        if SCREENSHOT_REQ.exists():
+            try:
+                pygame.image.save(screen, str(SCREENSHOT_OUT))
+            except Exception:
+                pass
+            try: SCREENSHOT_REQ.unlink()
+            except Exception: pass
 
         clock.tick(FPS)
 

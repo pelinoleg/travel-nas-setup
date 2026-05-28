@@ -649,8 +649,9 @@ def health_status():
     Throttling и питание оцениваются ОТДЕЛЬНО через ⚡-значок, не сюда."""
     bad, warn = False, False
     disk = c_disk.get()
-    if not disk:
-        bad = True
+    # disk: None (NOT MOUNTED) | "io_error" (mount висит, диск отвалился) | dict
+    if not isinstance(disk, dict):
+        bad = True   # любой не-dict — проблема
     else:
         if disk["pct"] >= 90:   bad = True
         elif disk["pct"] >= 80: warn = True
@@ -956,6 +957,7 @@ PAGE_DOCKER         = "docker"
 PAGE_YTARCHIVER     = "ytarchiver"
 PAGE_SYSTEM_DETAIL  = "system_detail"
 PAGE_STORAGE_DETAIL = "storage_detail"
+PAGE_NETWORK_DETAIL = "network_detail"
 
 state = {
     "page":        PAGE_STATUS,
@@ -1274,6 +1276,14 @@ def page_status():
             btns.append(Btn("", "open_system_detail", rect, ACCENT))
         elif draw_fn is _card_storage:
             btns.append(Btn("", "open_storage_detail", rect, ACCENT))
+        elif draw_fn is _card_network:
+            btns.append(Btn("", "open_network_detail", rect, ACCENT))
+        elif draw_fn is _card_ap:
+            btns.append(Btn("", "open_ap_info", rect, ACCENT))
+        elif draw_fn is _card_last_nas_backup:
+            btns.append(Btn("", "open_nas_status", rect, ACCENT))
+        elif draw_fn is _card_last_backup:
+            btns.append(Btn("", "open_daily", rect, ACCENT))
         y += h + gap
 
     # Footer: SMB-клиенты — uptime теперь в top-strip, тут только активные сессии
@@ -2124,6 +2134,104 @@ def page_storage_detail():
     return btns
 
 
+def _net_diag():
+    """Сеть: интерфейс, ssid/signal/bitrate, IP, gateway, DNS, MAC, mode."""
+    info = {
+        "iface": "wlan0", "mode": "?", "ssid": "?", "signal": None,
+        "bitrate": "?", "ip": "?", "gateway": "?", "dns": "?", "mac": "?",
+    }
+    wifi = c_wifi.get() or {}
+    if wifi.get("ssid"):     info["ssid"]   = wifi["ssid"]
+    if wifi.get("signal") is not None: info["signal"] = wifi["signal"]
+    ip = c_ip.get()
+    if ip: info["ip"] = ip
+    gw = c_gateway.get()
+    if gw: info["gateway"] = gw
+    # Bitrate + mode + MAC
+    try:
+        out = subprocess.check_output(
+            ["iw", "dev", "wlan0", "link"], timeout=2, stderr=subprocess.DEVNULL
+        ).decode()
+        for line in out.splitlines():
+            line = line.strip()
+            if line.startswith("tx bitrate:"):
+                info["bitrate"] = line.split(":", 1)[1].strip()[:24]
+    except Exception:
+        pass
+    try:
+        with open(f"/sys/class/net/{info['iface']}/address") as f:
+            info["mac"] = f.read().strip()
+    except Exception:
+        pass
+    # Mode: AP / client
+    ip_val = info["ip"]
+    if ip_val and ip_val.startswith("10.41."):
+        info["mode"] = "AP (comitup)"
+    else:
+        info["mode"] = "client"
+    # DNS
+    try:
+        with open("/etc/resolv.conf") as f:
+            servers = [l.split()[1] for l in f if l.startswith("nameserver")]
+        info["dns"] = ", ".join(servers[:3])[:35]
+    except Exception:
+        pass
+    return info
+
+
+c_net_diag = Cached(_net_diag, 8)
+
+
+def page_network_detail():
+    """Подробности WiFi/сети: SSID, signal, IP, gateway, DNS, MAC, mode."""
+    screen.fill(BG)
+    y = draw_top_strip("Network")
+    y += 8
+    btns = []
+    d = c_net_diag.get() or {}
+
+    # Mode большой
+    mode = d.get("mode", "?")
+    mode_col = WARN if "AP" in mode else ACCENT
+    screen.blit(F_NORMAL.render(mode, True, mode_col), (10, y))
+    y += 24
+
+    def kv(label, value, value_col=FG):
+        nonlocal y
+        screen.blit(F_TINY.render(label, True, MUTED), (10, y))
+        v = F_SMALL.render(str(value)[:30], True, value_col)
+        screen.blit(v, (SCREEN_W - 10 - v.get_width(), y - 1))
+        y += 18
+
+    kv("SSID",     d.get("ssid", "?"))
+    sig = d.get("signal")
+    if sig is not None:
+        # -50 отлично, -65 ОК, -75 плохо
+        sig_col = ACCENT if sig > -60 else (WARN if sig > -75 else ERROR)
+        kv("signal", f"{sig} dBm", sig_col)
+    if d.get("bitrate", "?") != "?":
+        kv("bitrate", d["bitrate"])
+
+    y += 4
+    pygame.draw.line(screen, BTN_BG, (10, y), (SCREEN_W - 10, y), 1)
+    y += 4
+
+    kv("IPv4",    d.get("ip", "?"))
+    kv("gateway", d.get("gateway", "?"))
+    kv("DNS",     d.get("dns", "?"))
+    kv("MAC",     d.get("mac", "?"))
+
+    # === Bottom ===
+    half_w = (SCREEN_W - 28) // 2
+    back = Btn("Back", "back_to_status",
+               pygame.Rect(8, SCREEN_H - 54, half_w, 46), MUTED)
+    refresh = Btn("Refresh", "net_refresh",
+                  pygame.Rect(SCREEN_W - 8 - half_w, SCREEN_H - 54, half_w, 46), INFO)
+    draw_button(back); draw_button(refresh)
+    btns.extend([back, refresh])
+    return btns
+
+
 def page_system_detail():
     """Детали системы — top CPU/RAM-процессов + текущие метрики.
     Открывается по тапу на SYSTEM card на главной."""
@@ -2373,6 +2481,7 @@ PAGES = {
     PAGE_YTARCHIVER:     page_ytarchiver,
     PAGE_SYSTEM_DETAIL:  page_system_detail,
     PAGE_STORAGE_DETAIL: page_storage_detail,
+    PAGE_NETWORK_DETAIL: page_network_detail,
 }
 
 
@@ -2476,6 +2585,10 @@ def do_action(action):
     elif action == "storage_refresh":
         c_disk_diag.invalidate(); c_disk.invalidate()
         toast("Refreshing storage…", INFO)
+    elif action == "open_network_detail":  go(PAGE_NETWORK_DETAIL)
+    elif action == "net_refresh":
+        c_net_diag.invalidate(); c_ip.invalidate(); c_wifi.invalidate(); c_gateway.invalidate()
+        toast("Refreshing network…", INFO)
     elif action == "docker_refresh":
         # Сброс кеша → следующий рендер дёрнет actual data
         c_docker.last = 0

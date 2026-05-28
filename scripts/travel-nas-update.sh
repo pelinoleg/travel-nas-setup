@@ -161,6 +161,7 @@ REQUIRED_CMDS=(
     "/usr/local/bin/fast-reboot.sh"
     "/usr/sbin/smartctl"
     "/usr/bin/smbstatus"
+    "/usr/bin/dmesg"
 )
 
 if [[ -f "$SUDOERS_FILE" ]]; then

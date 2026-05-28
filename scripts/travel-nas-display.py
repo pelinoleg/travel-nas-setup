@@ -295,7 +295,7 @@ def _t7_temp():
         return None
     device = device.rstrip("0123456789")
     out = subprocess.check_output(
-        ["sudo", "-n", "smartctl", "-a", "-d", "sat", device],
+        ["sudo", "-n", "/usr/sbin/smartctl", "-a", "-d", "sat", device],
         timeout=5, stderr=subprocess.DEVNULL,
     ).decode()
     for line in out.splitlines():
@@ -380,7 +380,7 @@ def _smb_clients():
     """Считаем подключенных SMB-клиентов через smbstatus -b. 0 если не доступно."""
     try:
         out = subprocess.check_output(
-            ["sudo", "-n", "smbstatus", "-b"],
+            ["sudo", "-n", "/usr/bin/smbstatus", "-b"],
             timeout=3, stderr=subprocess.DEVNULL,
         ).decode()
     except Exception:
@@ -2053,7 +2053,7 @@ def _disk_diag():
     # 8) dmesg-ошибки (последний час)
     try:
         out = subprocess.check_output(
-            ["sudo", "-n", "dmesg", "--time-format=iso"],
+            ["sudo", "-n", "/usr/bin/dmesg", "--time-format=iso"],
             timeout=3, stderr=subprocess.DEVNULL,
         ).decode(errors="replace")
     except Exception:

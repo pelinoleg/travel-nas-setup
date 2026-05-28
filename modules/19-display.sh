@@ -63,6 +63,7 @@ $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/systemctl stop nas-backup-runtime
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/touch-calibrate.sh
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/sbin/smartctl
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/smbstatus
+$DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/dmesg
 EOF
     sudo chmod 0440 /etc/sudoers.d/travel-nas-dashboard
     if ! sudo visudo -c -f /etc/sudoers.d/travel-nas-dashboard >/dev/null; then

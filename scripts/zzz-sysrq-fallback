@@ -1,0 +1,43 @@
+#!/bin/bash
+# =============================================================================
+# /usr/lib/systemd/system-shutdown/zzz-sysrq-fallback
+# =============================================================================
+# Вызывается systemd-shutdown ПОСЛЕ всех unit stops и unmount'ов,
+# прямо перед halt syscall. argv[1] = halt|poweroff|reboot|kexec.
+#
+# Что делает: пытается размонтировать любые USB-блок устройства (T7),
+# которые могут блокировать power-down. Потом форкает SysRq emergency,
+# которая срабатывает через 8 сек если halt syscall завис.
+#
+# Имя 'zzz-' — выполняется последним лексически (после других hooks).
+# =============================================================================
+
+set -u
+ACTION="${1:-poweroff}"
+
+# Принудительно отмонтируем USB-storage (T7) — известный блокер halt на Pi 5
+for m in /mnt/t7 /mnt/usb*; do
+    [[ -d "$m" ]] && umount -l "$m" 2>/dev/null
+done
+# То же для всех USB block devices
+for d in /sys/block/sd*; do
+    [[ -d "$d" ]] || continue
+    DEV=$(basename "$d")
+    umount -l "/dev/${DEV}"?* 2>/dev/null
+done
+sync
+
+# Форкаем SysRq fallback. Этот процесс будет жить максимум до halt syscall'а.
+# Если halt sysняется быстро (< 5 сек) — мы не доходим до echo o.
+# Если halt висит — kernel-level SysRq вырубает плату.
+case "$ACTION" in
+    reboot|kexec) TRIG=b ;;
+    *)            TRIG=o ;;
+esac
+(
+    sleep 5
+    echo 1 > /proc/sys/kernel/sysrq 2>/dev/null
+    echo "$TRIG" > /proc/sysrq-trigger 2>/dev/null
+) &
+
+exit 0

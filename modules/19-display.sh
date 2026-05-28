@@ -17,6 +17,14 @@ if (
     fetch_script "fast-shutdown.sh"          "$SCRIPT_DIR/fast-shutdown.sh"
     fetch_script "fast-reboot.sh"            "$SCRIPT_DIR/fast-reboot.sh"
 
+    # systemd-shutdown hook: вызывается в КОНЦЕ shutdown'а (после unit
+    # stops, перед halt syscall). Делает lazy umount T7 + SysRq emergency
+    # fallback. Pi 5 без него может застрять на 'Reached target system
+    # power off' навсегда (USB-bridge T7 блокирует hardware power-down).
+    sudo mkdir -p /usr/lib/systemd/system-shutdown/
+    fetch_script "zzz-sysrq-fallback" "/usr/lib/systemd/system-shutdown/zzz-sysrq-fallback"
+    sudo chmod 755 /usr/lib/systemd/system-shutdown/zzz-sysrq-fallback
+
     # xinput-calibrator — для touch-calibrate.sh (резистивные сенсоры
     # требуют per-device калибровки чтобы тап попадал в визуальную точку).
     if ! command -v xinput_calibrator >/dev/null 2>&1; then

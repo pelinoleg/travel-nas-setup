@@ -55,6 +55,7 @@ declare -A SCRIPTS=(
     [touch-calibrate.sh]=/usr/local/bin/touch-calibrate.sh
     [fast-shutdown.sh]=/usr/local/bin/fast-shutdown.sh
     [fast-reboot.sh]=/usr/local/bin/fast-reboot.sh
+    [zzz-sysrq-fallback]=/usr/lib/systemd/system-shutdown/zzz-sysrq-fallback
 )
 
 # Cache-buster на случай если CDN отдаёт стейл

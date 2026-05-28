@@ -549,6 +549,13 @@ def get_progress():
             except Exception: pass
             return None
         return data
+    # JSON есть но source не active — backup умер не по-плохому (trap не
+    # отработал). Удаляем stale JSON. Не дёргаем systemctl каждый раз —
+    # используем кэш c_nas_run (3 сек интервал).
+    if age > 5 and not c_nas_run.get():
+        try: PROGRESS_FILE.unlink()
+        except Exception: pass
+        return None
     # Не done — rsync может сканировать большую карту минутами без обновлений.
     # Считаем "застрявшим" только после 5 минут тишины.
     if age > 300:

@@ -69,22 +69,7 @@ awk '/^Section "InputClass"/,/^EndSection/' "$TMP_OUT" > "$CALIB_FILE"
 chmod 0644 "$CALIB_FILE"
 rm -f "$TMP_OUT"
 
-echo "[OK] Готово. Применяется после рестарта X-сессии или reboot'а."
-echo
-echo "    sudo reboot"
-echo
-echo "(прямо сейчас рестартую dashboard — частично применится, но для полной"
-echo " точности нужен рестарт X или reboot)"
-
-systemctl reset-failed travel-nas-display-runtime 2>/dev/null || true
-systemd-run --unit=travel-nas-display-runtime --uid="$USER_LOGIN" \
-    --setenv=DISPLAY=:0 --setenv=XAUTHORITY="$USER_HOME/.Xauthority" \
-    --setenv=HOME="$USER_HOME" \
-    /usr/bin/python3 /usr/local/bin/travel-nas-display.py
-
-echo
-echo "Перезагрузить сейчас чтобы применилось? (y/N)"
-read -r ans
-if [[ "$ans" =~ ^[yY] ]]; then
-    reboot
-fi
+echo "[OK] Готово. Перезагружаюсь через 5 сек чтобы применить (X должен"
+echo "     перечитать xorg.conf.d). Никаких клавиш — touch-only OK."
+sleep 5
+reboot

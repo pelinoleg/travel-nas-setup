@@ -52,8 +52,8 @@ EOF
 Version=1.0
 Type=Application
 Name=Calibrate Touch
-Comment=Resistive touchscreen calibration (tap 4 corners)
-Exec=lxterminal --geometry=80x20 -e bash -c "sudo /usr/local/bin/touch-calibrate.sh; echo; echo 'Нажми Enter'; read"
+Comment=Resistive touchscreen calibration (tap 4 corners, auto-reboot)
+Exec=sudo -n /usr/local/bin/touch-calibrate.sh
 Icon=preferences-desktop-display
 Terminal=false
 Categories=System;

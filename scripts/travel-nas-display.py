@@ -843,19 +843,20 @@ def draw_top_strip(page_label=None):
     if w is not None:
         pieces.append(F_SMALL.render(f"{w}W", True, MUTED))
 
-    # Sleep countdown — сколько осталось до auto-sleep. Показываем только
-    # если включён (>0). last_activity / display_on глобальные из main loop.
+    # Sleep countdown. Скрываем когда sleep всё равно заблокирован условиями
+    # main loop'а (backup/rsync активен) — иначе юзер видит "z 0s" но экран
+    # не гаснет, выглядит как баг.
     sleep_to = c_sleep.get()
-    if sleep_to > 0 and display_on:
+    sleep_blocked = (get_progress() is not None) or c_busy.get()
+    if sleep_to > 0 and display_on and not sleep_blocked:
         rem = sleep_to - (time.time() - last_activity)
-        if rem > 0:
+        if rem >= 1:   # < 1 сек не показываем — sleep сейчас сработает
             if rem < 60:
                 rem_str = f"{int(rem)}s"
             elif rem < 3600:
                 rem_str = f"{int(rem // 60)}m"
             else:
                 rem_str = f"{int(rem // 3600)}h"
-            # Цвет: красный если < 10 сек, тёплый если < 60 сек, иначе muted
             rem_col = ERROR if rem < 10 else (WARN if rem < 60 else MUTED)
             # `z ` префикс — universal sleep notation (emoji 💤 не в DejaVu)
             pieces.append(F_SMALL.render(f"z {rem_str}", True, rem_col))

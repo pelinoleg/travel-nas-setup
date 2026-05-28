@@ -1,24 +1,65 @@
 #!/bin/bash
 # =============================================================================
-# travel-nas-update — быстрое обновление наших скриптов из GitHub
+# travel-nas-update — обновление travel-NAS из GitHub
 # =============================================================================
-# Что делает:
-#   - Cкачивает свежие .sh/.py из main-ветки в /usr/local/bin/
-#   - Перезапускает tg-listener.service если бежит
-#   - Перезапускает dashboard если бежит
+# Два режима:
 #
-# Что НЕ делает (для этого — `travel-nas-setup`):
-#   - Не трогает /etc/travel-nas/ конфиги
-#   - Не пересоздаёт systemd units
-#   - Не лезет в sudoers / tmpfiles.d / NetworkManager
-#   - Не ставит apt-пакеты
-#   - Не трогает Docker
+#   travel-nas-update              — БЫСТРО (~30 сек). Только наши скрипты:
+#     - Скачивает свежие .sh/.py из main-ветки в /usr/local/bin/
+#     - Перезапускает tg-listener / dashboard
+#     - Синхронизирует sudoers
+#     - НЕ трогает apt / Docker / конфиги
 #
-# Использование:
-#   travel-nas-update
+#   travel-nas-update --full       — ПОЛНОЕ (~5-15 мин). Всё что выше плюс:
+#     - apt-get update && upgrade (включая kernel и tailscale)
+#     - docker compose pull + up -d по всем CasaOS-приложениям
+#     - На случай надо ребутнуться сам не делает — печатает варнинг
+#
+#   travel-nas-update --help       — справка
+#
+# Что НИКОГДА не трогает (для этого — `travel-nas-setup`):
+#   - /etc/travel-nas/ конфиги
+#   - systemd units (создание новых)
+#   - sudoers (создание файла; sync существующего — да)
+#   - tmpfiles.d / NetworkManager dispatcher (создание; обновление кода — да)
 # =============================================================================
 
 set -u
+
+# --- Парсинг аргументов -----------------------------------------------------
+MODE="fast"
+for arg in "$@"; do
+    case "$arg" in
+        --full) MODE="full" ;;
+        --help|-h)
+            cat << 'HELP'
+travel-nas-update — обновление travel-NAS из GitHub
+
+Использование:
+  travel-nas-update              Быстро (~30 сек): тянет наши .sh/.py
+                                 из GitHub, рестартит tg-listener / dashboard,
+                                 sync sudoers. Не трогает apt / Docker.
+
+  travel-nas-update --full       Полное (~5-15 мин): то же +
+                                   apt-get update && upgrade -y
+                                   docker compose pull && up -d (все CasaOS-апсы)
+                                 Если kernel или systemd обновились — печатает
+                                 предупреждение что нужен reboot.
+
+  travel-nas-update --help       Эта справка.
+
+Конфиги в /etc/travel-nas/ НИКОГДА не трогаются — для этого `travel-nas-setup`.
+
+См. docs/UPDATE.md.
+HELP
+            exit 0
+            ;;
+        *)
+            echo "ERROR: unknown arg '$arg'. См. --help" >&2
+            exit 2
+            ;;
+    esac
+done
 
 # Самопродвижение в root: если не root — re-exec через sudo. Так и tg-listener
 # (NOPASSWD: travel-nas-update), и интерактивный юзер (sudo prompts in tty) —
@@ -149,6 +190,7 @@ REQUIRED_CMDS=(
     "/usr/local/bin/daily-summary.sh"
     "/usr/local/bin/pi-config-backup.sh"
     "/usr/local/bin/travel-nas-update"
+    "/usr/local/bin/travel-nas-update --full"
     "/usr/local/bin/power-mode.sh"
     "/usr/local/bin/set-led.sh"
     "/usr/local/bin/docker-mgr.sh"
@@ -245,14 +287,97 @@ EOF
     fi
 fi
 
+# =============================================================================
+# --full режим: apt upgrade + docker pull/up. Запускается ПОСЛЕ обновления
+# наших скриптов, чтобы свежий docker-mgr.sh использовать.
+# =============================================================================
+APT_UPGRADED=0
+DOCKER_UPDATED=0
+REBOOT_NEEDED=0
+if [[ "$MODE" == "full" ]]; then
+    echo ""
+    echo "═══════════════════════════════════════════════════"
+    echo "  --full: apt upgrade + docker pull/up"
+    echo "═══════════════════════════════════════════════════"
+
+    # --- apt upgrade ---
+    echo ""
+    echo "→ apt-get update..."
+    if DEBIAN_FRONTEND=noninteractive apt-get update -qq 2>&1 | tail -3; then
+        echo ""
+        echo "→ apt-get upgrade (это может занять несколько минут)..."
+        # -y: автоматическое подтверждение
+        # -o Dpkg::Options::="--force-confdef --force-confold": сохраняем
+        #     старые конфиги при конфликте (наши /etc/travel-nas/ не трогаются
+        #     apt'ом, но какой-нибудь sshd_config мог быть отредактирован вручную)
+        if UPG=$(DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
+                -o Dpkg::Options::="--force-confdef" \
+                -o Dpkg::Options::="--force-confold" 2>&1); then
+            APT_UPGRADED=$(echo "$UPG" | grep -cE "^Setting up " || true)
+            echo "  ✓ $APT_UPGRADED packages upgraded"
+        else
+            echo "  ✗ apt-get upgrade failed"
+            echo "$UPG" | tail -10
+        fi
+        # Проверка нужен ли ребут (после kernel/libc/etc)
+        if [[ -f /var/run/reboot-required ]]; then
+            REBOOT_NEEDED=1
+            echo "  ⚠ /var/run/reboot-required: нужен reboot для применения"
+        fi
+    else
+        echo "  ✗ apt-get update failed (нет интернета?)"
+    fi
+
+    # --- docker compose pull/up ---
+    # CasaOS хранит приложения в /var/lib/casaos/apps/<name>/docker-compose.yml.
+    # Идём по каждому и pull/up -d. Контейнеры с last-pulled-image не перезапустятся.
+    if command -v docker &>/dev/null && [[ -d /var/lib/casaos/apps ]]; then
+        echo ""
+        echo "→ Docker (CasaOS apps): pull + up -d..."
+        for compose in /var/lib/casaos/apps/*/docker-compose.yml; do
+            [[ -f "$compose" ]] || continue
+            app_name=$(basename "$(dirname "$compose")")
+            echo "  • $app_name"
+            if docker compose -f "$compose" pull --quiet 2>&1 | tail -2 | sed 's/^/    /'; then
+                if docker compose -f "$compose" up -d 2>&1 | tail -2 | sed 's/^/    /'; then
+                    DOCKER_UPDATED=$((DOCKER_UPDATED + 1))
+                else
+                    echo "    ✗ up -d failed"
+                fi
+            else
+                echo "    ✗ pull failed"
+            fi
+        done
+        # Очистка старых образов (могут весить десятки GB на CasaOS)
+        if docker image prune -f 2>&1 | tail -1 | sed 's/^/  /'; then
+            :
+        fi
+        echo "  ✓ $DOCKER_UPDATED apps updated"
+    else
+        echo ""
+        echo "→ Docker не установлен / нет CasaOS apps — пропуск"
+    fi
+fi
+
 echo ""
 echo "Done. Configs in /etc/travel-nas/ untouched."
 if [[ ${#RESTARTED[@]} -gt 0 ]]; then
     echo "Restarted: ${RESTARTED[*]}"
+fi
+if (( REBOOT_NEEDED )); then
+    echo ""
+    echo "⚠ Нужен reboot (kernel / systemd / иной критичный пакет обновился)."
+    echo "  Выполни: sudo reboot — когда удобно."
 fi
 
 # Marker для tg-listener: он переживёт собственный рестарт (запущен через
 # Popen start_new_session=True) и на следующем старте увидит /tmp/...done →
 # пришлёт "✅ Update done" в Telegram. Так юзер получает обратную связь
 # несмотря на то что вызывающий бот был перезапущен этим же скриптом.
-echo "$OK ok / $((OK + FAIL)) fetched, sudoers +${ADDED:-0}" > /tmp/travel-nas-update.done
+{
+    echo "$OK ok / $((OK + FAIL)) fetched, sudoers +${ADDED:-0}"
+    if [[ "$MODE" == "full" ]]; then
+        echo "apt: $APT_UPGRADED upgraded, docker: $DOCKER_UPDATED apps"
+        (( REBOOT_NEEDED )) && echo "REBOOT_NEEDED"
+    fi
+} > /tmp/travel-nas-update.done

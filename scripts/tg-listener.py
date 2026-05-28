@@ -169,7 +169,8 @@ def cmd_help(token, chat_id, args):
 `/backup` — NAS backup
 `/backup dry` — dry-run NAS backup
 `/backup diff` — diff с NAS (что изменится)
-`/update` — обновить скрипты из GitHub
+`/update` — быстро обновить только скрипты (~30 сек)
+`/update full` — полный апдейт: скрипты + apt + docker (~5-15 мин)
 `/logs [N]` — хвост всех логов (default 30 строк)
 
 🔌 *Питание*
@@ -364,7 +365,11 @@ def cmd_update(token, chat_id, args):
 
     Решение: запускаем detached → отправляем "Update started" → бот
     умирает → systemd поднимает новый процесс → main() читает marker
-    и шлёт "✅ Update done" сразу после старта."""
+    и шлёт "✅ Update done" сразу после старта.
+
+    Аргументы:
+        (нет)   — быстрый режим (~30 сек): только наши скрипты + restart.
+        full    — полный (~5-15 мин): + apt upgrade + docker compose pull/up."""
     try:
         UPDATE_LOG_PATH.write_text("")
     except Exception:
@@ -374,19 +379,37 @@ def cmd_update(token, chat_id, args):
     except Exception:
         pass
 
+    full_mode = bool(args) and args[0].lower() in ("full", "--full", "-f")
+    cmd = ["sudo", "-n", "/usr/local/bin/travel-nas-update"]
+    if full_mode:
+        cmd.append("--full")
+
     # start_new_session=True ⇒ child в своей сессии, переживёт systemctl
     # restart tg-listener (который придёт нам через SIGTERM в конце апдейта)
     log_fd = open(UPDATE_LOG_PATH, "w")
     subprocess.Popen(
-        ["sudo", "-n", "/usr/local/bin/travel-nas-update"],
+        cmd,
         stdout=log_fd, stderr=subprocess.STDOUT,
         stdin=subprocess.DEVNULL, start_new_session=True,
     )
-    send(token, chat_id, """🔄 *Update запущен в фоне.*
+    if full_mode:
+        send(token, chat_id, """🔄 *Full update запущен в фоне.*
 
-Длительность ~20-40 сек.
-Бот сам перезапустится и сразу пришлёт итог.
+Это апдейт ВСЕГО — может занять *5-15 мин*:
+• скрипты из GitHub
+• `apt upgrade` (включая kernel)
+• `docker compose pull` + `up -d` по всем CasaOS-приложениям
 
+Бот сам перезапустится и пришлёт итог + флаг `REBOOT_NEEDED` если нужен ребут.
+
+Лог: `/tmp/travel-nas-update.log`""")
+    else:
+        send(token, chat_id, """🔄 *Update запущен в фоне.*
+
+Только скрипты из GitHub (~20-40 сек).
+Для полного апдейта (apt + docker): `/update full`
+
+Бот сам перезапустится и пришлёт итог.
 Лог: `/tmp/travel-nas-update.log`""")
 
 
@@ -773,8 +796,17 @@ def main():
                 except Exception:
                     pass
             tail_lines = "\n".join(log_tail.strip().split("\n")[-15:])
-            send(token, chat_id,
-                 f"✅ *Update done* — {marker}\n```\n{tail_lines}\n```")
+            reboot_warning = ""
+            if "REBOOT_NEEDED" in marker:
+                reboot_warning = "\n\n⚠ *Нужен reboot* — выполни `sudo reboot` когда удобно."
+            # Multi-line marker (--full mode) → отдельный code-блок;
+            # single-line (fast mode) — inline после тире.
+            if "\n" in marker:
+                send(token, chat_id,
+                     f"✅ *Update done*\n```\n{marker}\n```\n_log tail:_\n```\n{tail_lines}\n```{reboot_warning}")
+            else:
+                send(token, chat_id,
+                     f"✅ *Update done* — {marker}\n```\n{tail_lines}\n```{reboot_warning}")
         except Exception as e:
             print(f"update marker error: {e}", file=sys.stderr)
         try:

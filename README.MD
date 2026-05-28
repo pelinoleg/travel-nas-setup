@@ -15,7 +15,8 @@ curl -fsSL https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/main/set
 | Команда | Когда использовать |
 |---|---|
 | `travel-nas-setup` | Перезапустить wizard (добавить компонент, переустановить, поменять конфиг). Скачивает свежий `setup.sh`, бежит whiptail, спрашивает что делать. |
-| **`travel-nas-update`** | **Только обновить скрипты после правок в репо.** Молча тянет все `.sh`/`.py` из GitHub в `/usr/local/bin/`, перезапускает `tg-listener` и dashboard. Конфиги, systemd-units, Docker, sudoers — НЕ трогает. |
+| **`travel-nas-update`** | **Быстро (~30 сек) — только скрипты из репо.** Тянет `.sh`/`.py` из GitHub в `/usr/local/bin/`, перезапускает `tg-listener` и dashboard. Конфиги, systemd-units, sudoers (создание) — НЕ трогает. |
+| **`travel-nas-update --full`** | **Полное (~5-15 мин)** — то же + `apt upgrade` (включая kernel/tailscale) + `docker compose pull && up -d` по всем CasaOS-приложениям. Печатает варнинг если нужен reboot. См. [docs/UPDATE.md](docs/UPDATE.md). |
 
 ### Обновление после правок (когда поменял что-то в репо и хочешь применить на Pi)
 

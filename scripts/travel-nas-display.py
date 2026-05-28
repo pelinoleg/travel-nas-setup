@@ -781,9 +781,6 @@ def draw_top_strip(page_label=None):
 # =============================================================================
 PAGE_STATUS         = "status"
 PAGE_MENU           = "menu"
-PAGE_MENU_NAS       = "menu_nas"
-PAGE_MENU_INFO      = "menu_info"
-PAGE_MENU_SYSTEM    = "menu_system"
 PAGE_PROGRESS       = "progress"
 PAGE_LOGS           = "logs"
 PAGE_LOG_VIEW       = "log_view"
@@ -987,6 +984,60 @@ def _card_last_backup(rect):
     screen.blit(F_SMALL.render(nm, True, MUTED), (inner.x, inner.y + 22))
 
 
+def _last_nas_module():
+    """Самый свежий модуль из NAS_STATUS_JSON (последний backup)."""
+    data = _load_json(NAS_STATUS_JSON)
+    if not data:
+        return None
+    mods = [m for m in (data.get("modules") or [])
+            if m.get("exists") and m.get("last_run")]
+    if not mods:
+        return None
+    return max(mods, key=lambda m: m.get("last_run") or 0)
+
+
+c_last_nas = Cached(_last_nas_module, 30)
+
+
+def _card_last_nas_backup(rect):
+    inner = _card(rect, "LAST NAS BACKUP")
+    m = c_last_nas.get()
+    if not m:
+        screen.blit(F_NORMAL.render("none yet", True, MUTED), (inner.x, inner.y))
+        return
+    name   = m.get("name", "?")
+    size   = m.get("size") or "?"
+    nas_sz = m.get("nas_size")
+    status = m.get("status") or "?"
+    last_r = m.get("last_run")
+
+    # Цвет точки/статуса
+    if status == "ok":     dot = ACCENT
+    elif status == "warn": dot = WARN
+    elif status == "fail": dot = ERROR
+    elif status == "partial": dot = WARN
+    else: dot = MUTED
+
+    # Строка 1: точка + name слева, size справа (если incomplete — local/source)
+    pygame.draw.circle(screen, dot, (inner.x + 5, inner.y + 9), 5)
+    screen.blit(F_NORMAL.render(name, True, FG), (inner.x + 16, inner.y))
+    if nas_sz and _size_lt(size, nas_sz):
+        # incomplete: жёлтый цвет всей строки
+        sz_s = F_NORMAL.render(f"{size} / {nas_sz}", True, WARN)
+    else:
+        sz_s = F_NORMAL.render(size, True, FG)
+    screen.blit(sz_s, (inner.right - sz_s.get_width(), inner.y))
+
+    # Строка 2: time ago · status
+    sub = f"{_ago(last_r)}  ·  {status}"
+    if nas_sz and _size_lt(size, nas_sz):
+        sub += "  ·  not fully copied"
+        sub_col = WARN
+    else:
+        sub_col = MUTED
+    screen.blit(F_SMALL.render(sub, True, sub_col), (inner.x + 16, inner.y + 20))
+
+
 def page_status():
     screen.fill(BG)
     y = draw_top_strip()
@@ -1010,14 +1061,17 @@ def page_status():
             (_card_ap if in_ap else _card_network,  96 if in_ap else 66),
             (lambda r: _card_backup_progress(r, p), 84),
             (_card_storage,                         68),
-            (_card_system,                        110),
+            (_card_system,                        104),
         ]
     else:
+        # Юзер: 'если чуть убрать паддинга у System снизу — поместится и last
+        # NAS backup'. System ужат 124→104, добавлен _card_last_nas_backup.
         cards = [
             (_card_ap if in_ap else _card_network,  96 if in_ap else 68),
             (_card_storage,                         74),
-            (_card_system,                        124),
-            (_card_last_backup,                     62),
+            (_card_system,                        104),
+            (_card_last_nas_backup,                 54),
+            (_card_last_backup,                     54),
         ]
 
     # Распределяем gap'ы — оставляем мелкие зазоры, без растягивания
@@ -1044,27 +1098,25 @@ def page_status():
     return btns
 
 
-def _menu_helpers(btns):
-    """Shared layout helpers для всех меню-страниц. Возвращает (margin, full_w,
-    half_w, btn_h, gap_row, sect_h, section, row_full, row_pair, row_triple)."""
+def _menu_helpers(btns, btn_h=36, gap_row=2, sect_h=12):
+    """Layout-helpers для меню. Дефолты подкручены под flat-меню (всё на
+    один экран в 320px). Можно переопределить если страница имеет меньше
+    кнопок и хочется крупнее."""
     margin   = 8
     full_w   = SCREEN_W - margin * 2
     half_w   = (SCREEN_W - margin * 2 - 10) // 2
-    btn_h    = 44
-    gap_row  = 6
-    sect_h   = 16
 
-    # Closures используют y из вызывающей page (через mutable список).
     state_y = [0]
-
     def set_y(v): state_y[0] = v
     def get_y():  return state_y[0]
 
     def section(title, color):
-        screen.blit(F_SMALL.render(title, True, color), (margin, get_y()))
+        # Только текст + подчёркивание линией. Без отступа сверху/снизу
+        # чтобы по высоте было максимально компактно.
+        screen.blit(F_TINY.render(title, True, color), (margin, get_y()))
         pygame.draw.line(screen, color,
-                         (margin, get_y() + 14),
-                         (SCREEN_W - margin, get_y() + 14), 1)
+                         (margin, get_y() + 10),
+                         (SCREEN_W - margin, get_y() + 10), 1)
         set_y(get_y() + sect_h)
 
     def row_full(label, action, color, primary=False):
@@ -1073,16 +1125,16 @@ def _menu_helpers(btns):
         btns.append(b); draw_button(b)
         set_y(get_y() + btn_h + gap_row)
 
-    def row_pair(l1, a1, c1, l2, a2, c2):
+    def row_pair(l1, a1, c1, l2, a2, c2, primary1=False, primary2=False):
         r1 = pygame.Rect(margin, get_y(), half_w, btn_h)
         r2 = pygame.Rect(SCREEN_W - margin - half_w, get_y(), half_w, btn_h)
-        b1 = Btn(l1, a1, r1, c1); b2 = Btn(l2, a2, r2, c2)
+        b1 = Btn(l1, a1, r1, c1, primary=primary1)
+        b2 = Btn(l2, a2, r2, c2, primary=primary2)
         btns.extend([b1, b2])
         draw_button(b1); draw_button(b2)
         set_y(get_y() + btn_h + gap_row)
 
     def row_triple(items):
-        """3 кнопки в ряд: items = [(label, action, color, primary), ...]."""
         third_w = (SCREEN_W - margin * 2 - 12) // 3
         for i, (lbl, act, col, prim) in enumerate(items):
             x = margin + i * (third_w + 6)
@@ -1092,10 +1144,11 @@ def _menu_helpers(btns):
         set_y(get_y() + btn_h + gap_row)
 
     def bottom_pair(l1, a1, l2, a2):
-        bot_y = SCREEN_H - btn_h - 8
-        b1 = Btn(l1, a1, pygame.Rect(margin, bot_y, half_w, btn_h), MUTED)
+        bh = 44
+        bot_y = SCREEN_H - bh - 8
+        b1 = Btn(l1, a1, pygame.Rect(margin, bot_y, half_w, bh), MUTED)
         b2 = Btn(l2, a2,
-                 pygame.Rect(SCREEN_W - margin - half_w, bot_y, half_w, btn_h),
+                 pygame.Rect(SCREEN_W - margin - half_w, bot_y, half_w, bh),
                  MUTED)
         draw_button(b1); draw_button(b2)
         btns.extend([b1, b2])
@@ -1104,17 +1157,45 @@ def _menu_helpers(btns):
 
 
 def page_menu():
-    """Hub-страница меню. NAS (Run/Dry/Diff/Status) собрано на отдельной
-    под-странице чтобы не разбрасывалось. Power на hub'е — частая операция."""
+    """Flat-меню: всё на одном экране. Юзер: 'переделаем страницу меню.
+    row NAS: Run/Stop Backup, NAS status. Ниже INFO: Today, Logs, Services,
+    Configs, Docker. SYSTEM (остаётся как было) + кнопки power.'"""
     screen.fill(BG)
     y0 = draw_top_strip("Menu") + 6
     btns = []
-    (set_y, _get, section, row_full, row_pair, row_triple, bottom_pair
-     ) = _menu_helpers(btns)
+    # SCREEN_H=480 — места хватает на touch-friendly 44px кнопки + 3 секции
+    (set_y, _g, section, row_full, row_pair, row_triple, bottom_pair
+     ) = _menu_helpers(btns, btn_h=44, gap_row=6, sect_h=16)
     set_y(y0)
 
-    # POWER первым — частое + 1 ряд
-    section("POWER", WARN)
+    # NAS — Run/Stop пара с NAS status. Run превращается в Stop когда
+    # бэкап активен (systemctl is-active nas-backup-runtime).
+    section("NAS", ACCENT)
+    if c_nas_run.get():
+        row_pair("Stop backup", "nas_stop",         ERROR,
+                 "NAS status",  "open_nas_status",  INFO,
+                 primary1=True)
+    else:
+        row_pair("Run backup",  "nas_run",          ACCENT,
+                 "NAS status",  "open_nas_status",  INFO,
+                 primary1=True)
+
+    # INFO — что почитать. Today|Logs|Services в 3-col, потом Configs|Docker
+    section("INFO", INFO)
+    row_triple([
+        ("Today",    "open_daily",    INFO, False),
+        ("Logs",     "open_logs",     INFO, False),
+        ("Services", "open_services", INFO, False),
+    ])
+    row_pair("Configs", "open_configs", INFO,
+             "Docker",  "open_docker",  INFO)
+
+    # SYSTEM — wifi/власть + Power-режимы (юзер просил включить сюда)
+    section("SYSTEM", WARN)
+    row_pair("AP info",  "open_ap_info",    INFO,
+             "Force AP", "open_ap_confirm", WARN)
+    row_pair("Reboot",   "open_reboot",     WARN,
+             "Shutdown", "open_off",        ERROR)
     pref = c_ppref.get()
     row_triple([
         ("Normal", "pwr_normal", ACCENT, pref == "normal"),
@@ -1122,92 +1203,8 @@ def page_menu():
         ("Auto",   "pwr_auto",   INFO,   pref == "auto"),
     ])
 
-    # NAS — главная цель устройства, primary на hub'е чтоб 2 тапа было
-    section("MAIN", ACCENT)
-    row_full("NAS ▸", "open_menu_nas", ACCENT, primary=True)
-
-    # Прочая навигация
-    section("MORE", MUTED)
-    row_pair("Info ▸",   "open_menu_info",   INFO,
-             "System ▸", "open_menu_system", WARN)
-
     bottom_pair("Back", "back_to_status",
                 "Exit to desktop", "exit_to_desktop")
-    return btns
-
-
-def page_menu_nas():
-    """Все NAS-кнопки в одном месте: Run, Dry-run, Diff, NAS status, Stop.
-    Stop появляется только когда backup активен (systemd-unit nas-backup-runtime
-    is-active). Юзер просил: 'все кнопки связанные с NAS на одну страницу'."""
-    screen.fill(BG)
-    y0 = draw_top_strip("Menu › NAS") + 6
-    btns = []
-    (set_y, _g, section, row_full, row_pair, _t, bottom_pair
-     ) = _menu_helpers(btns)
-    set_y(y0)
-
-    running = c_nas_run.get()
-
-    section("BACKUP", ACCENT)
-    if running:
-        # Та же кнопка превращается в Stop пока backup активен — юзер
-        # не запутается, всегда одна точка управления.
-        row_full("Stop backup", "nas_stop", ERROR, primary=True)
-        row_full("Progress", "progress_open", INFO)
-    else:
-        row_full("Run backup", "nas_run", ACCENT, primary=True)
-
-    section("STATUS", INFO)
-    row_full("NAS status", "open_nas_status", INFO)
-
-    bottom_pair("Back", "open_menu",
-                "Status", "back_to_status")
-    return btns
-
-
-def page_menu_info():
-    """Sub-page: всё про чтение состояния системы. NAS вынесен в page_menu_nas
-    (юзер: 'все NAS-кнопки на одну страницу')."""
-    screen.fill(BG)
-    y0 = draw_top_strip("Menu › Info") + 6
-    btns = []
-    (set_y, _g, section, row_full, row_pair, _t, bottom_pair
-     ) = _menu_helpers(btns)
-    set_y(y0)
-
-    section("INFO", INFO)
-    row_pair("Today",     "open_daily",     INFO,
-             "Logs",      "open_logs",      INFO)
-    row_pair("Services",  "open_services",  INFO,
-             "Configs",   "open_configs",   INFO)
-    row_full("Docker",    "open_docker",    INFO)
-
-    bottom_pair("Back", "open_menu",
-                "Status", "back_to_status")
-    return btns
-
-
-def page_menu_system():
-    """Sub-page: AP/wifi/power-off. Всё рискованное — на отдельный экран
-    чтобы не нажать случайно когда лезешь за NAS status."""
-    screen.fill(BG)
-    y0 = draw_top_strip("Menu › System") + 6
-    btns = []
-    (set_y, _g, section, _f, row_pair, _t, bottom_pair
-     ) = _menu_helpers(btns)
-    set_y(y0)
-
-    section("WIFI", INFO)
-    row_pair("AP info",   "open_ap_info",    INFO,
-             "Force AP",  "open_ap_confirm", WARN)
-
-    section("DANGER", ERROR)
-    row_pair("Reboot",    "open_reboot", WARN,
-             "Shutdown",  "open_off",    ERROR)
-
-    bottom_pair("Back", "open_menu",
-                "Status", "back_to_status")
     return btns
 
 
@@ -1817,9 +1814,6 @@ def page_off_confirm():
 PAGES = {
     PAGE_STATUS:         page_status,
     PAGE_MENU:           page_menu,
-    PAGE_MENU_NAS:       page_menu_nas,
-    PAGE_MENU_INFO:      page_menu_info,
-    PAGE_MENU_SYSTEM:    page_menu_system,
     PAGE_PROGRESS:       page_progress,
     PAGE_LOGS:           page_logs,
     PAGE_LOG_VIEW:       page_log_view,
@@ -1894,9 +1888,6 @@ def _spawn_nas(action_arg, msg, color):
 
 def do_action(action):
     if action == "open_menu":           go(PAGE_MENU)
-    elif action == "open_menu_nas":     go(PAGE_MENU_NAS)
-    elif action == "open_menu_info":    go(PAGE_MENU_INFO)
-    elif action == "open_menu_system":  go(PAGE_MENU_SYSTEM)
     elif action == "back_to_status":    go(PAGE_STATUS)
     elif action == "back_to_prev":
         prev = state["prev_page"]
@@ -1948,12 +1939,14 @@ def do_action(action):
         )
         toast("Pi-config backup started…", ACCENT)
     elif action == "nas_status_refresh":
+        # --query-source — фолбэк через rsync --dry-run --stats для модулей
+        # у которых нет завершённого backup-лога. МЕДЛЕННО (минуты).
         subprocess.Popen(
-            ["sudo", "-n", "/usr/local/bin/nas-backup-status.py"],
+            ["sudo", "-n", "/usr/local/bin/nas-backup-status.py", "--query-source"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             stdin=subprocess.DEVNULL, start_new_session=True,
         )
-        toast("Refreshing NAS status…", INFO)
+        toast("Refreshing (querying NAS — may take minutes)…", INFO)
     elif action == "daily_refresh":
         subprocess.Popen(
             ["sudo", "-n", "/usr/local/bin/daily-summary.sh", "--json"],

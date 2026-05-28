@@ -23,6 +23,74 @@ CONFIG_PATH  = Path("/etc/travel-nas/nas-backup.conf")
 STATUS_FILE  = Path("/var/lib/travel-nas/nas-backup-status.json")
 DEFAULT_DEST = "/mnt/t7/nas-backup"
 
+# Кэш source-sizes между запусками. Сюда сохраняем результат
+# rsync --dry-run --stats, чтобы не дёргать NAS на каждом scan'е.
+# Структура: {"module_name": {"size": "5.5G", "queried": 1779953000}}
+SOURCE_CACHE = Path("/var/lib/travel-nas/nas-source-sizes.json")
+
+
+def read_nas_creds():
+    """NAS_USER, NAS_HOST, NAS_PASS из конфига bash-стиля. Нужны для прямого
+    запроса source-size через rsync --dry-run --stats."""
+    if not CONFIG_PATH.exists():
+        return None, None, None
+    try:
+        text = CONFIG_PATH.read_text()
+    except Exception:
+        return None, None, None
+    def find(key):
+        m = re.search(rf'^\s*{key}=["\']?([^"\'\n]+)', text, re.M)
+        return m.group(1).strip().rstrip('"').rstrip("'") if m else None
+    return find("NAS_USER"), find("NAS_HOST"), find("NAS_PASS")
+
+
+def load_source_cache():
+    try:
+        return json.loads(SOURCE_CACHE.read_text())
+    except Exception:
+        return {}
+
+
+def save_source_cache(cache):
+    try:
+        SOURCE_CACHE.parent.mkdir(parents=True, exist_ok=True)
+        SOURCE_CACHE.write_text(json.dumps(cache))
+    except Exception:
+        pass
+
+
+def query_source_size(user, host, password, module, timeout=600):
+    """rsync --dry-run --stats на NAS-модуль → 'Total file size'.
+    Возвращает human-readable строку ('1.23G') или None при ошибке/timeout.
+
+    ЭТО МЕДЛЕННАЯ операция: rsync проходит по всем файлам source'а без
+    транспорта, минуты на больших share'ах. Только когда нет другого
+    источника (нет завершённого backup-лога) и юзер явно запросил Refresh."""
+    if not (user and host and password):
+        return None
+    # Пустая папка для --dry-run target'а — rsync требует что-то.
+    tmp = Path("/tmp/.rsync-stats-target")
+    tmp.mkdir(parents=True, exist_ok=True)
+    try:
+        out = subprocess.check_output(
+            ["sshpass", "-p", password, "rsync", "--dry-run", "--stats",
+             "-rlt", "--human-readable",
+             f"{user}@{host}::{module}/", f"{tmp}/"],
+            timeout=timeout, stderr=subprocess.STDOUT,
+        ).decode("utf-8", errors="replace")
+    except Exception:
+        return None
+    m = TOTAL_SIZE_RE.search(out)
+    if not m:
+        return None
+    raw = m.group(1).strip()
+    if raw and raw[-1] in "KMGT":
+        return raw
+    try:
+        return _humanize(int(raw.replace(",", "").rstrip(".")))
+    except ValueError:
+        return raw
+
 
 def read_modules_from_config():
     """Парсит DEST и MODULES из bash-конфига регулярками (без source/dev).
@@ -198,11 +266,19 @@ def disk_info(dest):
 
 
 def main():
+    # --query-source: дёргаем rsync --dry-run --stats к NAS для каждого
+    # модуля у которого nas_size не найден в логах. МЕДЛЕННО (несколько
+    # минут на крупный share). Только когда юзер явно тыкнул Refresh.
+    query_source = "--query-source" in sys.argv
+
     dest, modules = read_modules_from_config()
     if not modules:
         modules = scan_subdirs(dest)
 
     log_dir = Path(dest) / "_logs"
+    cache = load_source_cache()
+    creds = read_nas_creds() if query_source else (None, None, None)
+
     out_modules = []
     for name in modules:
         path = Path(dest) / name
@@ -213,16 +289,32 @@ def main():
             if log is not None:
                 entry["last_run"] = int(log.stat().st_mtime)
                 entry["status"]   = parse_log_status(log)
-                # nas_size — ищем последний лог где есть rsync --stats блок
-                # (прерванные Stop'ом логи такого блока не имеют). Так юзер
-                # видит source size даже если последний run был прерван.
                 stats_log = latest_log_with_stats(log_dir, name)
-                entry["nas_size"] = parse_source_size(stats_log) if stats_log else None
+                nas_sz = parse_source_size(stats_log) if stats_log else None
+
+                # Если из логов не достать — пробуем кэш, потом прямой запрос
+                if nas_sz is None:
+                    nas_sz = (cache.get(name) or {}).get("size")
+                    if nas_sz is None and query_source:
+                        nas_sz = query_source_size(*creds, module=name)
+                        if nas_sz:
+                            cache[name] = {"size": nas_sz,
+                                           "queried": int(time.time())}
+
+                entry["nas_size"] = nas_sz
             else:
                 entry["last_run"] = None
                 entry["status"]   = None
-                entry["nas_size"] = None
+                # Для никогда не бэкапленных модулей тоже пробуем NAS query
+                nas_sz = (cache.get(name) or {}).get("size")
+                if nas_sz is None and query_source:
+                    nas_sz = query_source_size(*creds, module=name)
+                    if nas_sz:
+                        cache[name] = {"size": nas_sz, "queried": int(time.time())}
+                entry["nas_size"] = nas_sz
         out_modules.append(entry)
+
+    save_source_cache(cache)
 
     data = {
         "updated": int(time.time()),

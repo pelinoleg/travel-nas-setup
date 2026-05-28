@@ -1,0 +1,5 @@
+# YT-Archiver dashboard integration
+# Базовый URL FastAPI бэкенда (без trailing slash). Дашборд дёргает
+# {URL}/api/stats и {URL}/api/queue для страницы YT Archive.
+# Поменяй если переехал на другой порт/хост.
+URL="http://localhost:8081"

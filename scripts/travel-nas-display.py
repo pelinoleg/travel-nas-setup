@@ -19,6 +19,7 @@ import json
 import time
 import socket
 import subprocess
+import urllib.request
 import pygame
 from pathlib import Path
 from datetime import datetime
@@ -45,6 +46,7 @@ ERROR_LOG = Path("/tmp/travel-nas-display.error.log")
 T7_MOUNT = "/mnt/t7"
 
 SERVICES_CONF      = Path("/etc/travel-nas/services.conf")
+YT_ARCHIVER_CONF   = Path("/etc/travel-nas/yt-archiver.conf")
 NAS_STATUS_JSON    = Path("/var/lib/travel-nas/nas-backup-status.json")
 DAILY_SUMMARY_JSON = Path("/var/lib/travel-nas/daily-summary.json")
 POWER_MODE_FILE    = Path("/var/lib/travel-nas/power-mode.txt")
@@ -538,6 +540,65 @@ def is_ap_mode():
     return bool(ip and ip.startswith("10.41."))
 
 
+def _yt_archiver_url():
+    """URL из /etc/travel-nas/yt-archiver.conf или дефолт. Без trailing slash."""
+    default = "http://localhost:8081"
+    if not YT_ARCHIVER_CONF.exists():
+        return default
+    try:
+        for line in YT_ARCHIVER_CONF.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            m = re.match(r'^\s*URL\s*=\s*["\']?([^"\'\s]+)', line)
+            if m:
+                return m.group(1).rstrip("/")
+    except Exception:
+        pass
+    return default
+
+
+def _yt_stats():
+    """Запрашивает у yt-archiver /api/stats + /api/queue. Возвращает dict с
+    каналами/видео/размером/статусами очереди, или None при ошибке.
+
+    Лёгкий вызов (быстрый ответ < 200ms), но всё равно кэшируем чтобы не
+    долбить контейнер каждым рендером."""
+    base = _yt_archiver_url()
+    out = {}
+    try:
+        with urllib.request.urlopen(f"{base}/api/stats", timeout=4) as r:
+            s = json.loads(r.read())
+            out["channels"] = s.get("channels", 0)
+            out["videos"]   = s.get("videos", 0)
+            out["bytes"]    = s.get("total_bytes", 0)
+    except Exception:
+        return None
+    try:
+        with urllib.request.urlopen(f"{base}/api/queue", timeout=5) as r:
+            q = json.loads(r.read())
+        by_status = {}
+        downloading = []
+        for item in q:
+            st = item.get("status") or "?"
+            by_status[st] = by_status.get(st, 0) + 1
+            if st == "downloading" and len(downloading) < 3:
+                downloading.append({
+                    "channel": item.get("channel_name") or "?",
+                    "title":   item.get("title") or "?",
+                    "progress": item.get("progress") or 0,
+                })
+        out["queue"]       = by_status
+        out["downloading"] = downloading
+    except Exception:
+        out["queue"]       = {}
+        out["downloading"] = []
+    return out
+
+
+c_yt = Cached(_yt_stats, 30)
+
+
 def load_services():
     """Возвращает [(name, url)] — из /etc/travel-nas/services.conf или дефолты.
     {host}/{ip} в URL подставляются текущими значениями."""
@@ -795,6 +856,7 @@ PAGE_NAS_STATUS     = "nas_status"
 PAGE_DAILY_SUMMARY  = "daily_summary"
 PAGE_CONFIGS        = "configs"
 PAGE_DOCKER         = "docker"
+PAGE_YTARCHIVER     = "ytarchiver"
 
 state = {
     "page":        PAGE_STATUS,
@@ -1204,15 +1266,18 @@ def page_menu():
                  "NAS status",  "open_nas_status",  INFO,
                  primary1=True)
 
-    # INFO — что почитать. Today|Logs|Services в 3-col, потом Configs|Docker
+    # INFO — что почитать. 6 элементов в 2 ряда по 3.
     section("INFO", INFO)
     row_triple([
         ("Today",    "open_daily",    INFO, False),
         ("Logs",     "open_logs",     INFO, False),
         ("Services", "open_services", INFO, False),
     ])
-    row_pair("Configs", "open_configs", INFO,
-             "Docker",  "open_docker",  INFO)
+    row_triple([
+        ("Configs",  "open_configs",  INFO, False),
+        ("Docker",   "open_docker",   INFO, False),
+        ("YT",       "open_yt",       INFO, False),
+    ])
 
     # SYSTEM — wifi/власть + Power-режимы (юзер просил включить сюда)
     section("SYSTEM", WARN)
@@ -1681,6 +1746,86 @@ def page_docker():
     return btns
 
 
+def page_ytarchiver():
+    """YT Archive статистика — channels/videos/storage + очередь скачивания.
+    Источник: GET {URL}/api/stats и /api/queue. URL из yt-archiver.conf."""
+    screen.fill(BG)
+    y = draw_top_strip("YT Archive")
+    y += 8
+    btns = []
+
+    data = c_yt.get()
+    if not data:
+        screen.blit(F_NORMAL.render("yt-archiver не доступен", True, ERROR), (10, y))
+        y += 24
+        screen.blit(F_SMALL.render(_yt_archiver_url(), True, MUTED), (10, y))
+        y += 18
+        screen.blit(F_SMALL.render("проверь /etc/travel-nas/yt-archiver.conf", True, MUTED), (10, y))
+    else:
+        # === Шапка: каналы · видео · диск ===
+        ch = data.get("channels", 0)
+        vi = data.get("videos", 0)
+        sz = human_bytes(data.get("bytes", 0))
+        screen.blit(F_LARGE.render(f"{vi} videos", True, FG), (10, y))
+        screen.blit(F_NORMAL.render(sz, True, ACCENT),
+                    (SCREEN_W - 10 - F_NORMAL.size(sz)[0], y + 6))
+        y += 32
+        screen.blit(F_SMALL.render(f"{ch} channels", True, MUTED), (10, y))
+        y += 18
+        pygame.draw.line(screen, BTN_BG, (10, y), (SCREEN_W - 10, y), 1)
+        y += 8
+
+        # === Очередь: pending / downloading / errors ===
+        q = data.get("queue") or {}
+        screen.blit(F_TINY.render("QUEUE", True, MUTED), (10, y))
+        y += 14
+
+        dl_count   = q.get("downloading", 0)
+        pend_count = q.get("pending", 0)
+        err_count  = q.get("error", 0)
+
+        # 3 row indicators со своим цветом
+        rows = [
+            ("downloading", dl_count,   ACCENT if dl_count else MUTED),
+            ("pending",     pend_count, INFO   if pend_count else MUTED),
+            ("errors",      err_count,  ERROR  if err_count else MUTED),
+        ]
+        for label, n, col in rows:
+            pygame.draw.circle(screen, col, (16, y + 9), 5)
+            screen.blit(F_NORMAL.render(label, True, FG), (28, y))
+            n_surf = F_NORMAL.render(str(n), True, col)
+            screen.blit(n_surf, (SCREEN_W - 10 - n_surf.get_width(), y))
+            y += 22
+
+        # === Текущие downloads с progress-баром ===
+        dls = data.get("downloading") or []
+        if dls:
+            y += 6
+            screen.blit(F_TINY.render("NOW DOWNLOADING", True, MUTED), (10, y))
+            y += 14
+            for d in dls[:3]:
+                ch_name = d.get("channel", "")[:18]
+                title   = (d.get("title") or "")[:28]
+                pct     = int(d.get("progress") or 0)
+                screen.blit(F_SMALL.render(f"{ch_name} — {pct}%", True, FG), (10, y))
+                y += 16
+                # bar
+                draw_bar(10, y, SCREEN_W - 20, 6, pct, ACCENT)
+                y += 10
+                screen.blit(F_TINY.render(title, True, MUTED), (10, y))
+                y += 14
+
+    # Bottom: Refresh | Back
+    half_w = (SCREEN_W - 28) // 2
+    refresh = Btn("Refresh", "yt_refresh",
+                  pygame.Rect(8, SCREEN_H - 54, half_w, 46), INFO)
+    back = Btn("Back", "open_menu",
+               pygame.Rect(SCREEN_W - 8 - half_w, SCREEN_H - 54, half_w, 46), MUTED)
+    draw_button(refresh); draw_button(back)
+    btns.extend([refresh, back])
+    return btns
+
+
 def page_configs():
     """Шпаргалка где что лежит — чтоб не забыть перед перепрошивкой."""
     screen.fill(BG)
@@ -1850,6 +1995,7 @@ PAGES = {
     PAGE_DAILY_SUMMARY:  page_daily_summary,
     PAGE_CONFIGS:        page_configs,
     PAGE_DOCKER:         page_docker,
+    PAGE_YTARCHIVER:     page_ytarchiver,
 }
 
 
@@ -1941,6 +2087,10 @@ def do_action(action):
     elif action == "open_daily":        go(PAGE_DAILY_SUMMARY)
     elif action == "open_configs":      go(PAGE_CONFIGS)
     elif action == "open_docker":       go(PAGE_DOCKER)
+    elif action == "open_yt":           go(PAGE_YTARCHIVER)
+    elif action == "yt_refresh":
+        c_yt.invalidate()
+        toast("YT stats refreshing…", INFO)
     elif action == "docker_refresh":
         # Сброс кеша → следующий рендер дёрнет actual data
         c_docker.last = 0

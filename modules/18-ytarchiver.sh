@@ -120,6 +120,15 @@ EOF
     cd "$APP_DIR"
     sudo docker compose pull
     sudo docker compose up -d
+
+    # Конфиг для дашборда — где брать stats. Юзер может менять URL если
+    # переехал на другой порт/хост.
+    sudo mkdir -p "$CONFIG_DIR"
+    if [[ ! -f "$CONFIG_DIR/yt-archiver.conf" ]]; then
+        fetch_conf_example "yt-archiver.conf.example" "$CONFIG_DIR/yt-archiver.conf"
+    fi
+    sudo chown "$(whoami):$(whoami)" "$CONFIG_DIR/yt-archiver.conf"
+    sudo chmod 0644 "$CONFIG_DIR/yt-archiver.conf"
 ); then
     mark_ok "YTARCHIVER" "http://pi.local:8081"
 else

@@ -865,6 +865,23 @@ Categories=System;
         pass
 
 
+def _shutdown_screen(text):
+    """Заливает экран чёрным + крупный текст по центру. Вызывается ПЕРЕД
+    halt'ом — MHS35 LCD persistence сохранит этот кадр после power-off
+    (вместо тоста 'Shutting down…' который выглядит как зависание).
+    Также форсим pygame.display.flip() чтобы кадр точно ушёл на дисплей."""
+    screen.fill((0, 0, 0))
+    y = SCREEN_H // 2 - 60
+    for line in text.split("\n"):
+        if line.strip():
+            col = ERROR if line == line.upper() and len(line) > 3 else MUTED
+            f = F_LARGE if col == ERROR else F_SMALL
+            surf = f.render(line, True, col)
+            screen.blit(surf, surf.get_rect(center=(SCREEN_W // 2, y)))
+        y += 24
+    pygame.display.flip()
+
+
 def draw_top_strip(page_label=None):
     """Top-strip:
        Слева:  ● health-точка + (page_label | uptime)
@@ -2857,17 +2874,19 @@ def do_action(action):
             toast("Dropping WiFi → AP… (5-15 сек)", WARN)
             go(PAGE_STATUS)
     elif action == "do_reboot":
-        # fast-reboot.sh: docker stop + nas-backup stop + systemctl reboot --force
-        # + 20-сек hard fallback через SysRq. Юзер просил гарантированно.
+        # Перед halt'ом очищаем экран в чёрный + крупная надпись.
+        # MHS35 LCD persistence иначе показывает последний кадр (тост) после
+        # power-off — выглядит как зависание. Чёрный фон с понятным текстом
+        # = чище визуально.
+        _shutdown_screen("REBOOTING\n\nunplug USB-C\nto force off")
         subprocess.Popen(["sudo", "-n", "/usr/local/bin/fast-reboot.sh"],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          stdin=subprocess.DEVNULL, start_new_session=True)
-        toast("Rebooting…", WARN); go(PAGE_STATUS)
     elif action == "do_shutdown":
+        _shutdown_screen("POWERED OFF\n\nunplug USB-C\nto fully disconnect\n(red LED = standby)")
         subprocess.Popen(["sudo", "-n", "/usr/local/bin/fast-shutdown.sh"],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          stdin=subprocess.DEVNULL, start_new_session=True)
-        toast("Shutting down…", ERROR); go(PAGE_STATUS)
 
     elif action == "nas_run":   _spawn_nas("--run",     "NAS backup started", ACCENT)
     elif action == "nas_dry":   _spawn_nas("--dry-run", "Dry-run started",    INFO)

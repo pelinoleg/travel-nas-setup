@@ -1070,8 +1070,8 @@ def page_status():
             (_card_ap if in_ap else _card_network,  96 if in_ap else 68),
             (_card_storage,                         74),
             (_card_system,                        104),
-            (_card_last_nas_backup,                 54),
-            (_card_last_backup,                     54),
+            (_card_last_nas_backup,                 62),
+            (_card_last_backup,                     62),
         ]
 
     # Распределяем gap'ы — оставляем мелкие зазоры, без растягивания

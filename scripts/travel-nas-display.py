@@ -809,13 +809,13 @@ Categories=System;
 def draw_top_strip(page_label=None):
     """Top-strip:
        Слева:  ● health-точка + (page_label | uptime)
-       Справа: [⚡] power: [A·]<mode> <freq>GHz <W>W
-       A·<mode>: pref=auto (система сама выбирает). Без префикса = ручной режим."""
+       Справа: [⚡] [A·]<mode> <freq>GHz <W>W · <sleep_remaining>
+       A·<mode>: pref=auto. Без префикса = ручной режим. Слово 'power:'
+       убрано чтоб дать место sleep-индикатору."""
     pygame.draw.rect(screen, PANEL, (0, 0, SCREEN_W, 22))
     _, color = health_status()
     pygame.draw.circle(screen, color, (12, 11), 5)
 
-    # Слева: либо метка страницы, либо uptime (на главном экране — uptime)
     if page_label:
         left_text = page_label
     else:
@@ -823,7 +823,7 @@ def draw_top_strip(page_label=None):
         left_text = f"up {up}" if up else "up ?"
     screen.blit(F_SMALL.render(left_text, True, FG), (24, 4))
 
-    # === Power-блок прижат к правому краю (где раньше были часы) ===
+    # === Right pieces ===
     th = c_throttle.get()
     mode = c_pmode.get()
     pref = c_ppref.get()
@@ -834,21 +834,35 @@ def draw_top_strip(page_label=None):
     pieces = []
     if th and th[0] == "NOW":
         pieces.append(F_SMALL.render("⚡", True, ERROR))
-    pieces.append(F_SMALL.render("power:", True, MUTED))
     if pref == "auto":
-        # "A·" префикс = система сама управляет (auto). Цвет — INFO чтоб
-        # отличался от ручного режима.
         pieces.append(F_SMALL.render("A·", True, INFO))
     if mode and mode != "unknown":
         pieces.append(F_SMALL.render(mode, True, mode_color))
     if mhz is not None:
-        pieces.append(F_SMALL.render(f"{mhz:.1f}GHz", True, MUTED))
+        pieces.append(F_SMALL.render(f"{mhz:.1f}G", True, MUTED))  # `G` короче `GHz`
     if w is not None:
         pieces.append(F_SMALL.render(f"{w}W", True, MUTED))
 
-    GAP = 5
+    # Sleep countdown — сколько осталось до auto-sleep. Показываем только
+    # если включён (>0). last_activity / display_on глобальные из main loop.
+    sleep_to = c_sleep.get()
+    if sleep_to > 0 and display_on:
+        rem = sleep_to - (time.time() - last_activity)
+        if rem > 0:
+            if rem < 60:
+                rem_str = f"{int(rem)}s"
+            elif rem < 3600:
+                rem_str = f"{int(rem // 60)}m"
+            else:
+                rem_str = f"{int(rem // 3600)}h"
+            # Цвет: красный если < 10 сек, тёплый если < 60 сек, иначе muted
+            rem_col = ERROR if rem < 10 else (WARN if rem < 60 else MUTED)
+            # `z ` префикс — universal sleep notation (emoji 💤 не в DejaVu)
+            pieces.append(F_SMALL.render(f"z {rem_str}", True, rem_col))
+
+    GAP = 4
     total_w = sum(p.get_width() for p in pieces) + GAP * (len(pieces) - 1)
-    bx = SCREEN_W - total_w - 8   # прижато к правому краю
+    bx = SCREEN_W - total_w - 8
     for p in pieces:
         screen.blit(p, (bx, 4))
         bx += p.get_width() + GAP

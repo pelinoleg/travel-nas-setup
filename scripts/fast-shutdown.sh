@@ -1,20 +1,15 @@
 #!/bin/bash
 # =============================================================================
-# fast-shutdown.sh — гарантированный shutdown за ≤5 секунд
+# fast-shutdown.sh — гарантированный shutdown за ~5 секунд
 # =============================================================================
-# Юзер: 'shutdown так и не сработал. все равно думал долго.'
+# Юзер: 'нажал shutdown и всё зависло' (предыдущая версия делала
+# SysRq remount-RO ПЕРЕД systemctl — после этого systemd не мог
+# нормально завершиться).
 #
-# Прошлая стратегия `systemctl poweroff --force` (одинарный --force) всё
-# ещё ходит через systemd unit-stops, просто с SIGTERM/SIGKILL вместо
-# graceful — может занимать 30+ сек.
-#
-# Новая стратегия:
-# 1. Быстрый stop docker (parallel, 3s timeout — иначе T7 unmount висит)
-# 2. sync + remount-RO через SysRq (гарантирует целостность FS)
-# 3. systemctl poweroff --force --force = immediate halt syscall
-#    (bypassing systemd entirely — это как SysRq O, но через libc)
-#
-# Total time от тапа до отключения питания: ~3-5 секунд.
+# Новая стратегия — НЕ трогаем FS до halt'а:
+# 1. docker stop в фоне (best-effort, не блокируем)
+# 2. exec systemctl poweroff --force --force = immediate halt syscall
+# 3. Если за 8 секунд не halt — SysRq emergency (sync → power off)
 # =============================================================================
 
 set -u
@@ -23,28 +18,24 @@ if [[ "$EUID" -ne 0 ]]; then
     exec sudo -- "$0" "$@"
 fi
 
-# 1) Прибиваем docker контейнеры (parallel). 3s timeout — если не успеют,
-# kill -9 их через systemd shutdown anyway.
+# 1) Best-effort docker stop — параллельно, не блокируем
 if command -v docker >/dev/null 2>&1; then
-    docker ps -q 2>/dev/null | xargs -r timeout 4 docker stop -t 2 2>/dev/null &
+    docker ps -q 2>/dev/null | xargs -r timeout 3 docker stop -t 1 2>/dev/null &
 fi
 
-# 2) rsync / nas-backup hard stop — иначе T7 unmount может моргать
-pkill -TERM rsync 2>/dev/null
-systemctl stop nas-backup-runtime 2>/dev/null
+# 2) Fallback: SysRq emergency через 8 сек если halt не сработал.
+# Здесь делаем remount-RO потому что halt syscall уже не выполнился —
+# нужен kernel-level хард.
+(
+    sleep 8
+    echo 1 > /proc/sys/kernel/sysrq 2>/dev/null
+    echo s > /proc/sysrq-trigger 2>/dev/null     # sync
+    sleep 1
+    echo u > /proc/sysrq-trigger 2>/dev/null     # remount RO
+    sleep 1
+    echo o > /proc/sysrq-trigger 2>/dev/null     # power off
+) &
 
-# 3) Сразу sync + remount-RO — kernel-level, моментально, гарантирует
-# что journal сброшен и FS чисто
-echo 1 > /proc/sys/kernel/sysrq 2>/dev/null
-echo s > /proc/sysrq-trigger 2>/dev/null     # sync filesystems
-sleep 1
-echo u > /proc/sysrq-trigger 2>/dev/null     # remount all RO
-
-# 4) Backup-fallback на случай если systemctl --force --force почему-то
-# не сработает (10s — потолок ожидания)
-( sleep 10; echo o > /proc/sysrq-trigger 2>/dev/null ) &
-
-# 5) Главный путь: --force --force = bypass systemd, immediate halt syscall.
-# Одинарный --force всё ещё ждёт unit-stops с SIGTERM. Двойной = прямо
-# в reboot(LINUX_REBOOT_CMD_POWER_OFF) — kernel rebooot syscall.
-exec systemctl poweroff --force --force --no-wall
+# 3) Основной путь: --force --force = halt syscall напрямую.
+# Не трогаем FS заранее — systemd сам делает sync через halt(2) syscall.
+exec systemctl poweroff --force --force

@@ -631,12 +631,13 @@ c_yt = Cached(_yt_stats, 30)
 
 def _parse_services_conf(text):
     """Расширенный парсер services.conf:
-    - 'NAME=URL'     → новый сервис, добавляется в результат
+    - 'NAME=URL'     → новый сервис (имя над URL, две строки)
+    - '>NAME=URL'    → inline: "NAME: URL" на одной строке (компактно)
     - '    notes'    → строка с отступом (4+ пробелов/таб) = заметка к
                        предыдущему сервису
     - '# comment'    → игнор
     - пустая         → игнор
-    Возвращает [(name, url, [notes...]), ...]"""
+    Возвращает [(name, url, [notes...], inline_bool), ...]"""
     out = []
     for raw in text.splitlines():
         line = raw.rstrip()
@@ -648,7 +649,11 @@ def _parse_services_conf(text):
             continue
         if "=" in line:
             k, v = line.split("=", 1)
-            out.append((k.strip(), v.strip(), []))
+            k = k.strip()
+            inline = k.startswith(">")
+            if inline:
+                k = k[1:].strip()
+            out.append((k, v.strip(), [], inline))
     return out
 
 
@@ -663,16 +668,22 @@ def load_services():
                 items = parsed
         except Exception:
             pass
-    # Дефолты SERVICES_DEFAULTS — tuples (name, url). Дополняем пустыми notes
-    # чтобы единый формат с парсером.
-    items = [(t[0], t[1], t[2] if len(t) > 2 else []) for t in items]
+    # Дефолты SERVICES_DEFAULTS — tuples (name, url). Дополняем notes=[],
+    # inline=False чтобы единый формат с парсером (4-tuple).
+    items = [
+        (t[0], t[1],
+         t[2] if len(t) > 2 else [],
+         t[3] if len(t) > 3 else False)
+        for t in items
+    ]
     ip = c_ip.get() or "?"
     host = f"{socket.gethostname()}.local"
     return [
         (n,
          u.replace("{host}", host).replace("{ip}", ip),
-         [note.replace("{host}", host).replace("{ip}", ip) for note in notes])
-        for n, u, notes in items
+         [note.replace("{host}", host).replace("{ip}", ip) for note in notes],
+         inline)
+        for n, u, notes, inline in items
     ]
 
 
@@ -1579,16 +1590,17 @@ def page_log_view():
         screen.blit(F_MONO.render(ln, True, FG), (4, y))
         y += line_h
 
+    # Back всегда слева, Pause/Resume справа.
     half_w = (SCREEN_W - 24) // 2
+    back = Btn("Back", "open_logs",
+               pygame.Rect(8, SCREEN_H - 54, half_w, 46), MUTED)
     pause = Btn(
         "Resume" if state.get("log_paused") else "Pause",
         "toggle_log_pause",
-        pygame.Rect(8, SCREEN_H - 54, half_w, 46), INFO,
+        pygame.Rect(8 + half_w + 8, SCREEN_H - 54, half_w, 46), INFO,
     )
-    back = Btn("Back", "open_logs",
-               pygame.Rect(8 + half_w + 8, SCREEN_H - 54, half_w, 46), MUTED)
-    draw_button(pause); draw_button(back)
-    return [pause, back]
+    draw_button(back); draw_button(pause)
+    return [back, pause]
 
 
 def _ago(ts):
@@ -1840,36 +1852,46 @@ def page_services():
     LINE_H_NOTE = 14
     GAP_BETWEEN_ENTRIES = 8
 
-    for name, url, notes in items:
-        # Имя сервиса (синий)
-        screen.blit(F_NORMAL.render(name, True, INFO), (10, y))
-        y += LINE_H_NAME
-        # URL под именем
-        u = url
-        if len(u) > 38: u = u[:36] + "…"
-        screen.blit(F_SMALL.render(u, True, FG), (18, y))
-        y += LINE_H_URL
-        # Заметки (мелким серым)
+    for name, url, notes, inline in items:
+        if inline:
+            # NAME: URL на одной строке — имя синим, ": URL" белым следом
+            name_surf = F_NORMAL.render(name + ":", True, INFO)
+            screen.blit(name_surf, (10, y))
+            u = url
+            max_url_px = SCREEN_W - 10 - name_surf.get_width() - 16
+            # Урезать URL под доступную ширину
+            while u and F_SMALL.size(u)[0] > max_url_px and len(u) > 4:
+                u = u[:-2] + "…" if not u.endswith("…") else u[:-2] + "…"
+            screen.blit(F_SMALL.render(u, True, FG),
+                        (10 + name_surf.get_width() + 6, y + 3))
+            y += LINE_H_NAME
+        else:
+            # Двухрядный: имя синим сверху, URL белым под именем
+            screen.blit(F_NORMAL.render(name, True, INFO), (10, y))
+            y += LINE_H_NAME
+            u = url
+            if len(u) > 38: u = u[:36] + "…"
+            screen.blit(F_SMALL.render(u, True, FG), (18, y))
+            y += LINE_H_URL
+        # Заметки (мелким серым) — общий путь для inline и двухрядного
         for note in notes:
             note_s = note if len(note) <= 42 else note[:40] + "…"
             screen.blit(F_TINY.render(note_s, True, MUTED), (18, y))
             y += LINE_H_NOTE
             if y + LINE_H_NOTE >= bottom_btn_y:
-                break  # экран кончился
+                break
         y += GAP_BETWEEN_ENTRIES
         if y >= bottom_btn_y:
             break
 
-    btn_h = 46
-    btn_y = SCREEN_H - 54
-    refresh_w = 110
-    refresh = Btn("⟳ Refresh", "services_refresh",
-                  pygame.Rect(8, btn_y, refresh_w, btn_h), INFO)
+    # Bottom: Back | Refresh — Back всегда слева
+    half_w = (SCREEN_W - 28) // 2
     back = Btn("Back", "open_menu",
-               pygame.Rect(refresh_w + 16, btn_y,
-                           SCREEN_W - refresh_w - 24, btn_h), MUTED)
-    draw_button(refresh); draw_button(back)
-    return [refresh, back]
+               pygame.Rect(8, SCREEN_H - 54, half_w, 46), MUTED)
+    refresh = Btn("⟳ Refresh", "services_refresh",
+                  pygame.Rect(SCREEN_W - 8 - half_w, SCREEN_H - 54, half_w, 46), INFO)
+    draw_button(back); draw_button(refresh)
+    return [back, refresh]
 
 
 def _docker_projects():
@@ -2630,14 +2652,14 @@ def page_configs():
         screen.blit(F_TINY.render(line, True, MUTED), (10, y))
         y += 13
 
-    # Bottom: Backup now | Back
+    # Bottom: Back | Backup now — Back всегда слева
     half_w = (SCREEN_W - 28) // 2
-    backup_btn = Btn("Backup now", "pi_backup_now",
-                     pygame.Rect(8, SCREEN_H - 54, half_w, 46), ACCENT)
     back = Btn("Back", "open_menu",
-               pygame.Rect(SCREEN_W - 8 - half_w, SCREEN_H - 54, half_w, 46), MUTED)
-    draw_button(backup_btn); draw_button(back)
-    return [backup_btn, back]
+               pygame.Rect(8, SCREEN_H - 54, half_w, 46), MUTED)
+    backup_btn = Btn("Backup now", "pi_backup_now",
+                     pygame.Rect(SCREEN_W - 8 - half_w, SCREEN_H - 54, half_w, 46), ACCENT)
+    draw_button(back); draw_button(backup_btn)
+    return [back, backup_btn]
 
 
 def page_ap_info():

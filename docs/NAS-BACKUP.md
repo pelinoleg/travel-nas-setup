@@ -81,6 +81,24 @@ sshpass -p PASSWORD rsync user@192.168.1.95::
 
 Левая колонка — то что пишешь в `MODULES=` слева от `|`.
 
+### Можно ли писать subpath / абсолютный путь?
+
+| Формат в `MODULES=` | Работает | Пример |
+|---|---|---|
+| `module` | ✅ | `home\|Personal` |
+| `module/subpath` | ✅ если subpath существует | `HDD6TB/Photos\|MyPhotos` |
+| `module/.dotfile` | ✅ | `home/.config\|MyConfig` |
+| `module/deeper/path` | ✅ | `HDD6TB/Media/Movies\|Movies` |
+| `/volume1/...` | ❌ ERROR: must start with module name | rsync daemon не принимает абс. пути |
+| `volume1/...` | ❌ Unknown module 'volume1' | volume1 не модуль |
+| `module/../other` | ❌ rsync chroot блок | нельзя выйти за модуль |
+
+**Безопасность**: rsync daemon работает в chroot per-module. Невозможно случайно забэкапить `/etc` или вылезти за пределы модуля. При неверном пути `nas-backup.sh --diff` сразу выдаст ошибку — не нужно ждать backup чтобы понять что путь кривой.
+
+**Trailing slash не важен**: `home/` и `home` идентичны.
+
+**Excludes относительны к subpath**: если бэкапишь `HDD6TB/Photos`, `--exclude=".cache/"` фильтрует `HDD6TB/Photos/*/.cache/`, не `HDD6TB/.cache/`.
+
 ---
 
 ## Использование

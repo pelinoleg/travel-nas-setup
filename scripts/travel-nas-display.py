@@ -31,7 +31,8 @@ SCREEN_W, SCREEN_H = 320, 480
 FPS = 15
 REFRESH_INTERVAL = 1.5         # обычное обновление UI
 FAST_REFRESH_INTERVAL = 0.05   # пока активны touch-flash / toast
-SLEEP_AFTER_SEC = 300          # 5 минут до auto-sleep
+SLEEP_AFTER_SEC = 300          # default — переопределяется /var/lib/travel-nas/sleep-timeout
+SLEEP_TIMEOUT_FILE = Path("/var/lib/travel-nas/sleep-timeout")
 TOAST_DURATION = 2.0
 TOUCH_FLASH_DURATION = 0.25
 TOUCH_DEDUP_WINDOW = 0.12      # игнорируем дубль touch+mouse в одно касание
@@ -741,6 +742,22 @@ def _power_pref():
 
 c_pmode = Cached(_power_mode, 5)
 c_ppref = Cached(_power_pref, 5)
+
+
+def _sleep_timeout():
+    """Сколько секунд до auto-sleep. Читает SLEEP_TIMEOUT_FILE (юзер меняет
+    через TG /sleep). 0 = никогда не гасить. Default = SLEEP_AFTER_SEC."""
+    try:
+        if SLEEP_TIMEOUT_FILE.exists():
+            v = int(SLEEP_TIMEOUT_FILE.read_text().strip())
+            if v >= 0:
+                return v
+    except Exception:
+        pass
+    return SLEEP_AFTER_SEC
+
+
+c_sleep = Cached(_sleep_timeout, 5)
 
 
 def _ensure_desktop_icons():
@@ -2234,12 +2251,13 @@ def main():
                         last_refresh = 0  # принудительный rerender
                         break
 
-        # Auto-sleep (не во время бэкапа)
-        # Не гасим экран если:
-        #  - идёт backup (progress JSON активный)
-        #  - или просто rsync бежит (даже без нашего writer'а)
+        # Auto-sleep (не во время бэкапа). Таймаут берётся из файла на лету —
+        # юзер меняет через /sleep в TG, дашборд подхватывает без рестарта.
+        # 0 = никогда не гасить.
+        sleep_to = c_sleep.get()
         if (display_on
-                and (now - last_activity) > SLEEP_AFTER_SEC
+                and sleep_to > 0
+                and (now - last_activity) > sleep_to
                 and get_progress() is None
                 and not c_busy.get()):
             set_backlight(False)

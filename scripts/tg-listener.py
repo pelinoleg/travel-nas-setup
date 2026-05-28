@@ -157,6 +157,7 @@ def cmd_help(token, chat_id, args):
 📊 *Статус*
 `/status` `/today` — snapshot (uptime, CPU, T7, throttle)
 `/screenshot` `/screen` — PNG-снимок текущего экрана дашборда
+`/sleep` — auto-sleep таймаут (`/sleep 5m`, `/sleep never`)
 `/nas` — статус NAS-бэкапов (модули, размеры, last-run)
 `/docker` — Docker-compose проекты + кнопки Stop/Start/Restart
 `/docker audit` — диагностика UID-mismatch в bind mount'ах
@@ -567,6 +568,74 @@ def cmd_nas(token, chat_id, args):
 
 SCREENSHOT_REQ = Path("/var/run/travel-nas/screenshot-req")
 SCREENSHOT_PNG = Path("/var/run/travel-nas/dashboard.png")
+SLEEP_TIMEOUT_FILE = Path("/var/lib/travel-nas/sleep-timeout")
+
+# Пресеты sleep-таймаутов в секундах. Юзер пишет "/sleep 5m" или "/sleep never"
+SLEEP_PRESETS = {
+    "30s":   30,
+    "1m":    60,
+    "5m":    300,
+    "15m":   900,
+    "30m":   1800,
+    "1h":    3600,
+    "never": 0,
+    "off":   0,
+}
+
+
+def _format_sleep(seconds):
+    if seconds == 0:
+        return "never (всегда вкл)"
+    if seconds < 60:
+        return f"{seconds}s"
+    if seconds < 3600:
+        return f"{seconds // 60}m"
+    return f"{seconds // 3600}h"
+
+
+def cmd_sleep(token, chat_id, args):
+    """Auto-sleep timeout дашборда. `/sleep` без args — текущий + пресеты.
+    `/sleep 5m` или `/sleep never` — переключить."""
+    if not args:
+        cur = 300
+        try:
+            if SLEEP_TIMEOUT_FILE.exists():
+                cur = int(SLEEP_TIMEOUT_FILE.read_text().strip())
+        except Exception:
+            pass
+        preset_list = ", ".join(f"`{k}`" for k in SLEEP_PRESETS if k not in ("off",))
+        send(token, chat_id, f"""*Auto-sleep экрана дашборда*
+
+Сейчас: `{_format_sleep(cur)}`
+
+Пресеты: {preset_list}
+Или произвольное: `/sleep 120s`, `/sleep 7m`, `/sleep 2h`
+
+`/sleep never` — экран не гаснет вовсе (для долгого мониторинга).""")
+        return
+
+    arg = args[0].lower().strip()
+    if arg in SLEEP_PRESETS:
+        secs = SLEEP_PRESETS[arg]
+    else:
+        # Парсим '120s', '5m', '2h' или просто число секунд
+        m = re.match(r"^(\d+)([smh]?)$", arg)
+        if not m:
+            send(token, chat_id, f"❌ Не понял `{arg}`. Используй `/sleep` для справки.")
+            return
+        n, unit = int(m.group(1)), m.group(2)
+        secs = n * {"s": 1, "m": 60, "h": 3600, "": 1}[unit]
+        if secs > 86400:
+            send(token, chat_id, "❌ Слишком много (> 24 часа). 0 = никогда.")
+            return
+
+    try:
+        SLEEP_TIMEOUT_FILE.parent.mkdir(parents=True, exist_ok=True)
+        SLEEP_TIMEOUT_FILE.write_text(str(secs))
+    except Exception as e:
+        send(token, chat_id, f"❌ не смог записать: {e}")
+        return
+    send(token, chat_id, f"💤 Auto-sleep → `{_format_sleep(secs)}`\n_(применяется в течение 5 сек)_")
 
 
 def cmd_screenshot(token, chat_id, args):
@@ -614,6 +683,7 @@ COMMANDS = {
     "/yes":      cmd_yes,
     "/screenshot": cmd_screenshot,
     "/screen":   cmd_screenshot,
+    "/sleep":    cmd_sleep,
 }
 
 

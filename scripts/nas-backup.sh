@@ -17,6 +17,40 @@
 
 set -u
 
+# =============================================================================
+# Self-reexec через systemd-run для outliving вызывающего процесса
+# =============================================================================
+# Когда dashboard вызывает этот скрипт через Popen, rsync становится потомком
+# dashboard'а и попадает в его cgroup. Если dashboard рестартится (или его
+# systemd-unit получает stop) — cgroup погибает целиком, забирая rsync с собой
+# даже несмотря на start_new_session=True (sessions ≠ cgroups).
+#
+# Решение: при запуске не из-под systemd-run, переоборачиваем себя как
+# transient unit. После этого мы в отдельном cgroup и переживём всё.
+# Триггер NAS_BACKUP_DETACHED=1 предотвращает рекурсию.
+#
+# Запускается только в режимах --run/--dry-run/--diff (длинные операции).
+# Интерактивный whiptail-режим оставляем как есть (там нужен tty).
+if [[ -z "${NAS_BACKUP_DETACHED:-}" ]] && \
+   [[ "${1:-}" == "--run" || "${1:-}" == "--dry-run" || "${1:-}" == "--diff" ]] && \
+   command -v systemd-run >/dev/null 2>&1 && \
+   [[ "$EUID" -eq 0 ]]; then
+    UNIT="nas-backup-runtime-$$"
+    if [[ -t 1 ]]; then
+        echo "[INFO] Detached as systemd unit: $UNIT"
+        echo "[INFO] Progress: /var/run/travel-nas/backup-progress.json"
+        echo "[INFO] Log:      /mnt/t7/nas-backup/_logs/"
+        echo "[INFO] Live:     sudo journalctl -fu $UNIT"
+    fi
+    # --collect: после exit'а unit очищается, не оставляет inactive trail
+    # --quiet:   не печатать "Running as unit: ..." (мы уже сами вывели)
+    # --same-dir: сохраняем CWD (cron/test юзкейсы)
+    # --setenv: маркер для предотвращения рекурсии
+    exec systemd-run --unit="$UNIT" --collect --quiet --same-dir \
+        --setenv=NAS_BACKUP_DETACHED=1 \
+        -- "$0" "$@"
+fi
+
 CONFIG="/etc/travel-nas/nas-backup.conf"
 TG_NOTIFY="/usr/local/bin/tg-notify.sh"
 DEFAULT_DEST="/mnt/t7/nas-backup"

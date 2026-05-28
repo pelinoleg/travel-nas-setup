@@ -2426,6 +2426,36 @@ def page_photo_backups():
     return btns
 
 
+def _tailscale_info():
+    """Возвращает dict со статусом Tailscale или {} если не установлено / down.
+    Ключи: installed, online (bool), ip, dns_name, peers (int)."""
+    out = {"installed": False}
+    if not Path("/usr/bin/tailscale").exists() and not Path("/usr/local/bin/tailscale").exists():
+        return out
+    out["installed"] = True
+    try:
+        # --json не требует sudo если ставили с --operator=$USER
+        raw = subprocess.check_output(
+            ["tailscale", "status", "--json"], timeout=3,
+            stderr=subprocess.DEVNULL,
+        ).decode()
+        data = json.loads(raw)
+        self_info = data.get("Self", {}) or {}
+        # BackendState: "Running" = ок, "NeedsLogin"/"Stopped" = down
+        out["backend_state"] = data.get("BackendState", "?")
+        out["online"] = data.get("BackendState") == "Running"
+        ips = self_info.get("TailscaleIPs") or []
+        out["ip"] = ips[0] if ips else None
+        out["dns_name"] = (self_info.get("DNSName") or "").rstrip(".")
+        out["peers"] = len((data.get("Peer") or {}))
+    except Exception:
+        out["online"] = False
+    return out
+
+
+c_tailscale = Cached(_tailscale_info, 15)
+
+
 def _net_diag():
     """Сеть: интерфейс, ssid/signal/bitrate, IP, gateway, DNS, MAC, mode."""
     info = {
@@ -2512,6 +2542,28 @@ def page_network_detail():
     kv("gateway", d.get("gateway", "?"))
     kv("DNS",     d.get("dns", "?"))
     kv("MAC",     d.get("mac", "?"))
+
+    # === Tailscale секция (если установлен) ===
+    ts = c_tailscale.get() or {}
+    if ts.get("installed"):
+        y += 6
+        pygame.draw.line(screen, BTN_BG, (10, y), (SCREEN_W - 10, y), 1)
+        y += 4
+        screen.blit(F_TINY.render("Tailscale", True, MUTED), (10, y))
+        state = "online" if ts.get("online") else (ts.get("backend_state") or "down")
+        state_col = ACCENT if ts.get("online") else WARN
+        s_surf = F_SMALL.render(state, True, state_col)
+        screen.blit(s_surf, (SCREEN_W - 10 - s_surf.get_width(), y - 1))
+        y += 18
+        if ts.get("ip"):
+            kv("TS IP", ts["ip"], ACCENT)
+        if ts.get("dns_name"):
+            # Magic DNS может быть длинным — обрежем агрессивнее
+            dn = ts["dns_name"]
+            if len(dn) > 26: dn = dn[:24] + "…"
+            kv("magic DNS", dn)
+        if ts.get("peers") is not None:
+            kv("peers", str(ts["peers"]))
 
     # === Bottom ===
     half_w = (SCREEN_W - 28) // 2
@@ -2883,7 +2935,8 @@ def do_action(action):
         toast("Refreshing storage…", INFO)
     elif action == "open_network_detail":  go(PAGE_NETWORK_DETAIL)
     elif action == "net_refresh":
-        c_net_diag.invalidate(); c_ip.invalidate(); c_wifi.invalidate(); c_gateway.invalidate()
+        c_net_diag.invalidate(); c_ip.invalidate(); c_wifi.invalidate()
+        c_gateway.invalidate(); c_tailscale.invalidate()
         toast("Refreshing network…", INFO)
     elif action == "open_photo_backups": go(PAGE_PHOTO_BACKUPS)
     elif action == "photo_refresh":

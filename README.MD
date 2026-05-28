@@ -60,6 +60,7 @@ sudo curl -fsSL "https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/ma
 | 📺 **YTARCHIVER** | YouTube archiver (Docker, после CASAOS, UI на `:8081`) |
 | 🖥 **DISPLAY** | MHS35 3.5" сенсорный + Python dashboard в X-kiosk |
 | 💻 **DESKTOP** | Ярлыки на рабочий стол: Dashboard, Setup, T7 Files, Services, Logs |
+| 🔐 **TAILSCALE** | Zero-config VPN — доступ к Pi из любой сети мира + SSH без ключей. См. [docs/TAILSCALE.md](docs/TAILSCALE.md) |
 
 ## Hardware
 

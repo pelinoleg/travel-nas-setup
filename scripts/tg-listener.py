@@ -163,6 +163,7 @@ def cmd_help(token, chat_id, args):
 `/docker audit` — диагностика UID-mismatch в bind mount'ах
 `/services` — все URL установленных сервисов
 `/configs` — `/etc/travel-nas/` файлы + где что лежит
+`/tailscale` `/ts` — статус Tailscale VPN + peers
 
 🔄 *Действия*
 `/backup` — NAS backup
@@ -638,6 +639,61 @@ def cmd_sleep(token, chat_id, args):
     send(token, chat_id, f"💤 Auto-sleep → `{_format_sleep(secs)}`\n_(применяется в течение 5 сек)_")
 
 
+def cmd_tailscale(token, chat_id, args):
+    """Статус Tailscale: установлен / online / IP / magic DNS / peers.
+    Без аргументов — текущий status. Аргументы зарезервированы (на будущее)."""
+    if not (Path("/usr/bin/tailscale").exists() or Path("/usr/local/bin/tailscale").exists()):
+        send(token, chat_id,
+             "_Tailscale не установлен._\n\n"
+             "Установка: `travel-nas-setup` → выбрать `TAILSCALE`, или вручную:\n"
+             "`curl -fsSL https://tailscale.com/install.sh | sudo sh`")
+        return
+    try:
+        raw = subprocess.check_output(
+            ["tailscale", "status", "--json"], timeout=5,
+            stderr=subprocess.STDOUT,
+        ).decode()
+        data = json.loads(raw)
+    except Exception as e:
+        send(token, chat_id, f"❌ `tailscale status` failed: `{e}`")
+        return
+
+    state = data.get("BackendState", "?")
+    self_info = data.get("Self") or {}
+    ips = self_info.get("TailscaleIPs") or []
+    ts_ip = ips[0] if ips else "—"
+    dns_name = (self_info.get("DNSName") or "").rstrip(".") or "—"
+    online = state == "Running"
+    peers = data.get("Peer") or {}
+
+    # Краткий список peer'ов (макс 6 — телега не любит длинные сообщения)
+    peer_lines = []
+    for _key, p in list(peers.items())[:6]:
+        if not isinstance(p, dict):
+            continue
+        nm = (p.get("HostName") or p.get("DNSName") or "?").rstrip(".")
+        nm = nm.split(".")[0]  # короткое имя
+        pips = p.get("TailscaleIPs") or []
+        pip = pips[0] if pips else "—"
+        is_online = "🟢" if p.get("Online") else "⚪"
+        peer_lines.append(f"{is_online} `{nm}` — `{pip}`")
+    peers_block = "\n".join(peer_lines) if peer_lines else "_(нет других устройств)_"
+    if len(peers) > 6:
+        peers_block += f"\n_…и ещё {len(peers) - 6}_"
+
+    icon = "🟢" if online else "🔴"
+    send(token, chat_id, f"""*Tailscale* {icon} `{state}`
+
+*Это устройство*
+IP:        `{ts_ip}`
+DNS:       `{dns_name}`
+
+*Peers* ({len(peers)}):
+{peers_block}
+
+_Через tailnet ssh:_ `ssh oleg@{dns_name.split('.')[0] if dns_name != '—' else 'travel-nas'}`""")
+
+
 def cmd_screenshot(token, chat_id, args):
     """Запрашивает у dashboard'а скриншот текущего экрана и отправляет в TG.
     Механика: touch SCREENSHOT_REQ → dashboard на следующем тике main loop'а
@@ -684,6 +740,8 @@ COMMANDS = {
     "/screenshot": cmd_screenshot,
     "/screen":   cmd_screenshot,
     "/sleep":    cmd_sleep,
+    "/tailscale": cmd_tailscale,
+    "/ts":       cmd_tailscale,
 }
 
 

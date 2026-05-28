@@ -64,6 +64,15 @@ services:
       # Весь T7 как read-only — в UI указывай /t7/usb-imports, /t7/media и т.п.
       - $T7_MOUNT:/t7:ro
 EOF
+    # .photoviewignore — Photoview-нативный механизм типа .gitignore. Кладём в
+    # корень media-папки чтобы сканер игнорил RAW-форматы (на ARM darktable
+    # thumbnail RAW = минуты CPU на файл, юзеру обычно нужно только JPG).
+    sudo mkdir -p "$T7_MOUNT/usb-imports"
+    if [[ ! -f "$T7_MOUNT/usb-imports/.photoviewignore" ]]; then
+        fetch_conf_example "photoviewignore.example" "$T7_MOUNT/usb-imports/.photoviewignore"
+    fi
+    sudo chmod 0644 "$T7_MOUNT/usb-imports/.photoviewignore" 2>/dev/null || true
+
     cd /opt/photoview
     sudo docker compose up -d
 ); then

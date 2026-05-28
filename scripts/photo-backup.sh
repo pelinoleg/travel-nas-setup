@@ -198,7 +198,6 @@ START_TIME=$(date +%s)
 
 # rsync — копируем ВСЁ. Пайплим через progress-writer чтобы dashboard
 # видел прогресс в реальном времени (/var/run/travel-nas/backup-progress.json).
-# --no-inc-recursive нужен чтобы PROGRESS2 считал глобальный процент.
 PROGRESS_WRITER="/usr/local/bin/backup-progress-writer.py"
 if [[ -x "$PROGRESS_WRITER" ]]; then
     # stdbuf -o0: ОС-уровень unbuffered stdout у rsync. progress2 использует \r

@@ -634,6 +634,52 @@ c_pmode = Cached(_power_mode, 5)
 c_ppref = Cached(_power_pref, 5)
 
 
+def _ensure_desktop_icons():
+    """Создаёт/перезаписывает 2 .desktop в ~/Desktop. Идемпотентно: если уже
+    есть — overwrite (никаких дублей). Дёргается при Exit to desktop, чтоб
+    после reinstall ярлыки появлялись без отдельной команды."""
+    try:
+        desktop = Path.home() / "Desktop"
+        desktop.mkdir(parents=True, exist_ok=True)
+        dashboard_desktop = """[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Dashboard
+Comment=Re-open the kiosk dashboard
+Exec=/usr/bin/python3 /usr/local/bin/travel-nas-display.py
+Icon=display
+Terminal=false
+Categories=System;
+"""
+        update_desktop = """[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Update
+Comment=Pull latest scripts from GitHub
+Exec=lxterminal --geometry=100x30 -e bash -c "travel-nas-update; echo; echo 'Готово. Нажми Enter чтобы закрыть.'; read"
+Icon=system-software-update
+Terminal=false
+Categories=System;
+"""
+        for name, content in (
+            ("Travel-NAS-Dashboard.desktop", dashboard_desktop),
+            ("Travel-NAS-Update.desktop",    update_desktop),
+        ):
+            p = desktop / name
+            p.write_text(content)
+            p.chmod(0o755)
+        # Пинаем pcmanfm чтоб подхватил без релогина
+        subprocess.Popen(
+            ["pcmanfm", "--reconfigure"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL, start_new_session=True,
+        )
+    except Exception:
+        # Не критично если что-то не получилось — иконки всё равно создаются
+        # модулем 20-desktop и travel-nas-update'ом
+        pass
+
+
 def draw_top_strip(page_label=None):
     """Top-strip:
        Слева:  ● health-точка + (page_label | uptime)
@@ -1017,7 +1063,7 @@ def page_menu():
     screen.fill(BG)
     y0 = draw_top_strip("Menu") + 6
     btns = []
-    (set_y, _get, section, row_full, _, row_triple, bottom_pair
+    (set_y, _get, section, row_full, row_pair, row_triple, bottom_pair
      ) = _menu_helpers(btns)
     set_y(y0)
 
@@ -1769,6 +1815,10 @@ def do_action(action):
     elif action == "exit_to_desktop":
         # Постим QUIT — main loop корректно остановится, pygame.quit() в конце.
         # Пользователь вернётся через Desktop ярлык "Travel-NAS Dashboard".
+        # Заодно: перезаписываем ярлыки на рабочем столе (без дублей —
+        # write_text overwrite-ит существующие). Чтоб юзер их видел сразу
+        # после exit, а не после следующего travel-nas-update.
+        _ensure_desktop_icons()
         pygame.event.post(pygame.event.Event(pygame.QUIT))
         toast("Exiting to desktop…", MUTED)
     elif action == "open_nas_status":   go(PAGE_NAS_STATUS)

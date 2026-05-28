@@ -104,14 +104,21 @@ if pgrep -f /usr/local/bin/travel-nas-display.py >/dev/null; then
     pkill -f /usr/local/bin/travel-nas-display.py 2>/dev/null || true
     sleep 1
     if [[ -n "$USER_LOGIN" && -e "$USER_HOME/.Xauthority" ]]; then
-        # Дропаем привилегии обратно к юзеру и запускаем в его X
-        sudo -u "$USER_LOGIN" -H \
-            env DISPLAY=:0 XAUTHORITY="$USER_HOME/.Xauthority" \
-            nohup /usr/bin/python3 /usr/local/bin/travel-nas-display.py \
-            >/tmp/travel-nas-display.out 2>&1 &
-        disown 2>/dev/null || true
-        RESTARTED+=("dashboard")
-        echo "  ✓ dashboard (as $USER_LOGIN)"
+        # systemd-run --uid=oleg создаёт transient unit с правильным cgroup и
+        # сессией. Переживает SSH-disconnect (в отличие от прежнего
+        # `nohup ... &; disown` — тот гасился если update запущен из ssh).
+        # --unit=travel-nas-display-runtime: фиксированное имя, чтобы повторный
+        # запуск не плодил unit-ов.
+        systemctl reset-failed travel-nas-display-runtime 2>/dev/null || true
+        if systemd-run --unit=travel-nas-display-runtime --uid="$USER_LOGIN" \
+            --setenv=DISPLAY=:0 --setenv=XAUTHORITY="$USER_HOME/.Xauthority" \
+            --setenv=HOME="$USER_HOME" \
+            /usr/bin/python3 /usr/local/bin/travel-nas-display.py >/dev/null 2>&1; then
+            RESTARTED+=("dashboard")
+            echo "  ✓ dashboard (systemd-run as $USER_LOGIN)"
+        else
+            echo "  ✗ dashboard — systemd-run failed"
+        fi
     else
         echo "  ⚠ нет X-сессии — dashboard поднимется при следующем логине"
     fi

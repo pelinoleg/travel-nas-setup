@@ -1,43 +1,52 @@
 #!/bin/bash
 # =============================================================================
-# power-mode.sh — переключает CPU governor под условия питания
+# power-mode.sh — переключает CPU governor под условия питания / температуры
 # =============================================================================
-# Принцип: ВСЁ должно работать. Когда от powerbank'а просядет питание —
-# вместо вырубания сервисов просто опускаем планку CPU так, чтобы Pi
-# не дёргала пиковые токи. Всё остаётся доступно, просто медленнее.
+# Три режима:
+#   normal — CPU ondemand (до max 2.4 GHz). Никогда не меняется сам.
+#   saver  — CPU powersave (зажат на min). Никогда не меняется сам.
+#   auto   — система сама решает по throttled+temp. `A·` префикс в UI.
 #
-# Два режима:
-#   normal — ondemand governor (CPU поднимается до max когда нужно).
-#            Используется когда питания достаточно (нормальный БП / powerbank
-#            хорошо держит 5V).
-#   saver  — powersave governor (CPU зажат на min частоте).
-#            Используется когда vcgencmd сообщил под-вольтаж — пик потребления
-#            ниже, шанс что Pi устоит больше. Никакие сервисы НЕ выключаются.
+# Файлы состояния:
+#   /var/lib/travel-nas/power-mode-pref — выбор юзера (normal/saver/auto)
+#   /var/lib/travel-nas/power-mode.txt  — реально применённый governor
 #
 # Команды:
-#   power-mode.sh              — auto: smart выбор по throttled-биту
-#   power-mode.sh auto         — то же что без аргументов
-#   power-mode.sh normal       — принудительно normal
-#   power-mode.sh saver        — принудительно saver
-#   power-mode.sh status       — показать текущий
+#   power-mode.sh              — `auto` action: pref → apply
+#   power-mode.sh auto-tick    — то же (для systemd timer / dispatcher)
+#   power-mode.sh normal       — set pref=normal + apply
+#   power-mode.sh saver        — set pref=saver  + apply
+#   power-mode.sh auto         — set pref=auto   + apply (по температуре)
+#   power-mode.sh status       — текущий pref + applied
 #
-# Триггеры авто-переключения:
-#   • NetworkManager dispatcher при connect/disconnect (network up = новый
-#     БП был воткнут?)
-#   • system-monitor когда детектит throttling прямо сейчас
-#
-# Конфиг: /etc/travel-nas/power-mode.conf (HOME_SSIDS — legacy, не используется)
+# Триггеры авто-переключения (при pref=auto):
+#   • CPU temp ≥ 75°C → saver
+#   • throttled-бит    → saver
+#   • temp < 65°C AND throttle clear → normal (гистерезис 10°)
 # =============================================================================
 
 set -u
 
+PREF_FILE="/var/lib/travel-nas/power-mode-pref"
 STATE="/var/lib/travel-nas/power-mode.txt"
 LOG="/mnt/t7/_logs/power-mode.log"
 
 mkdir -p "$(dirname "$STATE")" "$(dirname "$LOG")" 2>/dev/null
 
 log_msg() {
-    echo "[$(date '+%d-%m-%Y %H:%M:%S')] $*" >> "$LOG"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG" 2>/dev/null
+}
+
+read_pref() {
+    if [[ -f "$PREF_FILE" ]]; then
+        cat "$PREF_FILE"
+    else
+        echo "auto"
+    fi
+}
+
+write_pref() {
+    echo "$1" | sudo tee "$PREF_FILE" >/dev/null
 }
 
 throttled_now() {
@@ -59,10 +68,10 @@ cpu_temp_c() {
 TEMP_HOT=75      # ≥75 → переходим в saver
 TEMP_COOL=65     # <65 → возвращаемся в normal
 
-detect_mode() {
-    # Под-вольтаж сейчас — однозначно saver
+detect_mode_from_env() {
+    # Возвращает строку "<mode>|<reason>"
     if throttled_now; then
-        echo "saver"
+        echo "saver|throttled-bit-set"
         return
     fi
 
@@ -71,45 +80,49 @@ detect_mode() {
     prev=""
     [[ -f "$STATE" ]] && prev=$(cat "$STATE")
 
-    # Гистерезис по температуре. Помогает CPU остыть когда жарко (saver
-    # ограничивает max-частоту → меньше тепла → возврат через TEMP_COOL).
+    # Гистерезис: пока в saver — остаёмся пока не остынем < TEMP_COOL.
+    # Пока в normal — переходим в saver только при t >= TEMP_HOT.
     if [[ "$prev" == "saver" ]]; then
-        # Остаёмся в saver пока не остыли ниже TEMP_COOL
         if (( t < TEMP_COOL )); then
-            echo "normal"
+            echo "normal|cooled-to-${t}C-below-${TEMP_COOL}"
         else
-            echo "saver"
+            echo "saver|still-hot-${t}C-above-${TEMP_COOL}"
         fi
     else
-        # В normal: переключаемся если жарко
         if (( t >= TEMP_HOT )); then
-            echo "saver"
+            echo "saver|temp-${t}C-above-${TEMP_HOT}"
         else
-            echo "normal"
+            echo "normal|temp-${t}C-below-${TEMP_HOT}"
         fi
     fi
 }
 
 apply_governor() {
     local gov="$1"
-    local count=0
+    local count=0 failed=0
     for f in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
         if echo "$gov" | sudo tee "$f" >/dev/null 2>&1; then
             count=$((count + 1))
+        else
+            failed=$((failed + 1))
         fi
     done
+    if (( failed > 0 )); then
+        log_msg "WARN: governor=$gov applied to $count CPUs, $failed failed"
+    fi
     echo "  governor=$gov applied to $count CPUs"
 }
 
 apply_mode() {
     local mode="$1"
+    local reason="${2:-manual}"
     case "$mode" in
         normal)
-            echo "→ NORMAL mode (ondemand governor)"
+            echo "→ NORMAL mode (ondemand governor) — $reason"
             apply_governor ondemand
             ;;
         saver)
-            echo "→ SAVER mode (powersave governor — CPU зажат на min частоте)"
+            echo "→ SAVER mode (powersave governor) — $reason"
             echo "  Все сервисы работают, просто медленнее."
             apply_governor powersave
             ;;
@@ -119,10 +132,10 @@ apply_mode() {
             ;;
     esac
     echo "$mode" | sudo tee "$STATE" >/dev/null
-    log_msg "mode applied: $mode"
+    log_msg "applied: mode=$mode reason=$reason"
 }
 
-# legacy: home/field/emergency → mapping на новые
+# legacy aliases для совместимости со старыми скриптами/командами
 map_legacy() {
     case "$1" in
         home|field) echo "normal" ;;
@@ -131,27 +144,77 @@ map_legacy() {
     esac
 }
 
-action="${1:-auto}"
+do_auto_tick() {
+    # auto-tick вызывается по таймеру/dispatcher'у. НЕ меняет pref.
+    # Читает текущий pref → действует.
+    local pref
+    pref=$(read_pref)
+    local prev=""
+    [[ -f "$STATE" ]] && prev=$(cat "$STATE")
+
+    case "$pref" in
+        normal|saver)
+            # Юзер фиксанул — просто гарантируем что governor совпадает
+            if [[ "$prev" != "$pref" ]]; then
+                apply_mode "$pref" "tick:pref=$pref"
+            else
+                # Тихий no-op, но запишем в лог для отладки
+                log_msg "tick: pref=$pref already applied (no-op)"
+            fi
+            ;;
+        auto|"")
+            local detected reason
+            IFS='|' read -r detected reason <<< "$(detect_mode_from_env)"
+            log_msg "tick: pref=auto detected=$detected prev=$prev reason=$reason"
+            if [[ "$detected" != "$prev" ]]; then
+                apply_mode "$detected" "auto:$reason"
+            fi
+            echo "$detected"
+            ;;
+        *)
+            log_msg "ERR: unknown pref '$pref', resetting to auto"
+            write_pref "auto"
+            do_auto_tick
+            ;;
+    esac
+}
+
+print_status() {
+    local pref applied
+    pref=$(read_pref)
+    applied=""
+    [[ -f "$STATE" ]] && applied=$(cat "$STATE")
+    echo "pref=$pref applied=${applied:-unknown}"
+    if [[ "$pref" == "auto" ]]; then
+        local detected reason
+        IFS='|' read -r detected reason <<< "$(detect_mode_from_env)"
+        echo "auto would pick: $detected ($reason)"
+    fi
+    echo "throttled-raw: $(vcgencmd get_throttled 2>/dev/null || echo n/a)"
+    echo "cpu-temp:      $(cpu_temp_c)°C"
+}
+
+action="${1:-auto-tick}"
 action=$(map_legacy "$action")
 
 case "$action" in
     normal|saver)
-        apply_mode "$action"
+        write_pref "$action"
+        apply_mode "$action" "manual"
+        ;;
+    auto)
+        # Юзер выбрал auto — записываем pref и сразу применяем по env
+        write_pref "auto"
+        do_auto_tick
+        ;;
+    auto-tick|"")
+        do_auto_tick
         ;;
     status)
-        if [[ -f "$STATE" ]]; then cat "$STATE"; else echo "unknown"; fi
-        ;;
-    auto|"")
-        m=$(detect_mode)
-        prev=""
-        [[ -f "$STATE" ]] && prev=$(cat "$STATE")
-        if [[ "$m" != "$prev" ]]; then
-            apply_mode "$m"
-        fi
-        echo "$m"
+        print_status
         ;;
     *)
-        echo "Usage: $0 [auto|normal|saver|status]" >&2
+        echo "Usage: $0 [normal|saver|auto|auto-tick|status]" >&2
         exit 1
         ;;
 esac

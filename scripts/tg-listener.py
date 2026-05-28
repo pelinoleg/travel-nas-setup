@@ -36,6 +36,7 @@ CONFIG = Path("/etc/travel-nas/tg-notify.conf")
 DAILY_SUMMARY_JSON = Path("/var/lib/travel-nas/daily-summary.json")
 NAS_STATUS_JSON    = Path("/var/lib/travel-nas/nas-backup-status.json")
 POWER_MODE_FILE    = Path("/var/lib/travel-nas/power-mode.txt")
+POWER_PREF_FILE    = Path("/var/lib/travel-nas/power-mode-pref")
 OFFSET_FILE        = Path("/var/lib/travel-nas/tg-listener.offset")
 T7_LOGS            = Path("/mnt/t7/_logs")
 
@@ -133,10 +134,10 @@ def cmd_help(token, chat_id, args):
 `/logs [N]` — хвост всех логов (default 30 строк)
 
 🔌 *Питание*
-`/power` — текущий режим + полная справка
-`/power auto` — пересчитать по throttle/temp
-`/power normal` — принудительно ondemand
-`/power saver` — принудительно powersave
+`/power` — справка + текущее
+`/power auto` — система сама решает (A· префикс в UI)
+`/power normal` `/power saver` — фиксируем ручной режим
+`/power status` — что и почему сейчас
 
 ⚙️ *Система*
 `/reboot` — ребут Pi (нужно /yes)
@@ -176,7 +177,11 @@ def cmd_status(token, chat_id, args):
             parts.append(f"(json error: {e})")
     if POWER_MODE_FILE.exists():
         try:
-            parts.append(f"🔌 power mode: `{POWER_MODE_FILE.read_text().strip()}`")
+            applied = POWER_MODE_FILE.read_text().strip()
+            pref = (POWER_PREF_FILE.read_text().strip()
+                    if POWER_PREF_FILE.exists() else "auto")
+            marker = "A·" if pref == "auto" else ""
+            parts.append(f"🔌 power: `{marker}{applied}` (pref `{pref}`)")
         except Exception:
             pass
     send(token, chat_id, "\n".join(parts))
@@ -235,30 +240,30 @@ def cmd_power(token, chat_id, args):
             cur = POWER_MODE_FILE.read_text().strip() if POWER_MODE_FILE.exists() else "unknown"
         except Exception:
             cur = "unknown"
-        send(token, chat_id, f"""*Power mode* — защита от просадок питания и перегрева
+        try:
+            pref = POWER_PREF_FILE.read_text().strip() if POWER_PREF_FILE.exists() else "auto"
+        except Exception:
+            pref = "auto"
+        marker = "A·" if pref == "auto" else ""
+        send(token, chat_id, f"""*Power mode* — три режима
 
-Текущий: `{cur}`
+Pref: `{pref}` · applied: `{marker}{cur}`
 
-Зачем: когда питание просядет (powerbank) или CPU перегреется,
-Pi сама ограничивает максимальную частоту чтобы не упасть.
-*Никакие сервисы не выключаются — всё работает, просто медленнее.*
+🟢 `normal` — CPU ondemand (до 2.4 GHz). Ручной, не меняется сам.
+🟡 `saver` — CPU powersave (зажат на min). Ручной, не меняется сам.
+🔵 `auto` — система сама решает по throttle/temp (показано `A·` префиксом).
 
-Режимы:
-🟢 `normal` — CPU ondemand (по нагрузке, до max 2.4 GHz).
-🟡 `saver` — CPU powersave (зажат на min ~1.5 GHz).
-
-Авто-переключение в `saver` когда:
-• `vcgencmd get_throttled & 0x7` — under-voltage сейчас
-• CPU temp ≥ 75°C — горячо, надо охладить
-
-Возврат в `normal` когда:
-• throttle очистился AND CPU temp < 65°C (гистерезис 10°)
+Auto-логика (при pref=auto):
+• throttled-bit или CPU temp ≥ 75°C → saver
+• CPU temp < 65°C AND throttle clear → normal (гистерезис 10°)
 
 Команды:
-`/power auto` — пересчитать сейчас
-`/power normal` `/power saver` — принудительно
+`/power normal` — фиксируем normal
+`/power saver` — фиксируем saver
+`/power auto` — включаем авто-переключение
+`/power status` — детально что сейчас + почему
 
-Триггеры:
+Триггеры тика:
 • NetworkManager dispatcher при connect/disconnect
 • system-monitor каждые 5 мин""")
         return

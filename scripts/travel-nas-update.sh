@@ -51,6 +51,7 @@ declare -A SCRIPTS=(
     [nas-backup-status.py]=/usr/local/bin/nas-backup-status.py
     [tg-listener.py]=/usr/local/bin/tg-listener.py
     [backup-progress-writer.py]=/usr/local/bin/backup-progress-writer.py
+    [99-travel-nas-power]=/etc/NetworkManager/dispatcher.d/99-travel-nas-power
 )
 
 # Cache-buster на случай если CDN отдаёт стейл

@@ -15,7 +15,7 @@ ACTION="${2:-}"
 case "$ACTION" in
     up|down|connectivity-change|hostname)
         if [[ -x /usr/local/bin/power-mode.sh ]]; then
-            /usr/local/bin/power-mode.sh auto >/dev/null 2>&1 &
+            /usr/local/bin/power-mode.sh auto-tick >/dev/null 2>&1 &
         fi
         ;;
 esac

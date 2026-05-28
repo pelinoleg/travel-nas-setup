@@ -46,6 +46,7 @@ SERVICES_CONF      = Path("/etc/travel-nas/services.conf")
 NAS_STATUS_JSON    = Path("/var/lib/travel-nas/nas-backup-status.json")
 DAILY_SUMMARY_JSON = Path("/var/lib/travel-nas/daily-summary.json")
 POWER_MODE_FILE    = Path("/var/lib/travel-nas/power-mode.txt")
+POWER_PREF_FILE    = Path("/var/lib/travel-nas/power-mode-pref")
 SERVICES_DEFAULTS = [
     ("CasaOS",      "http://{host}"),
     ("Photoview",   "http://{host}:8000"),
@@ -151,6 +152,10 @@ class Cached:
                 pass
             self.last = now
         return self.value
+    def invalidate(self):
+        # Заставит следующий .get() перечитать. Нужно после действий, которые
+        # меняют source-of-truth (нажали кнопку → переписали файл).
+        self.last = 0.0
 
 
 def _cpu_temp():
@@ -612,25 +617,39 @@ def _power_mode():
         return "unknown"
 
 
+def _power_pref():
+    """normal / saver / auto — выбор юзера (default auto)."""
+    try:
+        return POWER_PREF_FILE.read_text().strip() if POWER_PREF_FILE.exists() else "auto"
+    except Exception:
+        return "auto"
+
+
 c_pmode = Cached(_power_mode, 5)
+c_ppref = Cached(_power_pref, 5)
 
 
 def draw_top_strip(page_label=None):
     """Top-strip:
-       Слева:  ● health-точка + hostname
-       Справа: [⚡] power: <mode> <freq>GHz <W>W
-       (часы убраны по запросу — место занято power-блоком)"""
+       Слева:  ● health-точка + (page_label | uptime)
+       Справа: [⚡] power: [A·]<mode> <freq>GHz <W>W
+       A·<mode>: pref=auto (система сама выбирает). Без префикса = ручной режим."""
     pygame.draw.rect(screen, PANEL, (0, 0, SCREEN_W, 22))
     _, color = health_status()
     pygame.draw.circle(screen, color, (12, 11), 5)
 
-    host_text = page_label or socket.gethostname()
-    host_surf = F_SMALL.render(host_text, True, FG)
-    screen.blit(host_surf, (24, 4))
+    # Слева: либо метка страницы, либо uptime (на главном экране — uptime)
+    if page_label:
+        left_text = page_label
+    else:
+        up = c_uptime.get()
+        left_text = f"up {up}" if up else "up ?"
+    screen.blit(F_SMALL.render(left_text, True, FG), (24, 4))
 
     # === Power-блок прижат к правому краю (где раньше были часы) ===
     th = c_throttle.get()
     mode = c_pmode.get()
+    pref = c_ppref.get()
     mode_color = ACCENT if mode == "normal" else (WARN if mode == "saver" else MUTED)
     mhz = c_cpu_max.get()
     w = c_watts.get()
@@ -639,6 +658,10 @@ def draw_top_strip(page_label=None):
     if th and th[0] == "NOW":
         pieces.append(F_SMALL.render("⚡", True, ERROR))
     pieces.append(F_SMALL.render("power:", True, MUTED))
+    if pref == "auto":
+        # "A·" префикс = система сама управляет (auto). Цвет — INFO чтоб
+        # отличался от ручного режима.
+        pieces.append(F_SMALL.render("A·", True, INFO))
     if mode and mode != "unknown":
         pieces.append(F_SMALL.render(mode, True, mode_color))
     if mhz is not None:
@@ -897,19 +920,18 @@ def page_status():
             btns.append(Btn("", "progress_open", rect, ACCENT))
         y += h + gap
 
-    # Footer: SMB-клиенты + uptime + clock — не основная информация, мелко
+    # Footer: SMB-клиенты — uptime теперь в top-strip, тут только активные сессии
     smb = c_smb.get() or 0
-    up = c_uptime.get() or "?"
-    foot = [f"up {up}"]
-    if smb > 0: foot.append(f"{smb} smb")
-    screen.blit(F_TINY.render("  ·  ".join(foot), True, MUTED), (margin + 4, bottom_btn_y - 14))
+    if smb > 0:
+        screen.blit(F_TINY.render(f"{smb} smb", True, MUTED),
+                    (margin + 4, bottom_btn_y - 14))
 
-    # Bottom buttons
-    half_w = (SCREEN_W - 24) // 2
-    menu = Btn("Menu",    "open_menu",    pygame.Rect(8, bottom_btn_y, half_w, 46),                ACCENT, primary=True)
-    ap   = Btn("AP info", "open_ap_info", pygame.Rect(8 + half_w + 8, bottom_btn_y, half_w, 46),   INFO)
-    draw_button(menu); draw_button(ap)
-    btns += [menu, ap]
+    # Bottom button: Menu во всю ширину (AP info переехал в Menu)
+    menu = Btn("Menu", "open_menu",
+               pygame.Rect(8, bottom_btn_y, SCREEN_W - 16, 46),
+               ACCENT, primary=True)
+    draw_button(menu)
+    btns += [menu]
     return btns
 
 
@@ -951,6 +973,17 @@ def page_menu():
         draw_button(b1); draw_button(b2)
         y += btn_h + gap_row
 
+    def row_triple(items):
+        """3 кнопки в ряд: items = [(label, action, color, primary), ...]."""
+        nonlocal y
+        third_w = (SCREEN_W - margin * 2 - 12) // 3
+        for i, (lbl, act, col, prim) in enumerate(items):
+            x = margin + i * (third_w + 6)
+            r = pygame.Rect(x, y, third_w, btn_h)
+            b = Btn(lbl, act, r, col, primary=prim)
+            btns.append(b); draw_button(b)
+        y += btn_h + gap_row
+
     # === NAS BACKUP ===
     section("NAS BACKUP", ACCENT)
     row_full("Run", "nas_run", ACCENT, primary=True)
@@ -965,6 +998,16 @@ def page_menu():
              "Services",   "open_services",   INFO)
     row_pair("Configs",    "open_configs",    INFO,
              "Docker",     "open_docker",     INFO)
+
+    # === POWER ===
+    # 3 кнопки: подсвечена = выбранный режим. Auto = система сама решает.
+    section("POWER", WARN)
+    pref = c_ppref.get()
+    row_triple([
+        ("Normal", "pwr_normal", ACCENT, pref == "normal"),
+        ("Saver",  "pwr_saver",  WARN,   pref == "saver"),
+        ("Auto",   "pwr_auto",   INFO,   pref == "auto"),
+    ])
 
     # === SYSTEM ===
     section("SYSTEM", WARN)
@@ -1702,6 +1745,20 @@ def do_action(action):
     elif action == "open_reboot":       go(PAGE_REBOOT_CONFIRM)
     elif action == "open_off":          go(PAGE_OFF_CONFIRM)
     elif action == "progress_open":     go(PAGE_PROGRESS)
+
+    elif action in ("pwr_normal", "pwr_saver", "pwr_auto"):
+        # Записываем pref + сразу применяем. Скрипт сам обновит state-file,
+        # дашборд подхватит через c_pmode/c_ppref на следующем ticke.
+        mode_arg = action.replace("pwr_", "")
+        subprocess.Popen(
+            ["sudo", "-n", "/usr/local/bin/power-mode.sh", mode_arg],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL, start_new_session=True,
+        )
+        # Инвалидируем кэши чтобы подсветка кнопки обновилась сразу
+        c_pmode.invalidate(); c_ppref.invalidate()
+        toast(f"Power → {mode_arg}", INFO if mode_arg == "auto" else
+              (ACCENT if mode_arg == "normal" else WARN))
 
     elif action == "do_force_ap":
         # Документированный (см. comitup-cli.8) способ переключения в HOTSPOT:

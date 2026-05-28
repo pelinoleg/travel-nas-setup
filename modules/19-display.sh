@@ -13,6 +13,14 @@ if (
     set -e
     fetch_script "travel-nas-display.py"     "$SCRIPT_DIR/travel-nas-display.py"
     fetch_script "backup-progress-writer.py" "$SCRIPT_DIR/backup-progress-writer.py"
+    fetch_script "touch-calibrate.sh"        "$SCRIPT_DIR/touch-calibrate.sh"
+
+    # xinput-calibrator — для touch-calibrate.sh (резистивные сенсоры
+    # требуют per-device калибровки чтобы тап попадал в визуальную точку).
+    if ! command -v xinput_calibrator >/dev/null 2>&1; then
+        wait_for_apt
+        apt_install xinput-calibrator
+    fi
 
     # services.conf — список URL для страницы Services. oleg-owned чтобы
     # редактировать без sudo (там нет секретов).

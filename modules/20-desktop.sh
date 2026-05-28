@@ -47,6 +47,18 @@ Terminal=false
 Categories=System;
 EOF
 
+    cat > "$DESKTOP_DIR/Travel-NAS-Calibrate.desktop" << 'EOF'
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Calibrate Touch
+Comment=Resistive touchscreen calibration (tap 4 corners)
+Exec=lxterminal --geometry=80x20 -e bash -c "sudo /usr/local/bin/touch-calibrate.sh; echo; echo 'Нажми Enter'; read"
+Icon=preferences-desktop-display
+Terminal=false
+Categories=System;
+EOF
+
     chmod +x "$DESKTOP_DIR"/*.desktop
     # Удаляем устаревшие ярлыки (если остались с прошлых установок)
     rm -f "$DESKTOP_DIR/NAS-Backup.desktop" \

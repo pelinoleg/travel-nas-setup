@@ -52,6 +52,7 @@ declare -A SCRIPTS=(
     [tg-listener.py]=/usr/local/bin/tg-listener.py
     [backup-progress-writer.py]=/usr/local/bin/backup-progress-writer.py
     [99-travel-nas-power]=/etc/NetworkManager/dispatcher.d/99-travel-nas-power
+    [touch-calibrate.sh]=/usr/local/bin/touch-calibrate.sh
 )
 
 # Cache-buster на случай если CDN отдаёт стейл

@@ -88,22 +88,98 @@ def latest_log(log_dir, module_name):
         return None
 
 
-def parse_log_status(path):
-    """OK / WARN / FAIL по последним строкам лога."""
+def latest_log_with_stats(log_dir, module_name, max_check=5):
+    """Возвращает самый свежий лог где есть `Total file size` (rsync --stats).
+    Прерванный Stop'ом backup такого блока не пишет — берём предыдущий.
+    Смотрим максимум max_check логов, чтобы не сканировать историю годами."""
+    try:
+        files = sorted(
+            log_dir.glob(f"*_{module_name}.log"),
+            key=lambda p: p.stat().st_mtime, reverse=True,
+        )[:max_check]
+        for f in files:
+            if TOTAL_SIZE_RE.search(_read_log_tail(f, 32768)):
+                return f
+    except Exception:
+        pass
+    return None
+
+
+def _read_log_tail(path, n_bytes=32768):
+    """Читает последние n_bytes лога. Rsync пишет --stats блоком в конце,
+    поэтому tail обычно содержит всё интересное. 32KB — с запасом под
+    цветные ESC-коды и многомодульные логи."""
     try:
         with open(path, "rb") as f:
             f.seek(0, 2)
             size = f.tell()
-            f.seek(max(0, size - 8192))
-            tail = f.read().decode("utf-8", errors="replace")
+            f.seek(max(0, size - n_bytes))
+            return f.read().decode("utf-8", errors="replace")
     except Exception:
+        return ""
+
+
+def parse_log_status(path):
+    """OK / WARN / FAIL / PARTIAL по последним строкам лога.
+
+    PARTIAL = backup был запущен но не завершился (нет rsync --stats блока
+    в конце). Бывает когда юзер сделал Stop, или процесс прибили cgroup'ом.
+    Это важный сигнал: status='ok' раньше показывался даже для прерванных
+    backup'ов потому что в логе нет error/warn keywords."""
+    tail = _read_log_tail(path, 32768)
+    if not tail:
         return None
     low = tail.lower()
     if "rsync error" in low or "[err]" in low or "failed" in low:
         return "fail"
     if "[warn]" in low or "vanished" in low or "warnings" in low:
         return "warn"
-    return "ok"
+    # Маркер успешного завершения rsync'а: блок --stats с "Total file size"
+    if TOTAL_SIZE_RE.search(tail):
+        return "ok"
+    return "partial"
+
+
+# rsync --stats output ищем "Total file size: 1,234,567,890 bytes" или
+# "Total file size: 1.23G bytes" (зависит от -h). Возвращаем human-readable.
+TOTAL_SIZE_RE = re.compile(
+    r"Total file size:\s+([\d,.]+\s*[KMGT]?)\s*bytes",
+    re.I,
+)
+
+
+def _humanize(n_bytes):
+    n = float(n_bytes)
+    for u in ("B", "K", "M", "G", "T"):
+        if n < 1024:
+            return f"{int(n)}{u}" if u == "B" else f"{n:.1f}{u}"
+        n /= 1024
+    return f"{n:.1f}P"
+
+
+def parse_source_size(path):
+    """Из rsync --stats блока в логе вытягиваем 'Total file size' —
+    объём данных на источнике (NAS) на момент последнего завершённого
+    rsync'а. Юзер сравнит с local size и поймёт что ещё не докопировалось.
+
+    Returns: human-readable string ('1.23G') или None если в логе нет stats
+    (например бэкап был прерван stop'ом)."""
+    tail = _read_log_tail(path, 32768)
+    if not tail:
+        return None
+    m = TOTAL_SIZE_RE.search(tail)
+    if not m:
+        return None
+    raw = m.group(1).strip()
+    # Если уже human (1.23G) — возвращаем как есть, добавляя только B если нет суффикса
+    if raw and raw[-1] in "KMGT":
+        return raw
+    # Иначе чистые байты с запятыми
+    try:
+        n = int(raw.replace(",", "").rstrip("."))
+        return _humanize(n)
+    except ValueError:
+        return raw
 
 
 def disk_info(dest):
@@ -137,9 +213,15 @@ def main():
             if log is not None:
                 entry["last_run"] = int(log.stat().st_mtime)
                 entry["status"]   = parse_log_status(log)
+                # nas_size — ищем последний лог где есть rsync --stats блок
+                # (прерванные Stop'ом логи такого блока не имеют). Так юзер
+                # видит source size даже если последний run был прерван.
+                stats_log = latest_log_with_stats(log_dir, name)
+                entry["nas_size"] = parse_source_size(stats_log) if stats_log else None
             else:
                 entry["last_run"] = None
                 entry["status"]   = None
+                entry["nas_size"] = None
         out_modules.append(entry)
 
     data = {

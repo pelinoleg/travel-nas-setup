@@ -466,6 +466,36 @@ def _nas_backup_active():
 c_nas_run  = Cached(_nas_backup_active, 3)
 
 
+def _parse_size(s):
+    """'1.23G' / '500M' / '500K' / '1.2T' / '500B' → bytes. Возвращает None
+    если не парсится. Поддерживает du-формат (без 'i'/'B' суффикса)."""
+    if not s or not isinstance(s, str):
+        return None
+    s = s.strip()
+    if not s:
+        return None
+    units = {"B": 1, "K": 1024, "M": 1024**2, "G": 1024**3,
+             "T": 1024**4, "P": 1024**5}
+    suf = s[-1].upper()
+    if suf in units:
+        try: return float(s[:-1]) * units[suf]
+        except ValueError: return None
+    try: return float(s)
+    except ValueError: return None
+
+
+def _size_lt(a, b, tolerance=0.95):
+    """True если a существенно меньше b. Tolerance 95% — 5% разницы между
+    `du --apparent-size` локально и `Total file size` от rsync считаем за
+    'совпадает' (округление, инодные накладные). Без tolerance любая микро-
+    разница давала бы 'not fully copied'."""
+    av = _parse_size(a)
+    bv = _parse_size(b)
+    if av is None or bv is None:
+        return False
+    return av < bv * tolerance
+
+
 def human_bytes(n):
     if n is None: return "?"
     n = float(n)
@@ -1121,17 +1151,15 @@ def page_menu_nas():
 
     section("BACKUP", ACCENT)
     if running:
-        # Backup идёт — главная кнопка теперь Stop. Run спрятан чтобы юзер
-        # не запускал ещё один (всё равно systemd-run --unit= тот же).
+        # Та же кнопка превращается в Stop пока backup активен — юзер
+        # не запутается, всегда одна точка управления.
         row_full("Stop backup", "nas_stop", ERROR, primary=True)
-        row_pair("Progress", "progress_open", INFO,
-                 "NAS status", "open_nas_status", INFO)
+        row_full("Progress", "progress_open", INFO)
     else:
         row_full("Run backup", "nas_run", ACCENT, primary=True)
-        row_pair("Dry-run", "nas_dry",  INFO,
-                 "Diff",    "nas_diff", INFO)
-        section("STATUS", INFO)
-        row_full("NAS status", "open_nas_status", INFO)
+
+    section("STATUS", INFO)
+    row_full("NAS status", "open_nas_status", INFO)
 
     bottom_pair("Back", "open_menu",
                 "Status", "back_to_status")
@@ -1358,6 +1386,7 @@ def page_nas_status():
             ex = m.get("exists", False)
             status = m.get("status")
             size = m.get("size") or "?"
+            nas_size = m.get("nas_size")
             last_run = m.get("last_run")
 
             if not ex:
@@ -1372,6 +1401,10 @@ def page_nas_status():
             elif status == "fail":
                 dot_color = ERROR
                 status_label = "fail"
+            elif status == "partial":
+                # Backup был прерван — не докопирован. Жёлтый чтоб бросалось.
+                dot_color = WARN
+                status_label = "partial"
             else:
                 dot_color = MUTED
                 status_label = "never"
@@ -1379,12 +1412,33 @@ def page_nas_status():
             # Точка статуса + имя модуля
             pygame.draw.circle(screen, dot_color, (16, y + 9), 5)
             screen.blit(F_NORMAL.render(name, True, FG), (28, y))
-            # Размер справа
-            ss = F_NORMAL.render(size, True, FG if ex else MUTED)
-            screen.blit(ss, (SCREEN_W - ss.get_width() - 10, y))
-            # Подстрока: last_run + status
-            sub = f"{_ago(last_run)}  ·  {status_label}"
-            screen.blit(F_SMALL.render(sub, True, MUTED), (28, y + 20))
+
+            # Справа: "local / source" в две части — local белым, slash+source
+            # подсвечен жёлтым если local меньше (т.е. недокопировано) или
+            # серым если совпадает/source неизвестен.
+            if nas_size:
+                local_s = F_NORMAL.render(size, True, FG if ex else MUTED)
+                # Сравнение — простое нормализованное к bytes
+                incomplete = ex and _size_lt(size, nas_size)
+                sep_col = WARN if incomplete else MUTED
+                sep_s   = F_NORMAL.render(" / ", True, sep_col)
+                src_s   = F_NORMAL.render(nas_size, True, sep_col)
+                total_w = local_s.get_width() + sep_s.get_width() + src_s.get_width()
+                x = SCREEN_W - total_w - 10
+                screen.blit(local_s, (x, y)); x += local_s.get_width()
+                screen.blit(sep_s,   (x, y)); x += sep_s.get_width()
+                screen.blit(src_s,   (x, y))
+            else:
+                ss = F_NORMAL.render(size, True, FG if ex else MUTED)
+                screen.blit(ss, (SCREEN_W - ss.get_width() - 10, y))
+
+            # Подстрока: last_run + status + (если incomplete) подсказка
+            sub_parts = [_ago(last_run), status_label]
+            if nas_size and ex and _size_lt(size, nas_size):
+                sub_parts.append("not fully copied")
+            sub = "  ·  ".join(sub_parts)
+            sub_col = WARN if "not fully copied" in sub else MUTED
+            screen.blit(F_SMALL.render(sub, True, sub_col), (28, y + 20))
             y += row_h
 
     # Buttons: Refresh | Back

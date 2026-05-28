@@ -958,6 +958,7 @@ PAGE_YTARCHIVER     = "ytarchiver"
 PAGE_SYSTEM_DETAIL  = "system_detail"
 PAGE_STORAGE_DETAIL = "storage_detail"
 PAGE_NETWORK_DETAIL = "network_detail"
+PAGE_PHOTO_BACKUPS  = "photo_backups"
 
 state = {
     "page":        PAGE_STATUS,
@@ -1283,7 +1284,7 @@ def page_status():
         elif draw_fn is _card_last_nas_backup:
             btns.append(Btn("", "open_nas_status", rect, ACCENT))
         elif draw_fn is _card_last_backup:
-            btns.append(Btn("", "open_daily", rect, ACCENT))
+            btns.append(Btn("", "open_photo_backups", rect, ACCENT))
         y += h + gap
 
     # Footer: SMB-клиенты — uptime теперь в top-strip, тут только активные сессии
@@ -1936,6 +1937,19 @@ def page_ytarchiver():
                 screen.blit(F_TINY.render(title, True, MUTED), (10, y))
                 y += 14
 
+    # === Pause/Resume backend (yt-archiver API не имеет stop-all endpoint'а,
+    # делаем через docker stop/start ytarchiver-backend) ===
+    # Кнопка контекстная: если backend running → Pause; если нет → Resume
+    yt_running = _yt_backend_running()
+    pause_lbl = "Pause downloads" if yt_running else "Resume downloads"
+    pause_act = "yt_pause" if yt_running else "yt_resume"
+    pause_col = WARN if yt_running else ACCENT
+    pause_row_y = SCREEN_H - 54 - 50  # ряд над bottom-кнопками
+    pause_btn = Btn(pause_lbl, pause_act,
+                    pygame.Rect(8, pause_row_y, SCREEN_W - 16, 38), pause_col)
+    draw_button(pause_btn)
+    btns.append(pause_btn)
+
     # Bottom: Back | Refresh — Back всегда слева
     half_w = (SCREEN_W - 28) // 2
     back = Btn("Back", "open_menu",
@@ -1945,6 +1959,22 @@ def page_ytarchiver():
     draw_button(back); draw_button(refresh)
     btns.extend([back, refresh])
     return btns
+
+
+def _yt_backend_running():
+    """True если ytarchiver-backend контейнер running."""
+    try:
+        out = subprocess.check_output(
+            ["sudo", "-n", "/usr/local/bin/docker-mgr.sh", "list"],
+            timeout=4, stderr=subprocess.DEVNULL,
+        ).decode(errors="replace")
+        projects = json.loads(out)
+        for p in projects:
+            if p.get("Name") == "ytarchiver":
+                return "running" in str(p.get("Status", "")).lower()
+    except Exception:
+        pass
+    return False
 
 
 def _disk_diag():
@@ -2147,6 +2177,168 @@ def page_storage_detail():
     back = Btn("Back", "back_to_status",
                pygame.Rect(8, SCREEN_H - 54, half_w, 46), MUTED)
     refresh = Btn("Refresh", "storage_refresh",
+                  pygame.Rect(SCREEN_W - 8 - half_w, SCREEN_H - 54, half_w, 46), INFO)
+    draw_button(back); draw_button(refresh)
+    btns.extend([back, refresh])
+    return btns
+
+
+def _photo_backups_list(limit=10):
+    """Список бэкапов photos: idx по DD-MM-YYYY/HH-MM-SS_label_uuid.
+    Возвращает [(date, time_label, files, size_bytes, incomplete), ...] — последние."""
+    base = Path(T7_MOUNT) / "usb-imports"
+    out = []
+    if not base.is_dir():
+        return out
+    try:
+        # date dirs DD-MM-YYYY, newest first
+        date_dirs = sorted([d for d in base.iterdir() if d.is_dir()],
+                            key=lambda d: d.name, reverse=True)
+    except Exception:
+        return out
+    total = 0
+    for dd in date_dirs:
+        try:
+            items = sorted(dd.iterdir(), key=lambda p: p.name, reverse=True)
+        except Exception:
+            continue
+        for it in items:
+            if not it.is_dir():
+                continue
+            incomplete = it.name.endswith(".incomplete")
+            name = it.name.removesuffix(".incomplete") if incomplete else it.name
+            files = 0
+            size = 0
+            try:
+                for p in it.rglob("*"):
+                    if p.is_file():
+                        files += 1
+                        try:
+                            size += p.stat().st_size
+                        except Exception:
+                            pass
+                        if files > 50000:
+                            break
+            except Exception:
+                pass
+            out.append({
+                "date":  dd.name,
+                "label": name,
+                "files": files,
+                "size":  size,
+                "incomplete": incomplete,
+            })
+            total += 1
+            if total >= limit:
+                return out
+    return out
+
+
+def _photo_backups_totals():
+    """Aggregate всех бэкапов: total backups / files / size."""
+    base = Path(T7_MOUNT) / "usb-imports"
+    if not base.is_dir():
+        return None
+    total_backups = 0
+    total_files   = 0
+    total_size    = 0
+    incomplete    = 0
+    try:
+        for dd in base.iterdir():
+            if not dd.is_dir(): continue
+            for it in dd.iterdir():
+                if not it.is_dir(): continue
+                total_backups += 1
+                if it.name.endswith(".incomplete"):
+                    incomplete += 1
+                # Считать files/size — дорого. Берём du -s per-backup иначе медленно.
+                try:
+                    for p in it.rglob("*"):
+                        if p.is_file():
+                            total_files += 1
+                            try: total_size += p.stat().st_size
+                            except Exception: pass
+                            if total_files > 200000:
+                                return {"backups": total_backups,
+                                        "files": total_files,
+                                        "size": total_size,
+                                        "incomplete": incomplete,
+                                        "truncated": True}
+                except Exception:
+                    pass
+    except Exception:
+        return None
+    return {"backups": total_backups, "files": total_files,
+            "size": total_size, "incomplete": incomplete,
+            "truncated": False}
+
+
+c_photo_list   = Cached(_photo_backups_list,   30)
+c_photo_totals = Cached(_photo_backups_totals, 60)
+
+
+def page_photo_backups():
+    """Список SD/USB бэкапов: дата · label · files · size · incomplete-флаг."""
+    screen.fill(BG)
+    y = draw_top_strip("Photo backups")
+    y += 8
+    btns = []
+
+    totals = c_photo_totals.get()
+    items  = c_photo_list.get() or []
+
+    if totals is None:
+        screen.blit(F_NORMAL.render("/mnt/t7/usb-imports недоступен", True, ERROR), (10, y))
+        y += 24
+        screen.blit(F_SMALL.render("T7 не примонтирован?", True, MUTED), (10, y))
+    elif totals.get("backups", 0) == 0:
+        screen.blit(F_LARGE.render("none yet", True, MUTED), (10, y))
+        y += 28
+        screen.blit(F_SMALL.render("Бэкапы появятся когда подключишь", True, MUTED), (10, y))
+        y += 16
+        screen.blit(F_SMALL.render("SD-карту или USB-флешку через udev.", True, MUTED), (10, y))
+        y += 22
+        screen.blit(F_TINY.render("Source: /mnt/t7/usb-imports", True, MUTED), (10, y))
+    else:
+        # Aggregate
+        n_b = totals["backups"]
+        n_f = totals["files"]
+        n_s = human_bytes(totals["size"])
+        inc = totals["incomplete"]
+        line1 = f"{n_b} imports · {n_f} files · {n_s}"
+        screen.blit(F_NORMAL.render(line1, True, FG), (10, y))
+        y += 22
+        if inc:
+            screen.blit(F_SMALL.render(f"⚠ {inc} incomplete", True, WARN), (10, y))
+            y += 18
+
+        pygame.draw.line(screen, BTN_BG, (10, y), (SCREEN_W - 10, y), 1)
+        y += 6
+        screen.blit(F_TINY.render("RECENT", True, MUTED), (10, y))
+        y += 14
+
+        for r in items[:10]:
+            # Цвет/иконка для incomplete
+            icon_col = WARN if r["incomplete"] else MUTED
+            pygame.draw.circle(screen, icon_col, (16, y + 9), 4)
+            # date · label
+            label = r["label"]
+            if len(label) > 22: label = label[:20] + "…"
+            text = f"{r['date']} · {label}"
+            screen.blit(F_SMALL.render(text, True, FG), (28, y))
+            # files+size справа
+            right = f"{r['files']}f · {human_bytes(r['size'])}"
+            if r["incomplete"]:
+                right = "INC · " + right
+            rt = F_TINY.render(right, True, WARN if r["incomplete"] else MUTED)
+            screen.blit(rt, (SCREEN_W - 10 - rt.get_width(), y + 2))
+            y += 18
+
+    # === Bottom ===
+    half_w = (SCREEN_W - 28) // 2
+    back = Btn("Back", "back_to_status",
+               pygame.Rect(8, SCREEN_H - 54, half_w, 46), MUTED)
+    refresh = Btn("Refresh", "photo_refresh",
                   pygame.Rect(SCREEN_W - 8 - half_w, SCREEN_H - 54, half_w, 46), INFO)
     draw_button(back); draw_button(refresh)
     btns.extend([back, refresh])
@@ -2501,6 +2693,7 @@ PAGES = {
     PAGE_SYSTEM_DETAIL:  page_system_detail,
     PAGE_STORAGE_DETAIL: page_storage_detail,
     PAGE_NETWORK_DETAIL: page_network_detail,
+    PAGE_PHOTO_BACKUPS:  page_photo_backups,
 }
 
 
@@ -2596,6 +2789,25 @@ def do_action(action):
     elif action == "yt_refresh":
         c_yt.invalidate()
         toast("YT stats refreshing…", INFO)
+    elif action == "yt_pause":
+        # ytarchiver API не имеет pause-endpoint. Workaround: stop backend
+        # контейнера — yt-dlp процессы прибиваются. Состояние queue/channels
+        # в БД остаётся, после resume backend продолжит с того же места.
+        subprocess.Popen(
+            ["sudo", "-n", "/usr/local/bin/docker-mgr.sh", "stop", "ytarchiver"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL, start_new_session=True,
+        )
+        c_yt.invalidate()
+        toast("Pausing YT downloads…", WARN)
+    elif action == "yt_resume":
+        subprocess.Popen(
+            ["sudo", "-n", "/usr/local/bin/docker-mgr.sh", "start", "ytarchiver"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL, start_new_session=True,
+        )
+        c_yt.invalidate()
+        toast("Resuming YT downloads…", ACCENT)
     elif action == "open_system_detail":  go(PAGE_SYSTEM_DETAIL)
     elif action == "system_refresh":
         c_top_cpu.invalidate(); c_top_mem.invalidate()
@@ -2608,6 +2820,10 @@ def do_action(action):
     elif action == "net_refresh":
         c_net_diag.invalidate(); c_ip.invalidate(); c_wifi.invalidate(); c_gateway.invalidate()
         toast("Refreshing network…", INFO)
+    elif action == "open_photo_backups": go(PAGE_PHOTO_BACKUPS)
+    elif action == "photo_refresh":
+        c_photo_list.invalidate(); c_photo_totals.invalidate(); c_last.invalidate()
+        toast("Scanning imports…", INFO)
     elif action == "docker_refresh":
         # Сброс кеша → следующий рендер дёрнет actual data
         c_docker.last = 0

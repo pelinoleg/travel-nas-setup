@@ -139,11 +139,9 @@ def cmd_help(token, chat_id, args):
 `/power saver` — принудительно powersave
 
 ⚙️ *Система*
-`/rotate` — текущий поворот экрана
-`/rotate 0` / `90` / `180` / `270` — повернуть MHS35 (нужен /yes для ребута)
 `/reboot` — ребут Pi (нужно /yes)
 `/shutdown` — выключение (нужно /yes)
-`/yes` — подтвердить pending действие (rotate/reboot/shutdown)
+`/yes` — подтвердить pending действие (reboot/shutdown)
 
 `/help` `/start` — это сообщение""")
 
@@ -480,43 +478,6 @@ def handle_docker_callback(token, chat_id, data):
         send(token, chat_id, f"⏱ {action} `{name}` timeout >3 мин")
 
 
-def cmd_rotate(token, chat_id, args):
-    """/rotate без аргументов → справка + текущий поворот.
-    /rotate <0|90|180|270> → меняет + предлагает /yes для ребута."""
-    if not args:
-        try:
-            out = subprocess.check_output(
-                ["sudo", "-n", "/usr/local/bin/screen-rotate.sh"],
-                timeout=5, stderr=subprocess.STDOUT,
-            ).decode(errors="replace")
-        except Exception as e:
-            send(token, chat_id, f"❌ {e}")
-            return
-        send(token, chat_id, f"```\n{out}\n```")
-        return
-
-    rot = args[0]
-    if rot not in ("0", "90", "180", "270"):
-        send(token, chat_id, "Usage: `/rotate [0|90|180|270]`\nБез аргумента → текущий + справка")
-        return
-
-    try:
-        out = subprocess.check_output(
-            ["sudo", "-n", "/usr/local/bin/screen-rotate.sh", rot],
-            timeout=10, stderr=subprocess.STDOUT,
-        ).decode(errors="replace")
-    except subprocess.CalledProcessError as e:
-        send(token, chat_id, f"❌ rotate failed:\n```\n{e.output.decode(errors='replace')[-1000:]}\n```")
-        return
-
-    # Для применения нужен reboot — ставим pending action
-    pending[chat_id] = ("reboot", time.time() + CONFIRM_TTL)
-    send(token, chat_id,
-         f"✅ Rotation set to *{rot}°*.\n"
-         f"```\n{out[-800:]}\n```\n\n"
-         f"Нужен ребут чтобы применилось. Ответь `/yes` в течение 30 секунд → перезагружу.")
-
-
 def cmd_nas(token, chat_id, args):
     """NAS backup статус — per-module: status dot, size, last-run age."""
     if not NAS_STATUS_JSON_TG.exists():
@@ -561,7 +522,6 @@ COMMANDS = {
     "/configs":  cmd_configs,
     "/nas":      cmd_nas,
     "/docker":   cmd_docker,
-    "/rotate":   cmd_rotate,
     "/reboot":   cmd_reboot,
     "/shutdown": cmd_shutdown,
     "/yes":      cmd_yes,

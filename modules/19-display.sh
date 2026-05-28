@@ -43,7 +43,6 @@ $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/travel-nas-update
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/power-mode.sh
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/set-led.sh
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/docker-mgr.sh
-$DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/screen-rotate.sh
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/sbin/comitup-cli
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/nmcli connection down *
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff

@@ -29,6 +29,12 @@ else
     fi
 fi
 
+# docker-mgr.sh — обёртка для dashboard/tg-listener (list/start/stop/restart/audit).
+# Кладём только после CasaOS чтобы docker уже был установлен.
+if command -v docker &>/dev/null; then
+    fetch_script "docker-mgr.sh" "$SCRIPT_DIR/docker-mgr.sh"
+fi
+
 # NetworkManager: игнорим docker bridge/veth/br-* интерфейсы. Без этого
 # каждый docker start/stop генерит NM state-change → desktop notification
 # с именем вида "You are now connected to vetha45aeae" → выглядит как

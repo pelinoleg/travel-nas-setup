@@ -1,6 +1,6 @@
 # Travel-NAS Setup
 
-Infrastructure-as-Code для travel-NAS на Raspberry Pi 5 + USB SSD (Samsung T7 Shield по умолчанию). Whiptail-меню с компонентами, поддержка повторного запуска. Всё переустанавливается одной командой.
+Infrastructure-as-Code для travel-NAS на Raspberry Pi 5 **или Pi 4** + USB SSD (Samsung T7 Shield по умолчанию). Whiptail-меню с компонентами, поддержка повторного запуска. Всё переустанавливается одной командой.
 
 ## Быстрый старт
 
@@ -63,12 +63,15 @@ sudo curl -fsSL "https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/ma
 
 ## Hardware
 
-- Raspberry Pi 5 (8GB RAM рекомендуется)
+- **Raspberry Pi 5** (8GB RAM рекомендуется) — самый быстрый, но греется и под нагрузкой ~12W
+- **Raspberry Pi 4** (8GB RAM) — альтернатива, **~2× дольше работа от powerbank** (~7W под нагрузкой), обычно нет shutdown hang'а с USB-SSD. Слабее CPU (~50%), но для photo-backup IO-bound разница незаметна.
 - Samsung T7 Shield SSD 4TB через USB 3.0 (или любой ext4-форматируемый внешний диск)
 - microSD 64GB+ (для системы)
-- Pi 5 27W USB-C блок питания (комплектный — критично, иначе under-voltage)
-- (Опционально) **MHS35 3.5" SPI display** — `goodtft ili9486`, rotation 90
-- (Опционально) **Powerbank** с 5V/5A USB-C PD (Anker 737, Prime 27650) для поля
+- Блок питания:
+  - Pi 5: **27W USB-C PD** (Anker Nano 30W + 5A cable, ~€35)
+  - Pi 4: **15W USB-C** хватит (любая нормальная)
+- (Опционально) **MHS35 3.5" SPI display** — `goodtft ili9486`, rotation 90. Работает на обоих Pi 4/5.
+- (Опционально) **Powerbank** с USB-C PD для поля (Anker 737 или подобные)
 
 ## Структура файлов на T7
 
@@ -308,12 +311,14 @@ tail -F /mnt/t7/_logs/*.log
 
 ## Lessons learned
 
-- **NVMe через PCIe HAT нестабилен** на Pi 5 (Kingston SNV2S падал) — стабильнее USB SSD.
+- **NVMe через PCIe HAT нестабилен** на Pi 5 (Kingston SNV2S падал) — стабильнее USB SSD. Pi 4 NVMe вообще нет (нет PCIe слота).
 - **Bare USB SSD без DRAM не для NAS-нагрузки** — TLC SSD с DRAM (T7) лучше.
 - **lbb (Little Backup Box) конфликтует с CasaOS/fstab** — заменён собственным photo-backup.
 - **EXT4 надёжнее exFAT** на тяжёлой записи.
 - **PiOS Imager preconfig** обязательно — иначе первый boot без сети и без SSH.
-- **Pi 5 27W блок питания критичен** — с 15W блоками или хилым USB-PD идёт throttle.
+- **Pi 5 27W блок питания критичен** — с 15W блоками или хилым USB-PD идёт throttle. Pi 4 терпимее, 15W хватает.
+- **Pi 5 shutdown с USB-SSD виснет** на "Reached target system power off" — известная hardware quirk (USB-bridge power-down). Pi 4 этой проблемы обычно не имеет.
+- **Pi 4 vs Pi 5 для travel**: Pi 4 выигрывает по power (~2× дольше от powerbank), Pi 5 — по CPU. Для основного use-case (photo-backup + dashboard) Pi 4 достаточно.
 
 ## CHANGELOG
 

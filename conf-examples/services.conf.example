@@ -2,16 +2,36 @@
 # /etc/travel-nas/services.conf
 # =============================================================================
 # Список сервисов которые показываются в Dashboard → Menu → Services.
-# Формат: NAME=URL (по одной строке). Подстановки в URL:
+#
+# Формат:
+#   NAME=URL                        ← новый сервис
+#       заметка к сервису           ← строка с отступом = заметка
+#       ещё одна заметка
+#   # comment                       ← игнорируется
+#                                   ← пустая строка игнорируется
+#
+# Подстановки в URL и заметках:
 #   {host}  → travel-nas.local (mDNS — работает в локальной сети)
 #   {ip}    → текущий IP (192.168.x.x или 10.41.x.x в AP режиме)
 #
-# Пустые строки и строки с # игнорируются.
-# Если файл отсутствует, dashboard использует defaults эквивалентные ниже.
+# На дашборде:
+#   - NAME — синим (заголовок)
+#   - URL  — белым под именем
+#   - заметки — мелким серым под URL
 # =============================================================================
 
 CasaOS=http://{host}
+    Web-UI для Docker-приложений
+
 Photoview=http://{host}:8000
-yt-archiver=http://{host}:8081
+    Login: admin / hammett
+    Внутри контейнера: /t7/usb-imports
+
+YT-Archiver=http://{host}:8081
+    Self-hosted YouTube archive
+
 Samba=smb://{host}/travel-nas
+    open guest, no auth
+
 SSH=ssh oleg@{host}
+    pass: hammett

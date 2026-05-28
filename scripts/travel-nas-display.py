@@ -629,26 +629,51 @@ def _yt_stats():
 c_yt = Cached(_yt_stats, 30)
 
 
+def _parse_services_conf(text):
+    """Расширенный парсер services.conf:
+    - 'NAME=URL'     → новый сервис, добавляется в результат
+    - '    notes'    → строка с отступом (4+ пробелов/таб) = заметка к
+                       предыдущему сервису
+    - '# comment'    → игнор
+    - пустая         → игнор
+    Возвращает [(name, url, [notes...]), ...]"""
+    out = []
+    for raw in text.splitlines():
+        line = raw.rstrip()
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        # Indented line — note к предыдущему сервису
+        if line[0] in (" ", "\t") and out:
+            out[-1][2].append(line.strip())
+            continue
+        if "=" in line:
+            k, v = line.split("=", 1)
+            out.append((k.strip(), v.strip(), []))
+    return out
+
+
 def load_services():
     """Возвращает [(name, url)] — из /etc/travel-nas/services.conf или дефолты.
     {host}/{ip} в URL подставляются текущими значениями."""
     items = SERVICES_DEFAULTS
     if SERVICES_CONF.exists():
         try:
-            parsed = []
-            for line in SERVICES_CONF.read_text().splitlines():
-                line = line.strip()
-                if not line or line.startswith("#") or "=" not in line:
-                    continue
-                k, v = line.split("=", 1)
-                parsed.append((k.strip(), v.strip()))
+            parsed = _parse_services_conf(SERVICES_CONF.read_text())
             if parsed:
                 items = parsed
         except Exception:
             pass
+    # Дефолты SERVICES_DEFAULTS — tuples (name, url). Дополняем пустыми notes
+    # чтобы единый формат с парсером.
+    items = [(t[0], t[1], t[2] if len(t) > 2 else []) for t in items]
     ip = c_ip.get() or "?"
     host = f"{socket.gethostname()}.local"
-    return [(n, u.replace("{host}", host).replace("{ip}", ip)) for n, u in items]
+    return [
+        (n,
+         u.replace("{host}", host).replace("{ip}", ip),
+         [note.replace("{host}", host).replace("{ip}", ip) for note in notes])
+        for n, u, notes in items
+    ]
 
 
 def health_status():
@@ -1787,12 +1812,15 @@ def page_daily_summary():
     return [back, refresh]
 
 
+c_services = Cached(load_services, 5)
+
+
 def page_services():
     screen.fill(BG)
     y = draw_top_strip("Services")
     y += 8
 
-    items = load_services()
+    items = c_services.get() or []
     ip = c_ip.get()
 
     # Header — host + IP
@@ -1805,25 +1833,43 @@ def page_services():
     pygame.draw.line(screen, BTN_BG, (10, y), (SCREEN_W - 10, y), 1)
     y += 8
 
-    # Compute per-row height so list fills available space evenly
+    # Heights: 18 заголовок + 16 url + 14 за каждую note. Дальше gap.
     bottom_btn_y = SCREEN_H - 60
-    available = bottom_btn_y - y - 8
-    n = max(1, len(items))
-    # Минимум 44px на запись (заголовок 18 + url 16 + воздух)
-    row_h = max(44, min(60, available // n))
+    LINE_H_NAME = 18
+    LINE_H_URL  = 16
+    LINE_H_NOTE = 14
+    GAP_BETWEEN_ENTRIES = 8
 
-    for name, url in items:
-        # Имя сервиса
+    for name, url, notes in items:
+        # Имя сервиса (синий)
         screen.blit(F_NORMAL.render(name, True, INFO), (10, y))
-        # URL под именем (или обрезка если очень длинный)
+        y += LINE_H_NAME
+        # URL под именем
         u = url
         if len(u) > 38: u = u[:36] + "…"
-        screen.blit(F_SMALL.render(u, True, FG), (18, y + 20))
-        y += row_h
+        screen.blit(F_SMALL.render(u, True, FG), (18, y))
+        y += LINE_H_URL
+        # Заметки (мелким серым)
+        for note in notes:
+            note_s = note if len(note) <= 42 else note[:40] + "…"
+            screen.blit(F_TINY.render(note_s, True, MUTED), (18, y))
+            y += LINE_H_NOTE
+            if y + LINE_H_NOTE >= bottom_btn_y:
+                break  # экран кончился
+        y += GAP_BETWEEN_ENTRIES
+        if y >= bottom_btn_y:
+            break
 
+    btn_h = 46
+    btn_y = SCREEN_H - 54
+    refresh_w = 110
+    refresh = Btn("⟳ Refresh", "services_refresh",
+                  pygame.Rect(8, btn_y, refresh_w, btn_h), INFO)
     back = Btn("Back", "open_menu",
-               pygame.Rect(8, SCREEN_H - 54, SCREEN_W - 16, 46), MUTED)
-    draw_button(back); return [back]
+               pygame.Rect(refresh_w + 16, btn_y,
+                           SCREEN_W - refresh_w - 24, btn_h), MUTED)
+    draw_button(refresh); draw_button(back)
+    return [refresh, back]
 
 
 def _docker_projects():
@@ -2784,7 +2830,10 @@ def do_action(action):
     elif action == "toggle_log_pause":
         state["log_paused"] = not state.get("log_paused", False)
     elif action == "open_ap_info":      go(PAGE_AP_INFO)
-    elif action == "open_services":     go(PAGE_SERVICES)
+    elif action == "open_services":
+        c_services.invalidate()  # свежий conf при заходе на страницу
+        go(PAGE_SERVICES)
+    elif action == "services_refresh":  c_services.invalidate()
     elif action == "exit_to_desktop":
         # Постим QUIT — main loop корректно остановится, pygame.quit() в конце.
         # Пользователь вернётся через Desktop ярлык "Travel-NAS Dashboard".

@@ -97,6 +97,7 @@ declare -A SCRIPTS=(
     [99-travel-nas-power]=/etc/NetworkManager/dispatcher.d/99-travel-nas-power
     [touch-calibrate.sh]=/usr/local/bin/touch-calibrate.sh
     [screen-rotate.sh]=/usr/local/bin/screen-rotate.sh
+    [fix-conf-perms.sh]=/usr/local/bin/fix-conf-perms.sh
     [fast-shutdown.sh]=/usr/local/bin/fast-shutdown.sh
     [fast-reboot.sh]=/usr/local/bin/fast-reboot.sh
     [zzz-sysrq-fallback]=/usr/lib/systemd/system-shutdown/zzz-sysrq-fallback

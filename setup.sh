@@ -81,6 +81,7 @@ MODULES=(
     22-verify
     23-thermal-guard
     24-pi-tweaks
+    25-conf-perms
 )
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
@@ -124,7 +125,7 @@ export SETUP_REPO_ROOT="$REPO_ROOT"
 
 ALL_COMPONENTS="UPDATE UTILS T7_MOUNT TG_NOTIFY SAMBA PI_BACKUP \
 PHOTO_BACKUP NAS_BACKUP WATCHDOG SYS_MONITOR POWER_MODE TG_LISTENER DAILY_SUM \
-LOG2RAM ZRAM COMITUP CASAOS PHOTOVIEW YTARCHIVER DISPLAY DESKTOP TAILSCALE VERIFY THERMAL_GUARD PI_TWEAKS"
+LOG2RAM ZRAM COMITUP CASAOS PHOTOVIEW YTARCHIVER DISPLAY DESKTOP TAILSCALE VERIFY THERMAL_GUARD PI_TWEAKS CONF_PERMS"
 
 if [[ "${1:-}" == "--all" ]]; then
     SELECTED="$ALL_COMPONENTS"
@@ -162,6 +163,7 @@ Components:
   VERIFY         Ежемесячный bit-rot/IO scrub T7 (sha256 manifest)
   THERMAL_GUARD  Sustained-temp защита — staged docker throttle/pause/stop
   PI_TWEAKS      HW watchdog + EEPROM auto-update + WiFi powersave OFF + sysctl
+  CONF_PERMS     Авто-восстановление owner/mode у /etc/travel-nas/*.conf (path-unit)
 EOF
     exit 0
 else
@@ -192,6 +194,7 @@ else
         "VERIFY"       "Ежемесячный bit-rot/IO scrub T7"                  ON \
         "THERMAL_GUARD" "Защита от перегрева (MODE=warn по умолчанию)"    ON \
         "PI_TWEAKS"    "HW watchdog + EEPROM + WiFi-no-powersave + sysctl"  ON \
+        "CONF_PERMS"   "Авто-fix прав /etc/travel-nas/ при правке через CasaOS" ON \
         3>&1 1>&2 2>&3) || exit 0
 fi
 

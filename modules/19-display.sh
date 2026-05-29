@@ -14,6 +14,7 @@ if (
     fetch_script "travel-nas-display.py"     "$SCRIPT_DIR/travel-nas-display.py"
     fetch_script "backup-progress-writer.py" "$SCRIPT_DIR/backup-progress-writer.py"
     fetch_script "touch-calibrate.sh"        "$SCRIPT_DIR/touch-calibrate.sh"
+    fetch_script "screen-rotate.sh"          "$SCRIPT_DIR/screen-rotate.sh"
     fetch_script "fast-shutdown.sh"          "$SCRIPT_DIR/fast-shutdown.sh"
     fetch_script "fast-reboot.sh"            "$SCRIPT_DIR/fast-reboot.sh"
 
@@ -71,6 +72,10 @@ $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/systemctl restart comitup
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/systemctl stop nas-backup-runtime
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/systemctl start --no-block nas-verify.service
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/touch-calibrate.sh
+$DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/screen-rotate.sh 0
+$DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/screen-rotate.sh 90
+$DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/screen-rotate.sh 180
+$DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/screen-rotate.sh 270
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/sbin/smartctl
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/smbstatus
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/dmesg

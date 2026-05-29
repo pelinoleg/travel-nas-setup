@@ -95,6 +95,7 @@ declare -A SCRIPTS=(
     [backup-progress-writer.py]=/usr/local/bin/backup-progress-writer.py
     [99-travel-nas-power]=/etc/NetworkManager/dispatcher.d/99-travel-nas-power
     [touch-calibrate.sh]=/usr/local/bin/touch-calibrate.sh
+    [screen-rotate.sh]=/usr/local/bin/screen-rotate.sh
     [fast-shutdown.sh]=/usr/local/bin/fast-shutdown.sh
     [fast-reboot.sh]=/usr/local/bin/fast-reboot.sh
     [zzz-sysrq-fallback]=/usr/lib/systemd/system-shutdown/zzz-sysrq-fallback
@@ -202,6 +203,10 @@ REQUIRED_CMDS=(
     "/usr/bin/systemctl stop nas-backup-runtime"
     "/usr/bin/systemctl start --no-block nas-verify.service"
     "/usr/local/bin/touch-calibrate.sh"
+    "/usr/local/bin/screen-rotate.sh 0"
+    "/usr/local/bin/screen-rotate.sh 90"
+    "/usr/local/bin/screen-rotate.sh 180"
+    "/usr/local/bin/screen-rotate.sh 270"
     "/usr/local/bin/fast-shutdown.sh"
     "/usr/local/bin/fast-reboot.sh"
     "/usr/sbin/smartctl"

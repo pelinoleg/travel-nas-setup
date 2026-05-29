@@ -76,6 +76,7 @@ $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/screen-rotate.sh 0
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/screen-rotate.sh 90
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/screen-rotate.sh 180
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/screen-rotate.sh 270
+$DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/screen-rotate.sh flip
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/sbin/smartctl
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/smbstatus
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/dmesg

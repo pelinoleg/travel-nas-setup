@@ -207,6 +207,7 @@ REQUIRED_CMDS=(
     "/usr/local/bin/screen-rotate.sh 90"
     "/usr/local/bin/screen-rotate.sh 180"
     "/usr/local/bin/screen-rotate.sh 270"
+    "/usr/local/bin/screen-rotate.sh flip"
     "/usr/local/bin/fast-shutdown.sh"
     "/usr/local/bin/fast-reboot.sh"
     "/usr/sbin/smartctl"

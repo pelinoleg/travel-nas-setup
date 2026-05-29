@@ -165,6 +165,7 @@ def cmd_help(token, chat_id, args):
 `/configs` — `/etc/travel-nas/` файлы + где что лежит
 `/tailscale` `/ts` — статус Tailscale VPN + peers
 `/verify` — последний bit-rot/IO scrub T7 (`/verify run` чтоб запустить сейчас)
+`/rotate` `/flip` — flip ориентации экрана 0°↔180° + ребут
 
 🔄 *Действия*
 `/backup` — NAS backup
@@ -663,6 +664,64 @@ def cmd_sleep(token, chat_id, args):
     send(token, chat_id, f"💤 Auto-sleep → `{_format_sleep(secs)}`\n_(применяется в течение 5 сек)_")
 
 
+def cmd_rotate(token, chat_id, args):
+    """Flip MHS35 0° ↔ 180° (USB сверху ↔ USB снизу).
+    `/rotate` — текущая ориентация + подсказка.
+    `/rotate flip` — переключить + ребут."""
+    # Текущее значение из config.txt
+    cur = "?"
+    try:
+        with open("/boot/firmware/config.txt") as f:
+            for line in f:
+                m = re.search(r"dtoverlay=mhs35:rotate=(\d+)", line)
+                if m:
+                    cur = m.group(1)
+                    break
+    except Exception:
+        pass
+
+    if not args:
+        next_r = "180" if cur == "0" else "0"
+        send(token, chat_id, f"""*Screen rotation*
+
+Сейчас: `{cur}°` (USB { 'сверху' if cur == '0' else 'снизу' if cur == '180' else '?' })
+
+`/rotate flip` — переключить на `{next_r}°` + ребут.
+_(применяется только после reboot — kernel-overlay)_""")
+        return
+
+    if args[0].lower() not in ("flip", "toggle"):
+        send(token, chat_id, "Используй `/rotate` или `/rotate flip`.")
+        return
+
+    try:
+        out = subprocess.check_output(
+            ["sudo", "-n", "/usr/local/bin/screen-rotate.sh", "flip"],
+            timeout=10, stderr=subprocess.STDOUT,
+        ).decode()
+    except Exception as e:
+        send(token, chat_id, f"❌ screen-rotate.sh упал: `{e}`")
+        return
+
+    # Ребут через fast-reboot.sh (T7-aware, c SysRq-fallback'ом)
+    new_r = "180" if cur == "0" else "0"
+    send(token, chat_id, f"""🔄 *Rotation → `{new_r}°`*
+
+```
+{out.strip()}
+```
+
+Сейчас уйду в reboot — вернусь через ~30-60 сек. После загрузки экран будет в новой ориентации, touch уже откалиброван.""")
+    try:
+        subprocess.Popen(
+            ["sudo", "-n", "/usr/local/bin/fast-reboot.sh"],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, start_new_session=True,
+        )
+    except Exception as e:
+        send(token, chat_id, f"⚠ reboot не запустился: `{e}`\nСделай вручную: `sudo reboot`")
+
+
 def cmd_verify(token, chat_id, args):
     """Backup verify scrub: status или run.
     `/verify` — последний статус (JSON из /var/lib/travel-nas/verify-status.json)
@@ -820,6 +879,8 @@ COMMANDS = {
     "/tailscale": cmd_tailscale,
     "/ts":       cmd_tailscale,
     "/verify":   cmd_verify,
+    "/rotate":   cmd_rotate,
+    "/flip":     cmd_rotate,
 }
 
 

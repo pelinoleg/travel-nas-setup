@@ -1009,6 +1009,7 @@ PAGE_AP_INFO        = "ap_info"
 PAGE_AP_CONFIRM     = "ap_confirm"
 PAGE_REBOOT_CONFIRM = "reboot_confirm"
 PAGE_OFF_CONFIRM    = "off_confirm"
+PAGE_FLIP_CONFIRM   = "flip_confirm"
 PAGE_SERVICES       = "services"
 PAGE_NAS_STATUS     = "nas_status"
 PAGE_DAILY_SUMMARY  = "daily_summary"
@@ -2747,6 +2748,12 @@ def page_configs():
         screen.blit(F_TINY.render(line, True, MUTED), (10, y))
         y += 13
 
+    # Flip screen — тонкая полная-ширина кнопка над bottom row
+    flip_y = SCREEN_H - 54 - 38
+    flip_btn = Btn("↻ Flip screen (USB top ↔ bottom)", "open_flip_confirm",
+                   pygame.Rect(8, flip_y, SCREEN_W - 16, 32), INFO)
+    draw_button(flip_btn, F_SMALL)
+
     # Bottom: Back | Backup now — Back всегда слева
     half_w = (SCREEN_W - 28) // 2
     back = Btn("Back", "open_menu",
@@ -2754,7 +2761,7 @@ def page_configs():
     backup_btn = Btn("Backup now", "pi_backup_now",
                      pygame.Rect(SCREEN_W - 8 - half_w, SCREEN_H - 54, half_w, 46), ACCENT)
     draw_button(back); draw_button(backup_btn)
-    return [back, backup_btn]
+    return [flip_btn, back, backup_btn]
 
 
 def page_ap_info():
@@ -2836,6 +2843,32 @@ def page_reboot_confirm():
     )
 
 
+def page_flip_confirm():
+    # Текущая ориентация из config.txt — показываем "0° → 180°" или наоборот
+    cur = "?"
+    try:
+        with open("/boot/firmware/config.txt") as f:
+            for line in f:
+                if "dtoverlay=mhs35:rotate=" in line:
+                    cur = line.split("rotate=", 1)[1].strip()
+                    break
+    except Exception:
+        pass
+    nxt = "180°" if cur == "0" else "0°"
+    arrow = f"{cur}° → {nxt}"
+    return _draw_confirm(
+        "Flip screen",
+        [
+            arrow,
+            "",
+            "Pi reboots сразу.",
+            "Возвращается через",
+            "~30-60 сек.",
+        ],
+        "do_flip_screen", "Flip + reboot", INFO,
+    )
+
+
 def page_off_confirm():
     return _draw_confirm(
         "Shutdown",
@@ -2860,6 +2893,7 @@ PAGES = {
     PAGE_AP_CONFIRM:     page_ap_confirm,
     PAGE_REBOOT_CONFIRM: page_reboot_confirm,
     PAGE_OFF_CONFIRM:    page_off_confirm,
+    PAGE_FLIP_CONFIRM:   page_flip_confirm,
     PAGE_SERVICES:       page_services,
     PAGE_NAS_STATUS:     page_nas_status,
     PAGE_DAILY_SUMMARY:  page_daily_summary,
@@ -3025,6 +3059,7 @@ def do_action(action):
     elif action == "open_ap_confirm":   go(PAGE_AP_CONFIRM)
     elif action == "open_reboot":       go(PAGE_REBOOT_CONFIRM)
     elif action == "open_off":          go(PAGE_OFF_CONFIRM)
+    elif action == "open_flip_confirm": go(PAGE_FLIP_CONFIRM)
     elif action == "progress_open":     go(PAGE_PROGRESS)
 
     elif action in ("pwr_normal", "pwr_saver", "pwr_auto"):
@@ -3069,6 +3104,20 @@ def do_action(action):
     elif action == "do_shutdown":
         state["shutdown_msg"] = "POWERED OFF\n\nunplug USB-C\nto fully disconnect\n(red LED = standby)"
         subprocess.Popen(["sudo", "-n", "/usr/local/bin/fast-shutdown.sh"],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         stdin=subprocess.DEVNULL, start_new_session=True)
+    elif action == "do_flip_screen":
+        # Применяем flip (config.txt + xorg calibration) и сразу же ребутаем.
+        # screen-rotate.sh sync операция (~0.5 сек); reboot потом отдельно.
+        try:
+            subprocess.run(
+                ["sudo", "-n", "/usr/local/bin/screen-rotate.sh", "flip"],
+                timeout=10, capture_output=True,
+            )
+        except Exception:
+            pass
+        state["shutdown_msg"] = "FLIPPING\n\nrebooting...\nback in 30-60s"
+        subprocess.Popen(["sudo", "-n", "/usr/local/bin/fast-reboot.sh"],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          stdin=subprocess.DEVNULL, start_new_session=True)
 

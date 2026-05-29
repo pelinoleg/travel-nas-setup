@@ -10,17 +10,31 @@
 #   sudo screen-rotate.sh 90    # USB справа, ландшафт
 #   sudo screen-rotate.sh 180   # USB снизу, портрет вверх ногами
 #   sudo screen-rotate.sh 270   # USB слева, ландшафт зеркальный
+#   sudo screen-rotate.sh flip  # toggle 0 ↔ 180 (или вернуть в 0 из 90/270)
 #
 # Требует reboot — kernel dtoverlay подхватывается только при загрузке.
 # =============================================================================
 
 set -e
 
+BOOT_CFG="/boot/firmware/config.txt"
+CAL_FILE="/etc/X11/xorg.conf.d/99-calibration.conf"
+
 ROTATION="${1:-}"
 case "$ROTATION" in
     0|90|180|270) ;;
+    flip)
+        cur=$(grep -oE "rotate=[0-9]+" "$BOOT_CFG" | head -1 | cut -d= -f2)
+        cur="${cur:-0}"
+        case "$cur" in
+            0)   ROTATION=180 ;;
+            180) ROTATION=0   ;;
+            *)   ROTATION=0   ;;  # из 90/270 — сбрасываем в портрет 0
+        esac
+        echo "Flip: $cur° → $ROTATION°"
+        ;;
     *)
-        echo "Usage: $0 {0|90|180|270}" >&2
+        echo "Usage: $0 {0|90|180|270|flip}" >&2
         exit 2
         ;;
 esac
@@ -28,9 +42,6 @@ esac
 if [[ "$EUID" -ne 0 ]]; then
     exec sudo -- "$0" "$@"
 fi
-
-BOOT_CFG="/boot/firmware/config.txt"
-CAL_FILE="/etc/X11/xorg.conf.d/99-calibration.conf"
 
 # ── 1) /boot/firmware/config.txt: dtoverlay=mhs35:rotate=N ─────────────────
 if grep -q "^dtoverlay=mhs35" "$BOOT_CFG"; then

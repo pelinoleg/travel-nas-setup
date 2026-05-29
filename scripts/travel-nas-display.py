@@ -458,6 +458,30 @@ c_gateway  = Cached(_gateway,        10)
 c_wifi     = Cached(_wifi,            3)
 c_smb      = Cached(_smb_clients,     5)
 c_comitup  = Cached(_comitup_state,   8)
+
+
+def _comitup_port():
+    """Читает web_port из /etc/comitup.conf. Default 8090 если файла нет.
+    Кэшируем длинным TTL — port меняется только при reinstall."""
+    try:
+        for ln in Path("/etc/comitup.conf").read_text().splitlines():
+            m = re.match(r"^\s*web_port\s*:\s*(\d+)", ln)
+            if m:
+                return int(m.group(1))
+    except Exception:
+        pass
+    return 8090
+
+
+c_comitup_port = Cached(_comitup_port, 60)
+
+
+def _comitup_url(host="10.41.0.1"):
+    """URL comitup-portal. Без порта если 80 (выглядит чище)."""
+    port = c_comitup_port.get()
+    if port == 80:
+        return f"http://{host}"
+    return f"http://{host}:{port}"
 c_last     = Cached(_last_photo_backup, 15)
 c_uptime   = Cached(_uptime,          5)
 
@@ -1116,9 +1140,9 @@ def _card_ap(rect):
     # 1) что подключить
     screen.blit(F_SMALL.render("WiFi (no password):", True, MUTED), (inner.x, inner.y))
     screen.blit(F_MED.render("comitup-NNN", True, FG), (inner.x, inner.y + 14))
-    # 2) куда зайти — крупно и ярко (порт 8080, чтоб не конфликтить с CasaOS:80)
+    # 2) куда зайти — порт читается из /etc/comitup.conf динамически
     screen.blit(F_SMALL.render("then open in browser:", True, MUTED), (inner.x, inner.y + 40))
-    screen.blit(F_MED.render("http://10.41.0.1:8080", True, INFO), (inner.x, inner.y + 54))
+    screen.blit(F_MED.render(_comitup_url(), True, INFO), (inner.x, inner.y + 54))
 
 
 def _card_storage(rect):
@@ -3092,11 +3116,13 @@ def page_ap_info():
     screen.blit(F_NORMAL.render("(open network)", True, FG), (8, y)); y += 26
 
     ip = c_ip.get() or "10.41.0.1"
+    port = c_comitup_port.get()
+    port_suffix = "" if port == 80 else f":{port}"
     screen.blit(F_SMALL.render("Connect to AP, then:", True, MUTED), (8, y)); y += 16
-    screen.blit(F_SMALL.render("Setup WiFi: http://10.41.0.1:8080", True, FG), (8, y)); y += 16
+    screen.blit(F_SMALL.render(f"Setup WiFi: http://10.41.0.1{port_suffix}", True, FG), (8, y)); y += 16
     if not (ip and ip.startswith("10.41.")):
         screen.blit(F_SMALL.render(f"Current IP: {ip}", True, MUTED), (8, y)); y += 16
-    screen.blit(F_SMALL.render(f"Web:  http://{ip}:8080", True, FG), (8, y)); y += 16
+    screen.blit(F_SMALL.render(f"Web:  http://{ip}{port_suffix}", True, FG), (8, y)); y += 16
     screen.blit(F_SMALL.render(f"SSH:  ssh oleg@{ip}", True, FG), (8, y))
 
     back = Btn("Back", "back_to_prev", pygame.Rect(8, SCREEN_H - 54, SCREEN_W - 16, 46), MUTED)
@@ -3130,7 +3156,7 @@ def page_ap_confirm():
             "",
             "Connect to:",
             "  comitup-NNN",
-            "  http://10.41.0.1:8080",
+            f"  {_comitup_url()}",
             "",
             "Pi запомнит новый WiFi",
             "после ввода через portal.",
@@ -3435,7 +3461,7 @@ def do_action(action):
         # Документированный (см. comitup-cli.8) способ переключения в HOTSPOT:
         # `comitup-cli d` — удаляет текущий NM-connection профиль; comitup
         # daemon ловит это через D-Bus и тут же стартует AP. comitup-web
-        # слушает на :8080 (web_port в /etc/comitup.conf), чтобы не
+        # слушает на :8090 (web_port в /etc/comitup.conf), чтобы не
         # конфликтить с CasaOS-gateway на :80.
         if not Path("/usr/sbin/comitup-cli").exists():
             toast("comitup not installed", ERROR)

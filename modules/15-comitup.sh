@@ -33,14 +33,16 @@ if (
         exit 1
     fi
 
-    # web_port: 8080 — чтоб comitup-web не дрался с casaos-gateway за :80.
-    # AP портал тогда доступен на http://10.41.0.1:8080 (показано на дашборде).
+    # web_port: 8090 — выбран осознанно чтобы не конфликтнуть с типичными
+    # NAS-портами: 80 (CasaOS), 8000 (Photoview), 8081 (yt-archiver),
+    # 8096/8097 (Jellyfin). Дашборд читает этот порт из /etc/comitup.conf
+    # динамически и показывает корректный URL без хардкода.
     CONF=/etc/comitup.conf
     if [[ -f "$CONF" ]]; then
         if grep -qE '^[[:space:]]*web_port[[:space:]]*:' "$CONF"; then
-            sudo sed -i -E 's|^[[:space:]]*web_port[[:space:]]*:.*|web_port: 8080|' "$CONF"
+            sudo sed -i -E 's|^[[:space:]]*web_port[[:space:]]*:.*|web_port: 8090|' "$CONF"
         else
-            echo "web_port: 8080" | sudo tee -a "$CONF" >/dev/null
+            echo "web_port: 8090" | sudo tee -a "$CONF" >/dev/null
         fi
         # Рестарт демона — подхватит новый порт. Сервис может не бежать
         # (если не активен AP) — игнорируем код возврата.

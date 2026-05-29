@@ -1622,8 +1622,16 @@ def page_log_view():
     line_h = 12
     max_lines = max(1, (bottom - y) // line_h)
     visible = lines[-max_lines:]
+    # Сжимаем timestamp '[YYYY-MM-DD HH:MM:SS]' → 'HH:MM:SS' — на 320px
+    # такой длинный префикс жрёт половину строки. Дата редко важна на kiosk'е
+    # (логи показывают свежее), час:мин:сек хватает понять последовательность.
+    TS_RE = re.compile(r'^\[\d{4}-\d{2}-\d{2} (\d{2}:\d{2}:\d{2})\]\s*')
+    # На 320px экране F_MONO 11pt = ~7px/char → ~42 chars влезает
+    MAX_CHARS = 42
     for ln in visible:
-        if len(ln) > 52: ln = ln[:50] + "…"
+        ln = TS_RE.sub(r'\1 ', ln)
+        if len(ln) > MAX_CHARS:
+            ln = ln[:MAX_CHARS - 1] + "…"
         screen.blit(F_MONO.render(ln, True, FG), (4, y))
         y += line_h
 
@@ -2908,45 +2916,28 @@ def page_thermal():
             y += 16
 
     # === Кнопки управления ===
-    # Layout: [Mode toggle] над [Enable toggle | Restore] над [Back | Open log]
-    btn_h = 30
-    spacing = 4
-    by = SCREEN_H - 54 - (btn_h + spacing) * 2 - 8
-
-    # Row 1: Mode toggle full-width (warn↔auto). Не активна если DISABLED.
+    # Mode toggle сверху во всю ширину; Back | Restore снизу как стандарт.
+    # Enable/Disable и View log убраны — доступны через TG /thermal и
+    # Menu → Logs → Thermal guard соответственно. Иначе третий ряд не
+    # помещается на 320×480 без обрезки.
     next_mode = "auto" if mode != "auto" else "warn"
-    mode_label_full = f"Mode → {next_mode.upper()}"
     mode_btn_col = ACCENT if next_mode == "auto" else INFO
-    mode_btn = Btn(mode_label_full, "thermal_toggle_mode",
-                   pygame.Rect(8, by, SCREEN_W - 16, btn_h),
+    mode_btn = Btn(f"Mode → {next_mode.upper()}", "thermal_toggle_mode",
+                   pygame.Rect(8, SCREEN_H - 54 - 38, SCREEN_W - 16, 32),
                    mode_btn_col if enabled else MUTED)
     draw_button(mode_btn, F_SMALL)
     if enabled: btns.append(mode_btn)
-    by += btn_h + spacing
 
-    # Row 2: Enable/Disable | Restore
-    half_w2 = (SCREEN_W - 28) // 2
-    en_label = "Disable" if enabled else "Enable"
-    en_col   = MUTED if enabled else ACCENT
-    en_btn   = Btn(en_label, "thermal_toggle_enabled",
-                   pygame.Rect(8, by, half_w2, btn_h), en_col)
-    rest_disabled = not acts
-    rest_btn = Btn("Restore", "thermal_restore",
-                   pygame.Rect(SCREEN_W - 8 - half_w2, by,
-                               half_w2, btn_h),
-                   MUTED if rest_disabled else WARN)
-    draw_button(en_btn, F_SMALL); draw_button(rest_btn, F_SMALL)
-    btns.append(en_btn)
-    if not rest_disabled: btns.append(rest_btn)
-
-    # Row 3 (Bottom): Back | Open log
     half_w = (SCREEN_W - 28) // 2
     back = Btn("Back", "open_menu",
                pygame.Rect(8, SCREEN_H - 54, half_w, 46), MUTED)
-    log_btn = Btn("View log", "thermal_open_log",
-                  pygame.Rect(SCREEN_W - 8 - half_w, SCREEN_H - 54, half_w, 46), INFO)
-    draw_button(back); draw_button(log_btn)
-    btns.extend([back, log_btn])
+    rest_disabled = not acts
+    rest_btn = Btn("Restore", "thermal_restore",
+                   pygame.Rect(SCREEN_W - 8 - half_w, SCREEN_H - 54, half_w, 46),
+                   MUTED if rest_disabled else WARN)
+    draw_button(back); draw_button(rest_btn)
+    btns.append(back)
+    if not rest_disabled: btns.append(rest_btn)
     return btns
 
 

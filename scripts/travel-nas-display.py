@@ -2963,7 +2963,8 @@ def page_thermal():
 
     # === Кнопки управления ===
     # Layout: [Mode toggle] над [Enable toggle | Restore] над [Back | Open log]
-    btn_h = 30
+    # btn_h=40 (вместо 30) — на резистивном MHS35 узкие кнопки промахиваются.
+    btn_h = 40
     spacing = 4
     by = SCREEN_H - 54 - (btn_h + spacing) * 2 - 8
 

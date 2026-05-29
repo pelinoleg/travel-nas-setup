@@ -80,6 +80,7 @@ MODULES=(
     21-tailscale
     22-verify
     23-thermal-guard
+    24-pi-tweaks
 )
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
@@ -123,7 +124,7 @@ export SETUP_REPO_ROOT="$REPO_ROOT"
 
 ALL_COMPONENTS="UPDATE UTILS T7_MOUNT TG_NOTIFY SAMBA PI_BACKUP \
 PHOTO_BACKUP NAS_BACKUP WATCHDOG SYS_MONITOR POWER_MODE TG_LISTENER DAILY_SUM \
-LOG2RAM ZRAM COMITUP CASAOS PHOTOVIEW YTARCHIVER DISPLAY DESKTOP TAILSCALE VERIFY THERMAL_GUARD"
+LOG2RAM ZRAM COMITUP CASAOS PHOTOVIEW YTARCHIVER DISPLAY DESKTOP TAILSCALE VERIFY THERMAL_GUARD PI_TWEAKS"
 
 if [[ "${1:-}" == "--all" ]]; then
     SELECTED="$ALL_COMPONENTS"
@@ -160,6 +161,7 @@ Components:
   TAILSCALE      Zero-config VPN — доступ к Pi из любой сети мира
   VERIFY         Ежемесячный bit-rot/IO scrub T7 (sha256 manifest)
   THERMAL_GUARD  Sustained-temp защита — staged docker throttle/pause/stop
+  PI_TWEAKS      HW watchdog + EEPROM auto-update + WiFi powersave OFF + sysctl
 EOF
     exit 0
 else
@@ -189,6 +191,7 @@ else
         "TAILSCALE"    "Tailscale VPN (доступ к Pi из любой сети)"        ON \
         "VERIFY"       "Ежемесячный bit-rot/IO scrub T7"                  ON \
         "THERMAL_GUARD" "Защита от перегрева (MODE=warn по умолчанию)"    ON \
+        "PI_TWEAKS"    "HW watchdog + EEPROM + WiFi-no-powersave + sysctl"  ON \
         3>&1 1>&2 2>&3) || exit 0
 fi
 
@@ -266,8 +269,8 @@ Hostname: $(hostname).local"
     fi
 fi
 
-# Рекомендация ребута если ставили display / kernel-modules
-if [[ -n "${DO_DISPLAY:-}" ]]; then
+# Рекомендация ребута если ставили display / kernel-modules / dtparam
+if [[ -n "${DO_DISPLAY:-}" || -n "${DO_PI_TWEAKS:-}" ]]; then
     echo ""
     warn "Рекомендуется ребут для применения hostname и других изменений:"
     warn "  sudo reboot"

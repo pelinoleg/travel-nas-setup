@@ -15,6 +15,8 @@ Travel-NAS на Raspberry Pi 5 (или Pi 4) + Samsung T7 Shield 4TB SSD. Дел
 | [docs/VERIFY.md](docs/VERIFY.md) | Bit-rot scrub design |
 | [docs/V2-WEB-DASHBOARD.md](docs/V2-WEB-DASHBOARD.md) | План перехода на web+Chromium kiosk (DSI 800×480) — отложено до приезда нового экрана |
 | [docs/V2-WEB-UI-LAYOUT.md](docs/V2-WEB-UI-LAYOUT.md) | Визуальный язык V2 — layout patterns, page mockups, design tokens, ambient mode |
+| [docs/THERMAL-GUARD.md](docs/THERMAL-GUARD.md) | Staged docker throttle/pause/stop при sustained temp |
+| [docs/PI-TWEAKS.md](docs/PI-TWEAKS.md) | HW watchdog, EEPROM, WiFi/sysctl tunes |
 
 ## Структура
 

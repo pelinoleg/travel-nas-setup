@@ -63,6 +63,7 @@ sudo curl -fsSL "https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/ma
 | 🔐 **TAILSCALE** | Zero-config VPN — доступ к Pi из любой сети мира + SSH без ключей. См. [docs/TAILSCALE.md](docs/TAILSCALE.md) |
 | 🔍 **VERIFY** | Ежемесячный sha256 scrub T7 — ловит bit-rot, bad-sector'а, I/O ошибки. См. [docs/VERIFY.md](docs/VERIFY.md) |
 | 🌡 **THERMAL_GUARD** | Защита от перегрева — staged docker throttle/pause/stop при sustained высокой темпе. MODE=warn по умолчанию. См. [docs/THERMAL-GUARD.md](docs/THERMAL-GUARD.md) |
+| 🔧 **PI_TWEAKS** | HW watchdog (BCM2712), EEPROM auto-update, WiFi powersave OFF, sysctl tunes. См. [docs/PI-TWEAKS.md](docs/PI-TWEAKS.md) |
 
 ## Hardware
 

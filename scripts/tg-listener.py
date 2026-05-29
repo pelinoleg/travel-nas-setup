@@ -161,6 +161,7 @@ def cmd_help(token, chat_id, args):
 `/nas` — статус NAS-бэкапов (модули, размеры, last-run)
 `/docker` — Docker-compose проекты + кнопки Stop/Start/Restart
 `/docker audit` — диагностика UID-mismatch в bind mount'ах
+`/yt` — статус yt-archiver очереди (`/yt pause` / `/yt resume`)
 `/services` — все URL установленных сервисов
 `/configs` — `/etc/travel-nas/` файлы + где что лежит
 `/tailscale` `/ts` — статус Tailscale VPN + peers
@@ -490,6 +491,57 @@ def _ago_short(ts):
     if delta < 3600:  return f"{delta // 60}m"
     if delta < 86400: return f"{delta // 3600}h"
     return f"{delta // 86400}d"
+
+
+def cmd_yt(token, chat_id, args):
+    """yt-archiver pause/resume всех закачек через API.
+    `/yt` — статус (paused/pending/downloading/error).
+    `/yt pause` — приостановить все.
+    `/yt resume` — продолжить."""
+    # URL из yt-archiver.conf или дефолт
+    base = "http://localhost:8081"
+    try:
+        with open("/etc/travel-nas/yt-archiver.conf") as f:
+            for ln in f:
+                m = re.match(r'^\s*URL\s*=\s*["\']?([^"\'\s]+)', ln.strip())
+                if m: base = m.group(1).rstrip("/"); break
+    except Exception:
+        pass
+
+    if not args:
+        try:
+            import urllib.request
+            with urllib.request.urlopen(f"{base}/api/queue/status", timeout=4) as r:
+                s = json.loads(r.read())
+            icon = "⏸" if s.get("paused") else "▶"
+            send(token, chat_id, f"""*YT-Archiver queue* {icon}
+
+paused:       `{s.get("paused")}`
+pending:      {s.get("pending", 0)}
+downloading:  {s.get("downloading", 0)}
+error:        {s.get("error", 0)}
+max parallel: {s.get("max_concurrent", 1)}
+
+`/yt pause` — приостановить все
+`/yt resume` — продолжить""")
+        except Exception as e:
+            send(token, chat_id, f"❌ yt-archiver недоступен: `{e}`")
+        return
+
+    arg = args[0].lower()
+    if arg not in ("pause", "resume"):
+        send(token, chat_id, "Используй `/yt`, `/yt pause`, `/yt resume`.")
+        return
+    try:
+        import urllib.request
+        req = urllib.request.Request(f"{base}/api/queue/{arg}", method="POST")
+        with urllib.request.urlopen(req, timeout=5) as r:
+            r.read()
+        send(token, chat_id,
+             f"⏸ *YT downloads paused.*" if arg == "pause"
+             else f"▶ *YT downloads resumed.*")
+    except Exception as e:
+        send(token, chat_id, f"❌ API request failed: `{e}`")
 
 
 def cmd_docker(token, chat_id, args):
@@ -870,6 +922,7 @@ COMMANDS = {
     "/configs":  cmd_configs,
     "/nas":      cmd_nas,
     "/docker":   cmd_docker,
+    "/yt":       cmd_yt,
     "/reboot":   cmd_reboot,
     "/shutdown": cmd_shutdown,
     "/yes":      cmd_yes,

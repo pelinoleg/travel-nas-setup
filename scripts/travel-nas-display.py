@@ -623,10 +623,32 @@ def _yt_stats():
     except Exception:
         out["queue"]       = {}
         out["downloading"] = []
+    # /api/queue/status даёт paused flag — нужен для toggle-кнопки
+    try:
+        with urllib.request.urlopen(f"{base}/api/queue/status", timeout=3) as r:
+            qs = json.loads(r.read())
+            out["paused"] = bool(qs.get("paused"))
+    except Exception:
+        out["paused"] = False
     return out
 
 
 c_yt = Cached(_yt_stats, 30)
+
+
+def _yt_toggle_pause(currently_paused):
+    """POST'ит pause или resume в зависимости от текущего состояния.
+    Возвращает (ok, new_paused_state)."""
+    base = _yt_archiver_url()
+    endpoint = "resume" if currently_paused else "pause"
+    try:
+        req = urllib.request.Request(f"{base}/api/queue/{endpoint}",
+                                     method="POST")
+        with urllib.request.urlopen(req, timeout=4) as r:
+            r.read()
+        return True, not currently_paused
+    except Exception:
+        return False, currently_paused
 
 
 def _parse_services_conf(text):
@@ -2009,7 +2031,13 @@ def page_ytarchiver():
 
         # === Очередь: pending / downloading / errors ===
         q = data.get("queue") or {}
-        screen.blit(F_TINY.render("QUEUE", True, MUTED), (10, y))
+        paused = bool(data.get("paused"))
+        # При paused — жёлтый заголовок "QUEUE · PAUSED" чтобы сразу было видно
+        if paused:
+            q_label = "QUEUE  ·  PAUSED"
+            screen.blit(F_TINY.render(q_label, True, WARN), (10, y))
+        else:
+            screen.blit(F_TINY.render("QUEUE", True, MUTED), (10, y))
         y += 14
 
         dl_count   = q.get("downloading", 0)
@@ -2050,6 +2078,21 @@ def page_ytarchiver():
                 y += 10
                 screen.blit(F_TINY.render(title, True, MUTED), (10, y))
                 y += 14
+
+    # Pause/Resume — толстая кнопка над bottom row. Лейбл и цвет зависят
+    # от текущего paused-state из /api/queue/status. Если yt недоступен —
+    # кнопку не рисуем (data is None ушла в ветку "не доступен" выше).
+    if data is not None:
+        is_paused = bool(data.get("paused"))
+        if is_paused:
+            pr_label, pr_action, pr_color = "▶ Resume downloads", "yt_resume", ACCENT
+        else:
+            pr_label, pr_action, pr_color = "⏸ Pause downloads",  "yt_pause",  WARN
+        pr_y = SCREEN_H - 54 - 38
+        pr_btn = Btn(pr_label, pr_action,
+                     pygame.Rect(8, pr_y, SCREEN_W - 16, 32), pr_color)
+        draw_button(pr_btn, F_SMALL)
+        btns.append(pr_btn)
 
     # Bottom: Back | Refresh — Back всегда слева
     half_w = (SCREEN_W - 28) // 2
@@ -3013,6 +3056,16 @@ def do_action(action):
     elif action == "yt_refresh":
         c_yt.invalidate()
         toast("YT stats refreshing…", INFO)
+    elif action in ("yt_pause", "yt_resume"):
+        # Текущее состояние берём из кэша; toggle вызывает API.
+        current = bool((c_yt.get() or {}).get("paused"))
+        ok, new_state = _yt_toggle_pause(current)
+        c_yt.invalidate()  # пересчитать с новым state
+        if ok:
+            toast("All downloads paused" if new_state else "Downloads resumed",
+                  WARN if new_state else ACCENT)
+        else:
+            toast("yt-archiver: API request failed", ERROR)
     elif action == "open_system_detail":  go(PAGE_SYSTEM_DETAIL)
     elif action == "system_refresh":
         c_top_cpu.invalidate(); c_top_mem.invalidate()

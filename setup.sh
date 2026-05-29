@@ -58,7 +58,6 @@ fi
 MODULES=(
     01-update
     02-utils
-    03-hostname
     04-t7-mount
     05-tg-notify
     06-samba
@@ -121,7 +120,7 @@ export SETUP_REPO_ROOT="$REPO_ROOT"
 # Меню выбора компонентов
 # =============================================================================
 
-ALL_COMPONENTS="UPDATE UTILS HOSTNAME T7_MOUNT TG_NOTIFY SAMBA PI_BACKUP \
+ALL_COMPONENTS="UPDATE UTILS T7_MOUNT TG_NOTIFY SAMBA PI_BACKUP \
 PHOTO_BACKUP NAS_BACKUP WATCHDOG SYS_MONITOR POWER_MODE TG_LISTENER DAILY_SUM \
 LOG2RAM ZRAM COMITUP CASAOS PHOTOVIEW YTARCHIVER DISPLAY DESKTOP TAILSCALE VERIFY"
 
@@ -138,7 +137,6 @@ Usage:
 Components:
   UPDATE         apt update + upgrade
   UTILS          htop, ncdu, tmux, git, smartmontools, exiftool, etc + travel-nas-setup shortcut
-  HOSTNAME       Переименовать Pi в "pi" (pi.local)
   T7_MOUNT       Mount внешнего диска в /mnt/t7 (wizard для форматирования)
   TG_NOTIFY      Telegram уведомления (helper)
   SAMBA          SMB share /mnt/t7
@@ -167,7 +165,6 @@ else
         --checklist "Что устанавливать? (Space — выбор, Enter — OK)" 30 80 24 \
         "UPDATE"       "apt update + upgrade"                              ON \
         "UTILS"        "Утилиты + travel-nas-setup команда + LED helper"  ON \
-        "HOSTNAME"     "Переименовать в pi (доступ pi.local)"             ON \
         "T7_MOUNT"     "Внешний диск → /mnt/t7 (wizard форматирования)"   ON \
         "TG_NOTIFY"    "Telegram уведомления"                             ON \
         "SAMBA"        "Samba шара /mnt/t7"                               ON \
@@ -266,8 +263,8 @@ Hostname: $(hostname).local"
     fi
 fi
 
-# Рекомендация ребута если ставили hostname / display / kernel-modules
-if [[ -n "${DO_HOSTNAME:-}" || -n "${DO_DISPLAY:-}" ]]; then
+# Рекомендация ребута если ставили display / kernel-modules
+if [[ -n "${DO_DISPLAY:-}" ]]; then
     echo ""
     warn "Рекомендуется ребут для применения hostname и других изменений:"
     warn "  sudo reboot"

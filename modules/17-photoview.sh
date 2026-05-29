@@ -73,7 +73,7 @@ EOF
     cd /opt/photoview
     sudo docker compose up -d
 ); then
-    mark_ok "PHOTOVIEW" "http://pi.local:8000 (UI path: /t7/usb-imports)"
+    mark_ok "PHOTOVIEW" "http://$(hostname).local:8000 (UI path: /t7/usb-imports)"
 else
     mark_fail "PHOTOVIEW" "docker compose failed"
 fi

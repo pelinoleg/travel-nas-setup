@@ -41,7 +41,7 @@ docs/                       Long-form документация.
 ## Рабочий цикл с пользователем
 
 1. Пиши скрипт/правку → коммит в репо
-2. `ssh oleg@pi.local` (sshpass через env `SSHPASS=hammett`) — пароль `hammett`
+2. `ssh oleg@<host>.local` (sshpass через env `SSHPASS=hammett`) — пароль `hammett`. Hostname задаёт юзер в Pi Imager при прошивке — НЕ хардкодь `pi.local` в коде.
 3. `sudo -S /usr/local/bin/travel-nas-update` тянет с GitHub
 4. После изменений в `REQUIRED_CMDS` (sudoers list) нужен **второй прогон** — sudoers sync прогоняется уже из нового кода
 

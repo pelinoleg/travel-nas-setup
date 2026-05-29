@@ -21,13 +21,15 @@ if (
     # set-led — управление встроенным power-LED Pi из других скриптов
     fetch_script "set-led.sh"           "$SCRIPT_DIR/set-led.sh"
 
-    # /etc/motd — что увидит юзер при ssh-логине
-    sudo tee /etc/motd >/dev/null << 'EOF'
+    # /etc/motd — что увидит юзер при ssh-логине. Hostname берётся живой
+    # чтобы при перепрошивке (новое имя через Imager) MOTD не отставал.
+    HOST_LOCAL="$(hostname).local"
+    sudo tee /etc/motd >/dev/null << EOF
 
   ╔══════════════════════════════════════════════════════════╗
   ║                      Travel-NAS                          ║
   ║                                                          ║
-  ║   Dashboard:  http://pi.local                            ║
+  ║   Dashboard:  http://${HOST_LOCAL}
   ║   Re-config:  travel-nas-setup                           ║
   ║   Update:     travel-nas-update                          ║
   ║   Logs:       tail -F /mnt/t7/_logs/*.log                ║

@@ -130,7 +130,7 @@ EOF
     sudo chown "$(whoami):$(whoami)" "$CONFIG_DIR/yt-archiver.conf"
     sudo chmod 0644 "$CONFIG_DIR/yt-archiver.conf"
 ); then
-    mark_ok "YTARCHIVER" "http://pi.local:8081"
+    mark_ok "YTARCHIVER" "http://$(hostname).local:8081"
 else
     mark_fail "YTARCHIVER" "docker compose failed"
 fi

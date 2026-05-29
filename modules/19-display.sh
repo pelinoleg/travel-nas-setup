@@ -71,6 +71,7 @@ $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/fast-reboot.sh
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/systemctl restart comitup
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/systemctl stop nas-backup-runtime
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/systemctl start --no-block nas-verify.service
+$DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/thermal-guard.py --restore
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/touch-calibrate.sh
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/screen-rotate.sh 0
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/screen-rotate.sh 90

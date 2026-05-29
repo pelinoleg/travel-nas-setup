@@ -167,6 +167,7 @@ def cmd_help(token, chat_id, args):
 `/tailscale` `/ts` — статус Tailscale VPN + peers
 `/verify` — последний bit-rot/IO scrub T7 (`/verify run` чтоб запустить сейчас)
 `/rotate` `/flip` — flip ориентации экрана 0°↔180° + ребут
+`/thermal` — sustained-temp защита (`enable`/`disable`/`mode`/`restore`)
 
 🔄 *Действия*
 `/backup` — NAS backup
@@ -491,6 +492,108 @@ def _ago_short(ts):
     if delta < 3600:  return f"{delta // 60}m"
     if delta < 86400: return f"{delta // 3600}h"
     return f"{delta // 86400}d"
+
+
+THERMAL_CONF = Path("/etc/travel-nas/thermal-guard.conf")
+
+
+def _thermal_set_key(key, value):
+    """Меняет KEY=VALUE в /etc/travel-nas/thermal-guard.conf. Файл owned юзером."""
+    if not THERMAL_CONF.exists():
+        return False
+    try:
+        lines = THERMAL_CONF.read_text().splitlines()
+        found = False
+        for i, ln in enumerate(lines):
+            m = re.match(rf"^\s*{re.escape(key)}\s*=", ln)
+            if m:
+                lines[i] = f"{key}={value}"
+                found = True
+                break
+        if not found:
+            lines.append(f"{key}={value}")
+        THERMAL_CONF.write_text("\n".join(lines) + "\n")
+        return True
+    except Exception:
+        return False
+
+
+def cmd_thermal(token, chat_id, args):
+    """Thermal-guard статус + переключатели.
+    `/thermal`              — статус (temp/mode/enabled/actions)
+    `/thermal enable|disable`  — включить/выключить
+    `/thermal mode warn|auto`  — переключить mode
+    `/thermal restore`         — форс-restore всех текущих actions"""
+    if not Path("/usr/local/bin/thermal-guard.py").exists():
+        send(token, chat_id, "_thermal-guard не установлен_ (`travel-nas-setup` → THERMAL_GUARD)")
+        return
+
+    if args:
+        arg = args[0].lower()
+        if arg == "enable":
+            if _thermal_set_key("ENABLED", "true"):
+                send(token, chat_id, "✓ thermal-guard *enabled*")
+            else:
+                send(token, chat_id, "❌ не смог обновить conf")
+            return
+        if arg == "disable":
+            if _thermal_set_key("ENABLED", "false"):
+                send(token, chat_id, "⏸ thermal-guard *disabled* (timer остаётся, но скрипт выходит сразу)")
+            else:
+                send(token, chat_id, "❌ не смог обновить conf")
+            return
+        if arg == "mode" and len(args) >= 2 and args[1].lower() in ("warn", "auto"):
+            new_mode = args[1].lower()
+            if _thermal_set_key("MODE", new_mode):
+                send(token, chat_id, f"✓ MODE → `{new_mode}`")
+            else:
+                send(token, chat_id, "❌ не смог обновить conf")
+            return
+        if arg == "restore":
+            try:
+                out = subprocess.check_output(
+                    ["sudo", "-n", "/usr/local/bin/thermal-guard.py", "--restore"],
+                    timeout=60, stderr=subprocess.STDOUT,
+                ).decode()
+                send(token, chat_id, f"♻ *Restore:*\n```\n{out.strip()}\n```")
+            except Exception as e:
+                send(token, chat_id, f"❌ restore failed: `{e}`")
+            return
+        send(token, chat_id, "Используй `/thermal`, `/thermal enable|disable`, `/thermal mode warn|auto`, `/thermal restore`.")
+        return
+
+    # No args — текущий status
+    try:
+        out = subprocess.check_output(
+            ["/usr/local/bin/thermal-guard.py", "--status"],
+            timeout=5, stderr=subprocess.STDOUT,
+        ).decode()
+        s = json.loads(out)
+    except Exception as e:
+        send(token, chat_id, f"❌ thermal-guard --status failed: `{e}`")
+        return
+
+    on_icon  = "✅" if s.get("enabled") else "🔴"
+    mode     = s.get("mode") or "?"
+    temp     = s.get("last_temp")
+    thr      = s.get("thresholds") or {}
+    acts     = s.get("actions") or []
+
+    acts_block = "\n".join(
+        f"  • `{a['container']}` → `{a['stage']}`" for a in acts
+    ) or "_(нет — система не вмешивается)_"
+
+    send(token, chat_id, f"""*Thermal guard* {on_icon}
+
+mode:       `{mode}`
+temp:       `{temp}°C`  (hot {s.get('hot_consec',0)}m · cool {s.get('cool_consec',0)}m)
+thresholds: throttle `{thr.get('throttle')}°` · pause `{thr.get('pause')}°` · stop `{thr.get('stop')}°`
+sustained:  `{thr.get('sustained_m')} min` · cooldown `{thr.get('cool')}° × {thr.get('cool_m')}m`
+
+*Текущие actions:*
+{acts_block}
+
+`/thermal enable|disable` · `/thermal mode warn|auto` · `/thermal restore`""")
 
 
 def cmd_yt(token, chat_id, args):
@@ -923,6 +1026,7 @@ COMMANDS = {
     "/nas":      cmd_nas,
     "/docker":   cmd_docker,
     "/yt":       cmd_yt,
+    "/thermal":  cmd_thermal,
     "/reboot":   cmd_reboot,
     "/shutdown": cmd_shutdown,
     "/yes":      cmd_yes,

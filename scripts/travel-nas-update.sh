@@ -91,6 +91,7 @@ declare -A SCRIPTS=(
     [travel-nas-display.py]=/usr/local/bin/travel-nas-display.py
     [nas-backup-status.py]=/usr/local/bin/nas-backup-status.py
     [nas-verify.py]=/usr/local/bin/nas-verify.py
+    [thermal-guard.py]=/usr/local/bin/thermal-guard.py
     [tg-listener.py]=/usr/local/bin/tg-listener.py
     [backup-progress-writer.py]=/usr/local/bin/backup-progress-writer.py
     [99-travel-nas-power]=/etc/NetworkManager/dispatcher.d/99-travel-nas-power
@@ -202,6 +203,7 @@ REQUIRED_CMDS=(
     "/usr/bin/systemctl restart comitup"
     "/usr/bin/systemctl stop nas-backup-runtime"
     "/usr/bin/systemctl start --no-block nas-verify.service"
+    "/usr/local/bin/thermal-guard.py --restore"
     "/usr/local/bin/touch-calibrate.sh"
     "/usr/local/bin/screen-rotate.sh 0"
     "/usr/local/bin/screen-rotate.sh 90"

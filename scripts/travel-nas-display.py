@@ -2917,6 +2917,30 @@ def page_thermal():
         f"restore при ≤ {thr.get('cool','?')}° подряд", True, MUTED), (10, y))
     y += 16
 
+    # === Legend режимов — чтоб не забыть ===
+    pygame.draw.line(screen, BTN_BG, (10, y), (SCREEN_W - 10, y), 1)
+    y += 6
+    # WARN/AUTO подсвечиваем тем же цветом что бейдж справа сверху.
+    # Текущий режим — ярко, второй — приглушённо чтоб контраст.
+    warn_active = mode == "warn"
+    auto_active = mode == "auto"
+    warn_col = INFO   if warn_active else MUTED
+    auto_col = ACCENT if auto_active else MUTED
+    desc_col = FG     if warn_active or auto_active else MUTED
+
+    w_lbl = F_TINY.render("WARN", True, warn_col)
+    screen.blit(w_lbl, (10, y))
+    screen.blit(F_TINY.render(" — только TG-алёрты, ничего не трогаем",
+                              True, desc_col if warn_active else MUTED),
+                (10 + w_lbl.get_width(), y))
+    y += 14
+    a_lbl = F_TINY.render("AUTO", True, auto_col)
+    screen.blit(a_lbl, (10, y))
+    screen.blit(F_TINY.render(" — throttle → pause → stop top-CPU",
+                              True, desc_col if auto_active else MUTED),
+                (10 + a_lbl.get_width(), y))
+    y += 16
+
     # === Actions list ===
     pygame.draw.line(screen, BTN_BG, (10, y), (SCREEN_W - 10, y), 1)
     y += 6

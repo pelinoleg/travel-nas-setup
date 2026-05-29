@@ -975,12 +975,19 @@ def draw_top_strip(page_label=None):
     if sleep_to > 0 and display_on and not sleep_blocked:
         rem = sleep_to - (time.time() - last_activity)
         if rem >= 1:   # < 1 сек не показываем — sleep сейчас сработает
+            # Формат: показываем 2 единицы granularity чтобы не было
+            # сюрприза. 4h47m раньше отображалось как просто "4h" — юзер
+            # не понимал что ещё ~час до sleep'а.
             if rem < 60:
                 rem_str = f"{int(rem)}s"
+            elif rem < 300:                       # < 5 мин — секунды важны
+                m, s = int(rem // 60), int(rem % 60)
+                rem_str = f"{m}m {s:02d}s"
             elif rem < 3600:
                 rem_str = f"{int(rem // 60)}m"
             else:
-                rem_str = f"{int(rem // 3600)}h"
+                h, m = int(rem // 3600), int((rem % 3600) // 60)
+                rem_str = f"{h}h {m:02d}m"
             rem_col = ERROR if rem < 10 else (WARN if rem < 60 else MUTED)
             # Separator `·` перед sleep — отделяем power-блок от sleep visually.
             # `z ` — universal sleep notation (emoji 💤 не в DejaVu).

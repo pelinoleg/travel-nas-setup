@@ -65,6 +65,7 @@ LOG_OPTIONS = [
     ("NAS backup",     "__nas_latest__"),
     ("Watchdog",       "/mnt/t7/_logs/disk-watchdog.log"),
     ("System monitor", "/mnt/t7/_logs/system-monitor.log"),
+    ("Thermal guard",  "/mnt/t7/_logs/thermal-guard.log"),
     ("Display errors", str(ERROR_LOG)),
 ]
 
@@ -1049,6 +1050,7 @@ PAGE_SYSTEM_DETAIL  = "system_detail"
 PAGE_STORAGE_DETAIL = "storage_detail"
 PAGE_NETWORK_DETAIL = "network_detail"
 PAGE_PHOTO_BACKUPS  = "photo_backups"
+PAGE_THERMAL        = "thermal"
 
 state = {
     "page":        PAGE_STATUS,
@@ -1490,6 +1492,7 @@ def page_menu():
         ("Docker",   "open_docker",   INFO, False),
         ("YT",       "open_yt",       INFO, False),
     ])
+    row_full("Thermal guard", "open_thermal", INFO)
 
     # SYSTEM — wifi/власть + Power-режимы (юзер просил включить сюда)
     section("SYSTEM", WARN)
@@ -2554,6 +2557,76 @@ def _verify_status():
 c_verify = Cached(_verify_status, 60)
 
 
+def _thermal_state():
+    """JSON-state thermal-guard'а из /var/lib/travel-nas/thermal-guard.state.json
+    плюс актуальный conf (mode/enabled). Возвращает dict со всеми нужными полями."""
+    out = {
+        "installed": Path("/usr/local/bin/thermal-guard.py").exists(),
+        "enabled":   True,
+        "mode":      "warn",
+        "last_temp": None,
+        "hot":       0,
+        "cool":      0,
+        "actions":   [],
+        "thresholds": {},
+    }
+    if not out["installed"]:
+        return out
+    # State JSON
+    try:
+        st = json.loads(Path("/var/lib/travel-nas/thermal-guard.state.json").read_text())
+        out["last_temp"] = st.get("last_temp")
+        out["hot"]       = st.get("hot_consec", 0)
+        out["cool"]      = st.get("cool_consec", 0)
+        out["actions"]   = st.get("actions") or []
+    except Exception:
+        pass
+    # Conf (mode + enabled + thresholds)
+    try:
+        for ln in Path("/etc/travel-nas/thermal-guard.conf").read_text().splitlines():
+            ln = ln.strip()
+            if not ln or ln.startswith("#"):
+                continue
+            m = re.match(r'^([A-Z_]+)\s*=\s*"?([^"]*)"?\s*$', ln)
+            if not m:
+                continue
+            k, v = m.group(1), m.group(2)
+            if k == "ENABLED":          out["enabled"] = v.lower() == "true"
+            elif k == "MODE":           out["mode"] = v.lower()
+            elif k == "THROTTLE_TEMP":  out["thresholds"]["throttle"] = int(v)
+            elif k == "PAUSE_TEMP":     out["thresholds"]["pause"]    = int(v)
+            elif k == "STOP_TEMP":      out["thresholds"]["stop"]     = int(v)
+            elif k == "COOLDOWN_TEMP":  out["thresholds"]["cool"]     = int(v)
+    except Exception:
+        pass
+    return out
+
+
+c_thermal = Cached(_thermal_state, 8)
+
+
+def _thermal_write_conf_key(key, value):
+    """Меняет KEY=VALUE в /etc/travel-nas/thermal-guard.conf (owned юзером).
+    True если получилось записать. Используется кнопками страницы Thermal."""
+    p = Path("/etc/travel-nas/thermal-guard.conf")
+    if not p.exists():
+        return False
+    try:
+        lines = p.read_text().splitlines()
+        found = False
+        for i, ln in enumerate(lines):
+            if re.match(rf"^\s*{re.escape(key)}\s*=", ln):
+                lines[i] = f"{key}={value}"
+                found = True
+                break
+        if not found:
+            lines.append(f"{key}={value}")
+        p.write_text("\n".join(lines) + "\n")
+        return True
+    except Exception:
+        return False
+
+
 def _net_diag():
     """Сеть: интерфейс, ssid/signal/bitrate, IP, gateway, DNS, MAC, mode."""
     info = {
@@ -2751,6 +2824,132 @@ def page_system_detail():
     return btns
 
 
+def page_thermal():
+    """Управление thermal-guard'ом: статус, mode toggle, enable/disable, restore."""
+    screen.fill(BG)
+    y = draw_top_strip("Thermal guard")
+    y += 8
+    btns = []
+    t = c_thermal.get() or {}
+
+    if not t.get("installed"):
+        screen.blit(F_NORMAL.render("thermal-guard не установлен", True, ERROR), (10, y))
+        y += 24
+        screen.blit(F_SMALL.render("travel-nas-setup → THERMAL_GUARD", True, MUTED), (10, y))
+        back = Btn("Back", "open_menu",
+                   pygame.Rect(8, SCREEN_H - 54, SCREEN_W - 16, 46), MUTED)
+        draw_button(back); return [back]
+
+    # === Заголовок: большая температура + цветной mode-бейдж ===
+    temp = t.get("last_temp")
+    thr = t.get("thresholds") or {}
+    if temp is None:
+        temp_str = "?"
+        temp_col = MUTED
+    else:
+        temp_str = f"{temp}°C"
+        if temp >= thr.get("stop", 85):       temp_col = ERROR
+        elif temp >= thr.get("pause", 82):    temp_col = ERROR
+        elif temp >= thr.get("throttle", 80): temp_col = WARN
+        elif temp <= thr.get("cool", 70):     temp_col = ACCENT
+        else:                                 temp_col = FG
+
+    big = F_LARGE.render(temp_str, True, temp_col)
+    screen.blit(big, (10, y))
+
+    mode = t.get("mode", "warn")
+    enabled = t.get("enabled", True)
+    if not enabled:
+        mode_label, mode_col = "DISABLED", MUTED
+    elif mode == "auto":
+        mode_label, mode_col = "AUTO", ACCENT
+    else:
+        mode_label, mode_col = "WARN", INFO
+    m_s = F_NORMAL.render(mode_label, True, mode_col)
+    screen.blit(m_s, (SCREEN_W - 10 - m_s.get_width(), y + 8))
+    y += 36
+
+    # Hot/cool counters
+    h, cl = t.get("hot", 0), t.get("cool", 0)
+    screen.blit(F_TINY.render(
+        f"hot {h}m  ·  cool {cl}m", True, MUTED), (10, y))
+    y += 14
+    pygame.draw.line(screen, BTN_BG, (10, y), (SCREEN_W - 10, y), 1)
+    y += 6
+
+    # === Thresholds компактно ===
+    th_line = (f"throttle {thr.get('throttle','?')}°  "
+               f"pause {thr.get('pause','?')}°  "
+               f"stop {thr.get('stop','?')}°")
+    screen.blit(F_TINY.render(th_line, True, MUTED), (10, y))
+    y += 14
+    screen.blit(F_TINY.render(
+        f"restore при ≤ {thr.get('cool','?')}° подряд", True, MUTED), (10, y))
+    y += 16
+
+    # === Actions list ===
+    pygame.draw.line(screen, BTN_BG, (10, y), (SCREEN_W - 10, y), 1)
+    y += 6
+    screen.blit(F_TINY.render("ACTIONS", True, MUTED), (10, y))
+    y += 14
+    acts = t.get("actions") or []
+    if not acts:
+        screen.blit(F_SMALL.render("система не вмешивается", True, MUTED), (10, y))
+        y += 16
+    else:
+        for a in acts[:6]:
+            name = (a.get("container") or "?")
+            if len(name) > 24: name = name[:22] + "…"
+            stage = a.get("stage", "?")
+            st_col = ERROR if stage == "stop" else (WARN if stage == "pause" else INFO)
+            screen.blit(F_SMALL.render(name, True, FG), (10, y))
+            s_s = F_SMALL.render(stage, True, st_col)
+            screen.blit(s_s, (SCREEN_W - 10 - s_s.get_width(), y))
+            y += 16
+
+    # === Кнопки управления ===
+    # Layout: [Mode toggle] над [Enable toggle | Restore] над [Back | Open log]
+    btn_h = 30
+    spacing = 4
+    by = SCREEN_H - 54 - (btn_h + spacing) * 2 - 8
+
+    # Row 1: Mode toggle full-width (warn↔auto). Не активна если DISABLED.
+    next_mode = "auto" if mode != "auto" else "warn"
+    mode_label_full = f"Mode → {next_mode.upper()}"
+    mode_btn_col = ACCENT if next_mode == "auto" else INFO
+    mode_btn = Btn(mode_label_full, "thermal_toggle_mode",
+                   pygame.Rect(8, by, SCREEN_W - 16, btn_h),
+                   mode_btn_col if enabled else MUTED)
+    draw_button(mode_btn, F_SMALL)
+    if enabled: btns.append(mode_btn)
+    by += btn_h + spacing
+
+    # Row 2: Enable/Disable | Restore
+    half_w2 = (SCREEN_W - 28) // 2
+    en_label = "Disable" if enabled else "Enable"
+    en_col   = MUTED if enabled else ACCENT
+    en_btn   = Btn(en_label, "thermal_toggle_enabled",
+                   pygame.Rect(8, by, half_w2, btn_h), en_col)
+    rest_disabled = not acts
+    rest_btn = Btn("Restore", "thermal_restore",
+                   pygame.Rect(SCREEN_W - 8 - half_w2, by,
+                               half_w2, btn_h),
+                   MUTED if rest_disabled else WARN)
+    draw_button(en_btn, F_SMALL); draw_button(rest_btn, F_SMALL)
+    btns.append(en_btn)
+    if not rest_disabled: btns.append(rest_btn)
+
+    # Row 3 (Bottom): Back | Open log
+    half_w = (SCREEN_W - 28) // 2
+    back = Btn("Back", "open_menu",
+               pygame.Rect(8, SCREEN_H - 54, half_w, 46), MUTED)
+    log_btn = Btn("View log", "thermal_open_log",
+                  pygame.Rect(SCREEN_W - 8 - half_w, SCREEN_H - 54, half_w, 46), INFO)
+    draw_button(back); draw_button(log_btn)
+    btns.extend([back, log_btn])
+    return btns
+
+
 def page_configs():
     """Шпаргалка где что лежит — чтоб не забыть перед перепрошивкой."""
     screen.fill(BG)
@@ -2758,12 +2957,13 @@ def page_configs():
     y += 6
 
     confs = [
-        ("/etc/travel-nas/tg-notify.conf",    "Telegram bot token"),
-        ("/etc/travel-nas/nas-backup.conf",   "NAS host + password"),
-        ("/etc/travel-nas/services.conf",     "Dashboard URL list"),
-        ("/etc/travel-nas/power-mode.conf",   "Home WiFi SSIDs"),
-        ("/etc/travel-nas/photo-backup.conf", "USB backup settings"),
-        ("/etc/travel-nas/t7-info.conf",      "T7 UUID (auto)"),
+        ("/etc/travel-nas/tg-notify.conf",      "Telegram bot token"),
+        ("/etc/travel-nas/nas-backup.conf",     "NAS host + password"),
+        ("/etc/travel-nas/services.conf",       "Dashboard URL list"),
+        ("/etc/travel-nas/power-mode.conf",     "Home WiFi SSIDs"),
+        ("/etc/travel-nas/photo-backup.conf",   "USB backup settings"),
+        ("/etc/travel-nas/thermal-guard.conf",  "Перегрев: mode/пороги/excludes"),
+        ("/etc/travel-nas/t7-info.conf",        "T7 UUID (auto)"),
     ]
 
     screen.blit(F_TINY.render("/etc/travel-nas/  (●=exists)", True, MUTED), (10, y))
@@ -2958,6 +3158,7 @@ PAGES = {
     PAGE_STORAGE_DETAIL: page_storage_detail,
     PAGE_NETWORK_DETAIL: page_network_detail,
     PAGE_PHOTO_BACKUPS:  page_photo_backups,
+    PAGE_THERMAL:        page_thermal,
 }
 
 
@@ -3053,6 +3254,41 @@ def do_action(action):
     elif action == "open_configs":      go(PAGE_CONFIGS)
     elif action == "open_docker":       go(PAGE_DOCKER)
     elif action == "open_yt":           go(PAGE_YTARCHIVER)
+    elif action == "open_thermal":
+        c_thermal.invalidate(); go(PAGE_THERMAL)
+    elif action == "thermal_toggle_mode":
+        cur = (c_thermal.get() or {}).get("mode", "warn")
+        new = "auto" if cur != "auto" else "warn"
+        if _thermal_write_conf_key("MODE", new):
+            c_thermal.invalidate()
+            toast(f"Thermal mode → {new}", ACCENT if new == "auto" else INFO)
+        else:
+            toast("conf write failed", ERROR)
+    elif action == "thermal_toggle_enabled":
+        cur = (c_thermal.get() or {}).get("enabled", True)
+        new = "false" if cur else "true"
+        if _thermal_write_conf_key("ENABLED", new):
+            c_thermal.invalidate()
+            toast(f"Thermal {'enabled' if new == 'true' else 'disabled'}",
+                  ACCENT if new == "true" else MUTED)
+        else:
+            toast("conf write failed", ERROR)
+    elif action == "thermal_restore":
+        try:
+            subprocess.run(["sudo", "-n", "/usr/local/bin/thermal-guard.py",
+                            "--restore"], timeout=60, capture_output=True)
+            c_thermal.invalidate()
+            toast("Restored all actions", ACCENT)
+        except Exception:
+            toast("restore failed", ERROR)
+    elif action == "thermal_open_log":
+        # Открыть log_view для thermal-guard. Ищем индекс в LOG_OPTIONS.
+        for i, (name, _) in enumerate(LOG_OPTIONS):
+            if name == "Thermal guard":
+                state["log_idx"] = i
+                state["prev_page"] = PAGE_THERMAL  # чтобы Back из log вернуло сюда
+                go(PAGE_LOG_VIEW)
+                break
     elif action == "yt_refresh":
         c_yt.invalidate()
         toast("YT stats refreshing…", INFO)

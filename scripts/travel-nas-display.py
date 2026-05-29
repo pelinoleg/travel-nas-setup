@@ -1443,6 +1443,21 @@ def _menu_helpers(btns, btn_h=36, gap_row=2, sect_h=12):
             btns.append(b); draw_button(b)
         set_y(get_y() + btn_h + gap_row)
 
+    def row_quad(items):
+        """4 кнопки в ряд — для секций с большим списком (INFO). Меньшие
+        кнопки, но влезает 4 вместо 3."""
+        gap = 4
+        quad_w = (SCREEN_W - margin * 2 - gap * 3) // 4
+        for i, item in enumerate(items):
+            if item is None or item[0] is None:
+                continue
+            lbl, act, col, prim = item
+            x = margin + i * (quad_w + gap)
+            r = pygame.Rect(x, get_y(), quad_w, btn_h)
+            b = Btn(lbl, act, r, col, primary=prim)
+            btns.append(b); draw_button(b)
+        set_y(get_y() + btn_h + gap_row)
+
     def bottom_pair(l1, a1, l2, a2):
         bh = 48
         bot_y = SCREEN_H - bh - 8
@@ -1453,7 +1468,8 @@ def _menu_helpers(btns, btn_h=36, gap_row=2, sect_h=12):
         draw_button(b1); draw_button(b2)
         btns.extend([b1, b2])
 
-    return set_y, get_y, section, row_full, row_pair, row_triple, bottom_pair
+    return (set_y, get_y, section, row_full, row_pair, row_triple,
+            row_quad, bottom_pair)
 
 
 def page_menu():
@@ -1464,8 +1480,8 @@ def page_menu():
     y0 = draw_top_strip("Menu") + 6
     btns = []
     # btn_h=48: чуть крупнее под резистивный touch (MHS35 шумит у краёв)
-    (set_y, _g, section, row_full, row_pair, row_triple, bottom_pair
-     ) = _menu_helpers(btns, btn_h=48, gap_row=6, sect_h=16)
+    (set_y, _g, section, row_full, row_pair, row_triple, row_quad,
+     bottom_pair) = _menu_helpers(btns, btn_h=48, gap_row=6, sect_h=16)
     set_y(y0)
 
     # NAS — Run/Stop пара с NAS status. Run превращается в Stop когда
@@ -1480,19 +1496,22 @@ def page_menu():
                  "NAS status",  "open_nas_status",  INFO,
                  primary1=True)
 
-    # INFO — что почитать. 6 элементов в 2 ряда по 3.
+    # INFO — что почитать. 7 элементов: 4 + 3 (row_quad сделает кнопки
+    # чуть уже но 4 влезает на 320px). Иначе Thermal не помещается без
+    # выпихивания SYSTEM-секции за нижнюю кнопку Back/Exit.
     section("INFO", INFO)
-    row_triple([
+    row_quad([
         ("Today",    "open_daily",    INFO, False),
         ("Logs",     "open_logs",     INFO, False),
         ("Services", "open_services", INFO, False),
-    ])
-    row_triple([
         ("Configs",  "open_configs",  INFO, False),
+    ])
+    row_quad([
         ("Docker",   "open_docker",   INFO, False),
         ("YT",       "open_yt",       INFO, False),
+        ("Thermal",  "open_thermal",  INFO, False),
+        None,
     ])
-    row_full("Thermal guard", "open_thermal", INFO)
 
     # SYSTEM — wifi/власть + Power-режимы (юзер просил включить сюда)
     section("SYSTEM", WARN)
@@ -1622,10 +1641,13 @@ def page_log_view():
     line_h = 12
     max_lines = max(1, (bottom - y) // line_h)
     visible = lines[-max_lines:]
-    # Сжимаем timestamp '[YYYY-MM-DD HH:MM:SS]' → 'HH:MM:SS' — на 320px
-    # такой длинный префикс жрёт половину строки. Дата редко важна на kiosk'е
-    # (логи показывают свежее), час:мин:сек хватает понять последовательность.
-    TS_RE = re.compile(r'^\[\d{4}-\d{2}-\d{2} (\d{2}:\d{2}:\d{2})\]\s*')
+    # Сжимаем timestamp в начале строки → 'HH:MM:SS'. Логи разных скриптов
+    # пишут разную дату: thermal-guard.log = '[YYYY-MM-DD HH:MM:SS]', а
+    # disk-watchdog/photo-backup/daily = '[DD-MM-YYYY HH:MM:SS]'. Дата
+    # на kiosk'е редко важна (всегда показываем хвост = сегодня), час
+    # хватает. Без сжатия 21 char уходит на префикс из 42 char строки.
+    TS_RE = re.compile(
+        r'^\[(?:\d{4}-\d{2}-\d{2}|\d{2}-\d{2}-\d{4}) (\d{2}:\d{2}:\d{2})\]\s*')
     # На 320px экране F_MONO 11pt = ~7px/char → ~42 chars влезает
     MAX_CHARS = 42
     for ln in visible:
@@ -2916,28 +2938,45 @@ def page_thermal():
             y += 16
 
     # === Кнопки управления ===
-    # Mode toggle сверху во всю ширину; Back | Restore снизу как стандарт.
-    # Enable/Disable и View log убраны — доступны через TG /thermal и
-    # Menu → Logs → Thermal guard соответственно. Иначе третий ряд не
-    # помещается на 320×480 без обрезки.
+    # Layout: [Mode toggle] над [Enable toggle | Restore] над [Back | Open log]
+    btn_h = 30
+    spacing = 4
+    by = SCREEN_H - 54 - (btn_h + spacing) * 2 - 8
+
+    # Row 1: Mode toggle full-width (warn↔auto). Не активна если DISABLED.
     next_mode = "auto" if mode != "auto" else "warn"
+    mode_label_full = f"Mode → {next_mode.upper()}"
     mode_btn_col = ACCENT if next_mode == "auto" else INFO
-    mode_btn = Btn(f"Mode → {next_mode.upper()}", "thermal_toggle_mode",
-                   pygame.Rect(8, SCREEN_H - 54 - 38, SCREEN_W - 16, 32),
+    mode_btn = Btn(mode_label_full, "thermal_toggle_mode",
+                   pygame.Rect(8, by, SCREEN_W - 16, btn_h),
                    mode_btn_col if enabled else MUTED)
     draw_button(mode_btn, F_SMALL)
     if enabled: btns.append(mode_btn)
+    by += btn_h + spacing
 
+    # Row 2: Enable/Disable | Restore
+    half_w2 = (SCREEN_W - 28) // 2
+    en_label = "Disable" if enabled else "Enable"
+    en_col   = MUTED if enabled else ACCENT
+    en_btn   = Btn(en_label, "thermal_toggle_enabled",
+                   pygame.Rect(8, by, half_w2, btn_h), en_col)
+    rest_disabled = not acts
+    rest_btn = Btn("Restore", "thermal_restore",
+                   pygame.Rect(SCREEN_W - 8 - half_w2, by,
+                               half_w2, btn_h),
+                   MUTED if rest_disabled else WARN)
+    draw_button(en_btn, F_SMALL); draw_button(rest_btn, F_SMALL)
+    btns.append(en_btn)
+    if not rest_disabled: btns.append(rest_btn)
+
+    # Row 3 (Bottom): Back | Open log
     half_w = (SCREEN_W - 28) // 2
     back = Btn("Back", "open_menu",
                pygame.Rect(8, SCREEN_H - 54, half_w, 46), MUTED)
-    rest_disabled = not acts
-    rest_btn = Btn("Restore", "thermal_restore",
-                   pygame.Rect(SCREEN_W - 8 - half_w, SCREEN_H - 54, half_w, 46),
-                   MUTED if rest_disabled else WARN)
-    draw_button(back); draw_button(rest_btn)
-    btns.append(back)
-    if not rest_disabled: btns.append(rest_btn)
+    log_btn = Btn("View log", "thermal_open_log",
+                  pygame.Rect(SCREEN_W - 8 - half_w, SCREEN_H - 54, half_w, 46), INFO)
+    draw_button(back); draw_button(log_btn)
+    btns.extend([back, log_btn])
     return btns
 
 

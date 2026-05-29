@@ -1265,28 +1265,32 @@ def _card_last_nas_backup(rect):
     status  = agg["status"]
     last_r  = agg["last_run"]
 
-    incomplete = pct is not None and pct < 95
-    if status == "ok" and not incomplete: dot = ACCENT
-    elif status == "fail":                dot = ERROR
-    elif status in ("partial", "warn"):   dot = WARN
-    elif incomplete:                      dot = WARN
-    else:                                 dot = MUTED
+    # `incomplete` теперь чисто информационное (pct < 80 = большая разница;
+    # обычно EXCLUDES = Synology @eaDir + #recycle, ~5-15% мусора). НЕ влияет
+    # на статус-точку, т.к. rsync exit-code в `status` — авторитетный источник:
+    # если status='ok' значит rsync доехал. Раньше pct < 95 давал ложный
+    # warn при норм бэкапе из-за thumbnails.
+    size_gap = pct is not None and pct < 80
+    if status == "fail":                dot = ERROR
+    elif status in ("partial", "warn"): dot = WARN
+    elif status == "ok":                dot = ACCENT
+    else:                               dot = MUTED
 
-    # Строка 1: точка + size totals слева, % справа
+    # Строка 1: точка + size totals слева, % справа (всегда FG, не WARN)
     pygame.draw.circle(screen, dot, (inner.x + 5, inner.y + 9), 5)
-    main_col = WARN if incomplete else FG
     sz_text = f"{local_h} / {nas_h}"
-    screen.blit(F_NORMAL.render(sz_text, True, main_col), (inner.x + 16, inner.y))
+    screen.blit(F_NORMAL.render(sz_text, True, FG), (inner.x + 16, inner.y))
     if pct is not None:
-        pct_s = F_NORMAL.render(f"{pct:.0f}%", True, main_col)
+        pct_s = F_NORMAL.render(f"{pct:.0f}%", True, FG)
         screen.blit(pct_s, (inner.right - pct_s.get_width(), inner.y))
 
-    # Строка 2: time ago · status (или подсказка про incomplete)
+    # Строка 2: time ago · status. Размер-gap показываем только если ОЧЕНЬ
+    # большой (> 20%) И статус не ok — иначе тихо.
     parts = []
     if last_r: parts.append(_ago(last_r))
     if status: parts.append(status)
-    if incomplete: parts.append("not fully copied")
-    sub_col = WARN if incomplete or status in ("partial", "warn", "fail") else MUTED
+    if size_gap and status != "ok": parts.append("size mismatch")
+    sub_col = WARN if status in ("partial", "warn", "fail") else MUTED
     screen.blit(F_SMALL.render("  ·  ".join(parts), True, sub_col),
                 (inner.x + 16, inner.y + 20))
 
@@ -1689,14 +1693,13 @@ def page_nas_status():
             pygame.draw.circle(screen, dot_color, (16, y + 9), 5)
             screen.blit(F_NORMAL.render(name, True, FG), (28, y))
 
-            # Справа: "local / source" в две части — local белым, slash+source
-            # подсвечен жёлтым если local меньше (т.е. недокопировано) или
-            # серым если совпадает/source неизвестен.
+            # Справа: "local / source". Если status='ok' — серым (rsync
+            # отчитался ОК, размер-gap = только EXCLUDES). Если status≠ok
+            # И есть существенный gap — жёлтым.
+            size_gap = ex and nas_size and _size_lt(size, nas_size, tolerance=0.80)
             if nas_size:
                 local_s = F_NORMAL.render(size, True, FG if ex else MUTED)
-                # Сравнение — простое нормализованное к bytes
-                incomplete = ex and _size_lt(size, nas_size)
-                sep_col = WARN if incomplete else MUTED
+                sep_col = WARN if (size_gap and status != "ok") else MUTED
                 sep_s   = F_NORMAL.render(" / ", True, sep_col)
                 src_s   = F_NORMAL.render(nas_size, True, sep_col)
                 total_w = local_s.get_width() + sep_s.get_width() + src_s.get_width()
@@ -1708,12 +1711,13 @@ def page_nas_status():
                 ss = F_NORMAL.render(size, True, FG if ex else MUTED)
                 screen.blit(ss, (SCREEN_W - ss.get_width() - 10, y))
 
-            # Подстрока: last_run + status + (если incomplete) подсказка
+            # Подстрока: last_run + status. "size mismatch" только если status
+            # говорит проблема. При status='ok' молчим — rsync сказал OK.
             sub_parts = [_ago(last_run), status_label]
-            if nas_size and ex and _size_lt(size, nas_size):
-                sub_parts.append("not fully copied")
+            if size_gap and status != "ok":
+                sub_parts.append("size mismatch")
             sub = "  ·  ".join(sub_parts)
-            sub_col = WARN if "not fully copied" in sub else MUTED
+            sub_col = WARN if "size mismatch" in sub or status in ("partial", "warn", "fail") else MUTED
             screen.blit(F_SMALL.render(sub, True, sub_col), (28, y + 20))
             y += row_h
 

@@ -22,6 +22,12 @@ if (
     # set-led — управление встроенным power-LED Pi из других скриптов
     fetch_script "set-led.sh"           "$SCRIPT_DIR/set-led.sh"
 
+    # chrony — единственный NTP-демон. Дефолтный конфиг уже рабочий (NTP-пул +
+    # makestep на старте + rtcsync). Явно гасим systemd-timesyncd чтобы два
+    # клиента времени не дрались. Настройка не нужна — синхронит при наличии сети.
+    sudo systemctl disable --now systemd-timesyncd 2>/dev/null || true
+    sudo systemctl enable --now chrony 2>/dev/null || sudo systemctl enable --now chronyd 2>/dev/null || true
+
     # /etc/motd — что увидит юзер при ssh-логине. Hostname берётся живой
     # чтобы при перепрошивке (новое имя через Imager) MOTD не отставал.
     HOST_LOCAL="$(hostname).local"

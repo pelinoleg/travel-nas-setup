@@ -78,7 +78,7 @@ sudo curl -fsSL "https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/ma
 - (Опционально) **MHS35 3.5" SPI display** — `goodtft ili9486`, rotation 90. Работает на обоих Pi 4/5.
 - (Опционально) **Powerbank** с USB-C PD для поля (Anker 737 или подобные)
 
-## Структура файлов на T7
+## Структура файлов на диске (`/mnt/storage`)
 
 ```
 /mnt/storage/                  (owned by install user — можно создавать папки без sudo)
@@ -104,32 +104,39 @@ sudo curl -fsSL "https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/ma
 
 | Файл | Назначение | Перм |
 |---|---|---|
-| `tg-notify.conf` | Telegram bot token + chat_id | 600 root |
-| `nas-backup.conf` | NAS host/user/pass + список модулей | 600 root |
-| `photo-backup.conf` | Настройки автобэкапа SD | 644 root |
-| `storage-info.conf` | UUID диска T7 (сгенерён при mount) | 644 root |
-| `services.conf` | URL-ы для Services page в dashboard | 644 oleg |
-| `power-mode.conf` | HOME_SSIDS + HEAVY_DOCKER_APPS | 644 oleg |
-| `yt-archiver.conf` | URL для yt-archiver dashboard страницы | 644 oleg |
+| `tg-notify.conf` | Telegram bot token + chat_id | 600 |
+| `nas-backup.conf` | NAS host/user/pass + MODULES + `AUTO_BACKUP*` (расписание) | 600 |
+| `photo-backup.conf` | Настройки автобэкапа SD | 644 |
+| `storage-info.conf` | UUID storage-диска (сгенерён при mount) | 644 |
+| `services.conf` | URL-ы для Services page в dashboard | 644 |
+| `power-mode.conf` | HOME_SSIDS + HEAVY_DOCKER_APPS | 644 |
+| `yt-archiver.conf` | URL дашборда + `YT_CPU_LIMIT` (лимит CPU контейнера) | 644 |
 
-В git коммитятся только `*.example` в `conf-examples/`.
+В git коммитятся только `*.example` в `conf-examples/` (без секретов).
+
+**Применение правок:** после ребута применяются все конфиги. Большинство — и без
+ребута: `services.conf`/URL читаются live дашбордом; `AUTO_BACKUP*` и `YT_CPU_LIMIT`
+применяются **сразу при сохранении** (systemd path-units); per-run скрипты
+(nas/photo-backup, power-mode) берут конфиг свежим при следующем запуске;
+`tg-notify.conf` — после рестарта tg-listener. Владелец конфигов = юзер из Pi Imager
+(uid 1000), не хардкод.
 
 ## Dashboard (MHS35 display)
 
 Pygame-кiosk в X11. Никаких внешних терминалов — фокус не уходит, тач всегда работает. Pages:
 
-- **Status** (главная) — карточки: Network/IP/SSID (или AP с инструкцией), Storage T7 (с `NOT MOUNTED` детектом + % справа от бара), System (CPU/RAM bars), **Last NAS backup** (агрегат: local/source/%), Last photo backup. Если бэкап в процессе — зелёная карточка с прогрессом заменяет last-карточки. Сверху в плашке: `up Xh Ym` слева, `power: [A·]<mode> <freq>GHz <W>W` справа (`A·` префикс = система сама выбирает режим).
+- **Status** (главная) — карточки: Network/IP/SSID (или AP с инструкцией), Storage (с `NOT MOUNTED` детектом + % справа от бара), System (CPU/RAM bars), **Last NAS backup** (агрегат: local/source/%), Last photo backup. Если бэкап в процессе — зелёная карточка с прогрессом заменяет last-карточки. Сверху в плашке: `up Xh Ym` слева, `power: [A·]<mode> <freq>GHz <W>W` справа (`A·` префикс = система сама выбирает режим).
 - **Menu** — одна страница, 3 секции:
   - **NAS**: Run/Stop backup (одна контекстная кнопка) | NAS status
   - **INFO**: Today | Logs | Services / Configs | Docker
   - **SYSTEM**: AP info | Force AP, Reboot | Shutdown, Normal | Saver | Auto (power modes)
-- **NAS status** — по каждому модулю: цвет-точка (ok/warn/fail/partial/absent), `local / source` размер, % при mismatch + `not fully copied` подсказка. Кнопка **Refresh** опционально запрашивает source size через `rsync --dry-run --stats` (медленно). Hourly timer обновляет local без NAS-запросов.
-- **Today** — превью daily-summary: uptime, CPU°C, IP, T7%, throttling, photos/NAS today, errors, microSD wear, power mode.
-- **Services** — список из `/etc/travel-nas/services.conf` с подстановкой `{host}` и `{ip}`.
+- **NAS status** — по каждому модулю: цвет-точка (ok/warn/fail/partial/absent), `local / source` размер, % при mismatch + `not fully copied` подсказка. Сверху строка `auto-backup: daily HH:MM` (расписание). Низ: `Back | Auto | Refresh` — **Auto** вкл/выкл авто-бэкап, **Refresh** опционально запрашивает source size через `rsync --dry-run --stats` (медленно).
+- **Today** — превью daily-summary: uptime, CPU°C, IP, диск %, throttling, photos/NAS today, errors, microSD wear, power mode.
+- **Services** — список из `/etc/travel-nas/services.conf` с подстановкой `{host}`, `{ip}`, `{user}`.
 - **Logs** — встроенный viewer (photo-backup, nas-backup, watchdog, system-monitor, display errors).
 - **Docker** — все compose-проекты с inline кнопками Stop/Start/Restart.
 - **YT Archive** — статистика yt-archiver: каналы / видео / диск + очередь (downloading/pending/errors) + текущие загрузки с прогресс-барами. URL настраивается в `/etc/travel-nas/yt-archiver.conf`.
-- **AP info / Force AP** — SSID `comitup-NNN` + URL `http://10.41.0.1:8080` (comitup-web висит на нестандартном порту чтобы не конфликтить с CasaOS nginx :80). Force AP сбрасывает текущий WiFi и стартует hotspot.
+- **AP info / Force AP** — SSID `comitup-NNN` + URL `http://10.41.0.1:8090` (comitup-web висит на нестандартном порту чтобы не конфликтить с CasaOS nginx :80). Force AP сбрасывает текущий WiFi и стартует hotspot.
 - **Reboot / Shutdown** — с подтверждением.
 
 Auto-sleep через 5 минут неактивности (xset dpms + sysfs backlight для дисплеев которые умеют). На MHS35 lampbacklight прибита к 5V, экран чернеет но лампа горит — hardware-limit, не наш баг.
@@ -202,7 +209,7 @@ Auto-логика (при `pref=auto`):
 - **Photoview**: `http://<host>.local:8000` (в UI указывай путь `/storage/usb-imports` или `/storage/media`)
 - **YT-Archiver**: `http://<host>.local:8081`
 - **SSH**: `ssh oleg@<host>.local`
-- **AP mode** (полевой): подключиться к WiFi `comitup-NNN` (без пароля) → `http://10.41.0.1:8080` для настройки нового WiFi
+- **AP mode** (полевой): подключиться к WiFi `comitup-NNN` (без пароля) → `http://10.41.0.1:8090` для настройки нового WiFi
 
 > ⚠️ **Photoview** UI принимает только пути ВНУТРИ контейнера. Мы монтируем `/mnt/storage` как `/storage:ro`. То есть в Photoview указывай `/storage/usb-imports`, а **не** `/mnt/storage/usb-imports`. Иначе получишь "Server error: internal system error at initialSetupWizard".
 

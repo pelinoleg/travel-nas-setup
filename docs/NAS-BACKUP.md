@@ -130,6 +130,31 @@ sudo nas-backup.sh --config     # редактировать конфиг
 /backup diff  # показать diff
 ```
 
+### Авто-расписание (опционально)
+
+Бэкап можно гонять автоматически. Источник правды — ключи `AUTO_BACKUP*` в
+`nas-backup.conf`. Реализация — systemd timer `nas-backup-auto` + helper
+`nas-schedule.sh` (status/apply/set/off/toggle).
+
+```bash
+AUTO_BACKUP="off"          # on | off
+AUTO_BACKUP_FREQ="daily"   # daily | weekly (воскресенье)
+AUTO_BACKUP_TIME="03:00"   # HH:MM, 24ч
+```
+
+- **Правка конфига применяется сразу** (path-unit `nas-schedule-apply`) и на ребуте.
+- Включить/выключить можно тремя путями: правка конфига · дашборд (NAS status →
+  кнопка **Auto**) · wizard (`travel-nas-setup` → NAS_BACKUP) · CLI `nas-schedule.sh`.
+- **Travel-safe**: когда NAS недоступен (в поездке) — запуск тихо пропускается
+  (ping-guard), без фейла юнита и без Telegram-алёрта. `Persistent=true` догоняет
+  пропущенный из-за выключенного Pi бэкап при следующем включении.
+
+```bash
+nas-schedule.sh status            # off | daily HH:MM | weekly HH:MM
+nas-schedule.sh set weekly 04:30  # включить
+nas-schedule.sh off               # выключить (выбор запоминается)
+```
+
 ---
 
 ## Конфиг: `/etc/travel-nas/nas-backup.conf`
@@ -139,7 +164,7 @@ NAS_HOST="192.168.1.95"          # IP или hostname домашнего NAS
 NAS_USER="oleg"                  # user для rsync daemon
 NAS_PASS="..."                   # password из rsyncd.secrets на NAS
 
-DEST="/mnt/storage/nas-backup"        # куда копировать на T7
+DEST="/mnt/storage/nas-backup"        # куда копировать на storage-диск
 
 # MODULES — какие шары забирать.
 # Формат: "rsync_module|local_folder"

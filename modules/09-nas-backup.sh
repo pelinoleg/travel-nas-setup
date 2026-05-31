@@ -113,68 +113,43 @@ EOF
     fi
 
     # --- Авто-расписание (опционально) ---
+    # Логика таймера вынесена в nas-schedule.sh (его же дёргает дашборд).
+    fetch_script "nas-schedule.sh" "$SCRIPT_DIR/nas-schedule.sh"
+
     # Спрашиваем только если конфиг есть (иначе бэкапить нечем).
     if [[ -f "$CONFIG_DIR/nas-backup.conf" ]]; then
         # Текущее состояние → дефолт в меню (чтобы re-run показывал что выбрано).
-        CUR="off"
-        if systemctl is-enabled nas-backup-auto.timer >/dev/null 2>&1; then
-            if grep -q 'Sun' /etc/systemd/system/nas-backup-auto.timer 2>/dev/null; then
-                CUR="weekly"
-            else
-                CUR="daily"
-            fi
-        fi
-        SCHED=$(whiptail --title "NAS авто-бэкап" --default-item "$CUR" --menu \
+        CUR_STATUS=$("$SCRIPT_DIR/nas-schedule.sh" status 2>/dev/null)
+        CUR_FREQ=$(echo "$CUR_STATUS" | awk '{print $1}')
+        CUR_TIME=$(echo "$CUR_STATUS" | awk '{print $2}')
+        [[ "$CUR_FREQ" == daily || "$CUR_FREQ" == weekly ]] || CUR_FREQ="off"
+
+        SCHED=$(whiptail --title "NAS авто-бэкап" --default-item "$CUR_FREQ" --menu \
 "Запускать бэкап с NAS автоматически?
 Когда NAS недоступен (в поездке) — тихо пропускается, без алёртов." 15 72 3 \
             "off"    "Только вручную (дашборд / бот)" \
-            "daily"  "Каждую ночь в 03:00" \
-            "weekly" "Раз в неделю — воскресенье 03:00" \
-            3>&1 1>&2 2>&3) || SCHED="$CUR"
+            "daily"  "Каждый день в выбранное время" \
+            "weekly" "Раз в неделю (воскресенье) в выбранное время" \
+            3>&1 1>&2 2>&3) || SCHED="$CUR_FREQ"
 
-        case "$SCHED" in
-            daily)  CAL="*-*-* 03:00:00" ;;
-            weekly) CAL="Sun *-*-* 03:00:00" ;;
-            *)      CAL="" ;;
-        esac
-
-        if [[ -n "$CAL" ]]; then
-            write_systemd_unit nas-backup-auto.service << 'EOF'
-[Unit]
-Description=Automatic NAS backup (scheduled)
-After=network-online.target mnt-storage.mount
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-Environment=NAS_BACKUP_DETACHED=1
-Nice=15
-IOSchedulingClass=idle
-# Тихо пропустить если NAS недоступен (в поездке) — без фейла/алёрта.
-# NAS_BACKUP_DETACHED=1 → nas-backup.sh бежит прямо в этом oneshot, без re-exec.
-ExecStart=/bin/bash -c 'source /etc/travel-nas/nas-backup.conf 2>/dev/null; ping -c1 -W3 "$NAS_HOST" >/dev/null 2>&1 && exec /usr/local/bin/nas-backup.sh --run'
-EOF
-            write_systemd_unit nas-backup-auto.timer << EOF
-[Unit]
-Description=Scheduled NAS backup
-
-[Timer]
-OnCalendar=$CAL
-Persistent=true
-RandomizedDelaySec=5min
-
-[Install]
-WantedBy=timers.target
-EOF
-            sudo systemctl daemon-reload
-            sudo systemctl enable --now nas-backup-auto.timer
-            info "NAS авто-бэкап: $SCHED ($CAL)"
-        else
-            sudo systemctl disable --now nas-backup-auto.timer 2>/dev/null || true
-            sudo rm -f /etc/systemd/system/nas-backup-auto.timer \
-                       /etc/systemd/system/nas-backup-auto.service
-            sudo systemctl daemon-reload
+        if [[ "$SCHED" == "off" ]]; then
+            sudo "$SCRIPT_DIR/nas-schedule.sh" off >/dev/null
             info "NAS авто-бэкап: выключен (только вручную)"
+        else
+            # Кастомное время — спрашиваем HH:MM, валидируем, по умолчанию текущее/03:00.
+            DEF_TIME="${CUR_TIME:-03:00}"
+            [[ "$DEF_TIME" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]] || DEF_TIME="03:00"
+            while true; do
+                TIME=$(whiptail --title "Время бэкапа" --inputbox \
+"Во сколько запускать ($SCHED)?  Формат HH:MM (24ч).
+Совет: ночь/раннее утро — меньше мешает." 11 64 "$DEF_TIME" 3>&1 1>&2 2>&3) || TIME="$DEF_TIME"
+                if [[ "$TIME" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]]; then
+                    break
+                fi
+                whiptail --msgbox "Неверный формат: '$TIME'. Нужно HH:MM, напр. 03:00 или 23:30." 9 60
+            done
+            sudo "$SCRIPT_DIR/nas-schedule.sh" set "$SCHED" "$TIME" >/dev/null
+            info "NAS авто-бэкап: $SCHED $TIME"
         fi
     fi
 ); then

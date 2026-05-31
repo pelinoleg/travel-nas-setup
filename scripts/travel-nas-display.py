@@ -526,6 +526,22 @@ def _nas_backup_active():
 c_nas_run  = Cached(_nas_backup_active, 3)
 
 
+def _nas_schedule():
+    """Текущее авто-расписание: 'off' | 'daily HH:MM' | 'weekly HH:MM'.
+    Читается без sudo (nas-schedule.sh status = systemctl is-enabled + grep)."""
+    try:
+        r = subprocess.run(
+            ["/usr/local/bin/nas-schedule.sh", "status"],
+            capture_output=True, text=True, timeout=4,
+        )
+        return (r.stdout or "").strip() or "off"
+    except Exception:
+        return "off"
+
+
+c_nas_sched = Cached(_nas_schedule, 15)
+
+
 def _parse_size(s):
     """'1.23G' / '500M' / '500K' / '1.2T' / '500B' → bytes. Возвращает None
     если не парсится. Поддерживает du-формат (без 'i'/'B' суффикса)."""
@@ -1729,6 +1745,12 @@ def page_nas_status():
     y += 8
     btns = []
 
+    # Авто-расписание — строка статуса вверху (всегда видна).
+    sched = c_nas_sched.get()
+    st = F_TINY.render(f"auto-backup: {sched}", True, ACCENT if sched != "off" else MUTED)
+    screen.blit(st, (10, y))
+    y += 16
+
     data = _load_json(NAS_STATUS_JSON)
     if not data:
         screen.blit(F_NORMAL.render("No status data yet.", True, MUTED), (10, y))
@@ -1815,14 +1837,21 @@ def page_nas_status():
             screen.blit(F_SMALL.render(sub, True, sub_col), (28, y + 20))
             y += row_h
 
-    # Buttons: Back | Refresh — Back всегда слева (как в браузере)
-    half_w = (SCREEN_W - 28) // 2
-    back    = Btn("Back",    "open_menu",
-                  pygame.Rect(8, SCREEN_H - 54, half_w, 46), MUTED)
-    refresh = Btn("Refresh", "nas_status_refresh",
-                  pygame.Rect(SCREEN_W - 8 - half_w, SCREEN_H - 54, half_w, 46), INFO)
-    draw_button(back); draw_button(refresh)
-    return [back, refresh]
+    # Buttons: Back | Auto | Refresh — Back слева, Refresh справа (конвенция).
+    # Auto-кнопка показывает что сделает тап: "Auto off" если сейчас вкл, иначе "Auto on".
+    sched_now  = c_nas_sched.get()
+    auto_label = "Auto off" if sched_now != "off" else "Auto on"
+    auto_col   = WARN if sched_now != "off" else ACCENT
+    third = (SCREEN_W - 32) // 3
+    by = SCREEN_H - 54
+    back    = Btn("Back",     "open_menu",
+                  pygame.Rect(8, by, third, 46), MUTED)
+    autob   = Btn(auto_label, "nas_auto_toggle",
+                  pygame.Rect(8 + third + 8, by, third, 46), auto_col)
+    refresh = Btn("Refresh",  "nas_status_refresh",
+                  pygame.Rect(SCREEN_W - 8 - third, by, third, 46), INFO)
+    draw_button(back); draw_button(autob); draw_button(refresh)
+    return [back, autob, refresh]
 
 
 def page_daily_summary():
@@ -3525,6 +3554,20 @@ def do_action(action):
         )
         c_nas_run.invalidate()
         toast("Stopping NAS backup…", WARN)
+
+    elif action == "nas_auto_toggle":
+        # off↔on. Включение восстанавливает запомненное расписание (или daily 03:00).
+        # Сменить день/время — через wizard (travel-nas-setup → NAS_BACKUP).
+        try:
+            subprocess.run(
+                ["sudo", "-n", "/usr/local/bin/nas-schedule.sh", "toggle"],
+                capture_output=True, text=True, timeout=8,
+            )
+        except Exception:
+            pass
+        c_nas_sched.invalidate()
+        new = c_nas_sched.get()
+        toast(f"Auto-backup: {new}", ACCENT if new != "off" else WARN)
 
 
 # =============================================================================

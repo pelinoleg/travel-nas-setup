@@ -79,6 +79,7 @@ declare -A SCRIPTS=(
     [tg-notify.sh]=/usr/local/bin/tg-notify.sh
     [photo-backup.sh]=/usr/local/bin/photo-backup.sh
     [nas-backup.sh]=/usr/local/bin/nas-backup.sh
+    [nas-schedule.sh]=/usr/local/bin/nas-schedule.sh
     [pi-config-backup.sh]=/usr/local/bin/pi-config-backup.sh
     [disk-watchdog.sh]=/usr/local/bin/disk-watchdog.sh
     [system-monitor.sh]=/usr/local/bin/system-monitor.sh
@@ -206,6 +207,7 @@ REQUIRED_CMDS=(
     "/usr/bin/systemctl reboot, /usr/bin/systemctl poweroff"
     "/usr/bin/systemctl restart comitup"
     "/usr/bin/systemctl stop nas-backup-runtime"
+    "/usr/local/bin/nas-schedule.sh toggle"
     "/usr/bin/systemctl start --no-block nas-verify.service"
     "/usr/local/bin/thermal-guard.py --restore"
     "/usr/local/bin/touch-calibrate.sh"

@@ -24,11 +24,17 @@ Significant changes to travel-nas-setup. Newest first.
   возможным RTC-дрейфом).
 
 ### NAS / Photo
-- **NAS авто-бэкап (опц.)** — в wizard'е NAS_BACKUP теперь спрашивается
-  расписание: off / каждую ночь 03:00 / еженедельно (воскр 03:00) → systemd
-  timer `nas-backup-auto`. Когда NAS недоступен (в поездке) — тихо пропускается
+- **NAS авто-бэкап (опц.)** — в wizard'е NAS_BACKUP спрашивается расписание:
+  off / daily / weekly **+ кастомное время (HH:MM)** → systemd timer
+  `nas-backup-auto`. Когда NAS недоступен (в поездке) — тихо пропускается
   (ping-guard в ExecStart), без фейла юнита и без Telegram-алёрта. `Persistent=true`
   — пропущенный из-за выключенного Pi бэкап догоняется при следующем включении.
+- **Управление расписанием вынесено в `nas-schedule.sh`** (единый источник правды
+  для wizard'а и дашборда): `status|set <freq> <HH:MM>|off|toggle`. Toggle
+  запоминает выбор (`/var/lib/travel-nas/nas-schedule.pref`).
+- **Дашборд → NAS status**: строка `auto-backup: daily HH:MM` + кнопка **Auto on/off**
+  (через `sudo nas-schedule.sh toggle`). Низ страницы теперь `Back | Auto | Refresh`.
+  Смена дня/времени — в wizard'е. Новый sudoers-вызов → нужен двойной прогон update.
 - **photo-backup guard** — отказ + Telegram-алёрт если storage-диск не
   примонтирован (раньше тихо лил импорт на microSD; был инцидент 6.6 ГБ).
 

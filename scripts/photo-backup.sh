@@ -146,6 +146,19 @@ UUID_SHORT=$(echo "$DEVICE_UUID" | cut -c1-8)
 # Без UUID — используем имя устройства чтобы две карты не слились в одну папку
 [[ -z "$UUID_SHORT" ]] && UUID_SHORT="dev-$(basename "$DEVICE")"
 
+# КРИТИЧНО: целевой диск должен быть РЕАЛЬНО примонтирован. Если SSD не готов
+# (nofail пропустил его на boot), DEST=/mnt/storage/... лежит на microSD (root
+# fs) и импорт молча зальёт карту вместо диска — реальный инцидент, 6.6 ГБ на SD.
+# findmnt --target отдаёт точку монтирования ФС, содержащей DEST: "/" = диск НЕ
+# смонтирован → отказ, карту не трогаем (фото целы, вынимать рано).
+STORAGE_MNT=$(findmnt -rno TARGET --target "$DEST" 2>/dev/null)
+if [[ -z "$STORAGE_MNT" || "$STORAGE_MNT" == "/" ]]; then
+    log_msg "ABORT: storage disk не примонтирован (DEST=$DEST на '${STORAGE_MNT:-?}') — НЕ пишу на microSD"
+    tg_notify error "Photo backup отменён" "Диск-хранилище не примонтирован. Карта \`$LABEL\` НЕ скопирована — фото остались на карте, вынимать рано. Проверь SSD."
+    [[ -n "$TEMP_MOUNT" ]] && { umount "$TEMP_MOUNT" 2>/dev/null; rmdir "$TEMP_MOUNT" 2>/dev/null; }
+    exit 1
+fi
+
 # Структура: usb-imports/DD-MM-YYYY/HH-MM-SS_<label>_<uuid>/
 # SS в префиксе чтобы быстрые re-plug не сливались в одну папку.
 DATE_DIR=$(date '+%d-%m-%Y')

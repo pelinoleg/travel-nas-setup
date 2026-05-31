@@ -27,7 +27,7 @@ CasaOS=http://{host}
     Web-UI для Docker-приложений
 
 Photoview=http://{host}:8000
-    Login: admin / hammett
+    Login: admin / <твой-пароль>
     Внутри контейнера: /storage/usb-imports
 
 YT-Archiver=http://{host}:8081
@@ -36,4 +36,4 @@ YT-Archiver=http://{host}:8081
 # Компактный inline для коротких записей:
 >Samba=smb://{host}/travel-nas
 >SSH=ssh oleg@{host}
-    pass: hammett
+    pass: <твой-пароль>

@@ -277,6 +277,8 @@ if [[ -n "$STORAGE_DEV" ]]; then
                 info "Мигрировал путь в $(basename "$cf"): $STORAGE_LEGACY_MOUNT → $STORAGE_MOUNT"
             fi
         done
+        # Сирота старой схемы: t7-info.conf заменён на storage-info.conf.
+        sudo rm -f "$CONFIG_DIR/t7-info.conf"
 
         STORAGE_UUID=$(sudo blkid -s UUID -o value "$STORAGE_DEV")
         sudo mkdir -p "$STORAGE_MOUNT" "$CONFIG_DIR"

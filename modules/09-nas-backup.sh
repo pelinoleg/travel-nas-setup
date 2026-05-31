@@ -46,10 +46,14 @@ EOF
     write_systemd_unit nas-schedule-apply.service << 'EOF'
 [Unit]
 Description=Apply NAS auto-backup schedule from nas-backup.conf
+After=local-fs.target
 
 [Service]
 Type=oneshot
 ExecStart=/usr/local/bin/nas-schedule.sh apply
+
+[Install]
+WantedBy=multi-user.target
 EOF
     write_systemd_unit nas-schedule-apply.path << 'EOF'
 [Unit]
@@ -63,7 +67,8 @@ Unit=nas-schedule-apply.service
 WantedBy=paths.target
 EOF
     sudo systemctl daemon-reload
-    sudo systemctl enable --now nas-schedule-apply.path
+    # .path — мгновенно при правке конфига; .service в boot — пере-применяет расписание.
+    sudo systemctl enable --now nas-schedule-apply.path nas-schedule-apply.service
 
     if [[ ! -f "$CONFIG_DIR/nas-backup.conf" ]]; then
         # Дефолты для retry-loop'а

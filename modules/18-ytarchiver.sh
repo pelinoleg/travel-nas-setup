@@ -15,10 +15,28 @@ elif (
     sudo install -d -o "$(whoami)" -g "$(whoami)" /mnt/storage/media/YT-Archiver/data
     sudo install -d -o "$(whoami)" -g "$(whoami)" /mnt/storage/media/YT-Archiver/video
 
+    # Адаптивные дефолты под модель Pi. Все quad-core, отличается скорость CPU:
+    # Pi 5 заметно быстрее → даём больше ядер (превью быстрее, есть запас);
+    # Pi 4 слабее → осторожнее; 3/неизвестно — минимум. RAM-лимит = 75% от факт.
+    PI_MODEL=$(tr -d '\0' < /proc/device-tree/model 2>/dev/null || echo "")
+    case "$PI_MODEL" in
+        *"Pi 5"*) YT_CPU_DEFAULT="2.5" ;;
+        *"Pi 4"*) YT_CPU_DEFAULT="2.0" ;;
+        *)        YT_CPU_DEFAULT="1.5" ;;
+    esac
+    RAM_KB=$(awk '/MemTotal/{print $2}' /proc/meminfo 2>/dev/null || echo 0)
+    if (( RAM_KB > 0 && RAM_KB < 2000000 )); then
+        warn "Мало RAM (<2GB) — тяжёлые Docker-апы (Photoview/yt-archiver) будут впритык"
+    fi
+    # Memory-лимит контейнера = 75% RAM (ceiling от runaway; на 8GB никогда не задеть).
+    MEM_LIMIT=$(( RAM_KB > 0 ? RAM_KB * 1024 / 4 * 3 : 6000000000 ))
+
     # Конфиг нужен ДО compose — оттуда берём YT_CPU_LIMIT (юзер правит лимит там).
     sudo mkdir -p "$CONFIG_DIR"
     if [[ ! -f "$CONFIG_DIR/yt-archiver.conf" ]]; then
         fetch_conf_example "yt-archiver.conf.example" "$CONFIG_DIR/yt-archiver.conf"
+        # Первая установка: подставляем дефолт под конкретную модель Pi.
+        sudo sed -i "s/^YT_CPU_LIMIT=.*/YT_CPU_LIMIT=\"$YT_CPU_DEFAULT\"/" "$CONFIG_DIR/yt-archiver.conf"
     fi
     sudo chown "$(whoami):$(whoami)" "$CONFIG_DIR/yt-archiver.conf"
     sudo chmod 0644 "$CONFIG_DIR/yt-archiver.conf"
@@ -26,9 +44,9 @@ elif (
     YT_CPU_LIMIT=""
     # shellcheck source=/dev/null
     source "$CONFIG_DIR/yt-archiver.conf" 2>/dev/null || true
-    YT_CPU_LIMIT="${YT_CPU_LIMIT:-2.0}"
-    # Sanity: только число (2 / 2.0), иначе compose упадёт — откат на дефолт.
-    [[ "$YT_CPU_LIMIT" =~ ^[0-9]+(\.[0-9]+)?$ ]] || YT_CPU_LIMIT="2.0"
+    YT_CPU_LIMIT="${YT_CPU_LIMIT:-$YT_CPU_DEFAULT}"
+    # Sanity: только число (2 / 2.0), иначе compose упадёт — откат на модель-дефолт.
+    [[ "$YT_CPU_LIMIT" =~ ^[0-9]+(\.[0-9]+)?$ ]] || YT_CPU_LIMIT="$YT_CPU_DEFAULT"
 
     APP_DIR=/var/lib/casaos/apps/ytarchiver
     sudo mkdir -p "$APP_DIR"
@@ -46,7 +64,7 @@ services:
       resources:
         limits:
           cpus: "${YT_CPU_LIMIT}"
-          memory: "8453619712"
+          memory: "${MEM_LIMIT}"
     environment:
       BETWEEN_DOWNLOADS_MAX_SECONDS: "15"
       BETWEEN_DOWNLOADS_MIN_SECONDS: "5"
@@ -97,7 +115,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: "8453619712"
+          memory: "${MEM_LIMIT}"
     depends_on:
       backend:
         condition: service_started

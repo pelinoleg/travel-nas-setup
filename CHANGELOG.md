@@ -42,6 +42,12 @@ Significant changes to travel-nas-setup. Newest first.
 - **photo-backup guard** — отказ + Telegram-алёрт если storage-диск не
   примонтирован (раньше тихо лил импорт на microSD; был инцидент 6.6 ГБ).
 
+### YT-Archiver
+- **CPU-лимит контейнера** (ffmpeg-превью забирал ~3.4 ядра из 4 и клал
+  отзывчивость). Жёсткий `deploy.resources.limits.cpus`, выносится в
+  `yt-archiver.conf` → `YT_CPU_LIMIT` (дефолт `2.0`, с комментами и примерами
+  1.0/2.0/3.0/4.0). Применить на лету: `docker update --cpus=2.0 ytarchiver-backend`.
+
 ### Универсальность (reflash-proof)
 - Имя пользователя больше не захардкожено `oleg` — резолвится из uid 1000
   (юзер из Pi Imager): `getent passwd 1000` / `pwd.getpwuid(1000)`. Затронуты

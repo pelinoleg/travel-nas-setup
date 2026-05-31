@@ -15,9 +15,25 @@ elif (
     sudo install -d -o "$(whoami)" -g "$(whoami)" /mnt/storage/media/YT-Archiver/data
     sudo install -d -o "$(whoami)" -g "$(whoami)" /mnt/storage/media/YT-Archiver/video
 
+    # Конфиг нужен ДО compose — оттуда берём YT_CPU_LIMIT (юзер правит лимит там).
+    sudo mkdir -p "$CONFIG_DIR"
+    if [[ ! -f "$CONFIG_DIR/yt-archiver.conf" ]]; then
+        fetch_conf_example "yt-archiver.conf.example" "$CONFIG_DIR/yt-archiver.conf"
+    fi
+    sudo chown "$(whoami):$(whoami)" "$CONFIG_DIR/yt-archiver.conf"
+    sudo chmod 0644 "$CONFIG_DIR/yt-archiver.conf"
+
+    YT_CPU_LIMIT=""
+    # shellcheck source=/dev/null
+    source "$CONFIG_DIR/yt-archiver.conf" 2>/dev/null || true
+    YT_CPU_LIMIT="${YT_CPU_LIMIT:-2.0}"
+    # Sanity: только число (2 / 2.0), иначе compose упадёт — откат на дефолт.
+    [[ "$YT_CPU_LIMIT" =~ ^[0-9]+(\.[0-9]+)?$ ]] || YT_CPU_LIMIT="2.0"
+
     APP_DIR=/var/lib/casaos/apps/ytarchiver
     sudo mkdir -p "$APP_DIR"
-    sudo tee "$APP_DIR/docker-compose.yml" >/dev/null << 'EOF'
+    # Heredoc без кавычек — подставляем ${YT_CPU_LIMIT}. В теле нет других $.
+    sudo tee "$APP_DIR/docker-compose.yml" >/dev/null << EOF
 name: ytarchiver
 services:
   backend:
@@ -29,6 +45,7 @@ services:
     deploy:
       resources:
         limits:
+          cpus: "${YT_CPU_LIMIT}"
           memory: "8453619712"
     environment:
       BETWEEN_DOWNLOADS_MAX_SECONDS: "15"
@@ -119,18 +136,9 @@ x-casaos:
 EOF
     cd "$APP_DIR"
     sudo docker compose pull
-    sudo docker compose up -d
-
-    # Конфиг для дашборда — где брать stats. Юзер может менять URL если
-    # переехал на другой порт/хост.
-    sudo mkdir -p "$CONFIG_DIR"
-    if [[ ! -f "$CONFIG_DIR/yt-archiver.conf" ]]; then
-        fetch_conf_example "yt-archiver.conf.example" "$CONFIG_DIR/yt-archiver.conf"
-    fi
-    sudo chown "$(whoami):$(whoami)" "$CONFIG_DIR/yt-archiver.conf"
-    sudo chmod 0644 "$CONFIG_DIR/yt-archiver.conf"
+    sudo docker compose up -d   # применяет cpus-лимит к backend-контейнеру
 ); then
-    mark_ok "YTARCHIVER" "http://$(hostname).local:8081"
+    mark_ok "YTARCHIVER" "http://$(hostname).local:8081 (CPU≤${YT_CPU_LIMIT})"
 else
     mark_fail "YTARCHIVER" "docker compose failed"
 fi

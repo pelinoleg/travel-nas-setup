@@ -145,7 +145,7 @@ Components:
   SAMBA          SMB share /mnt/storage
   PI_BACKUP      Еженедельный бэкап конфигов (воскр 03:00)
   PHOTO_BACKUP   Автобэкап SD/USB карт при подключении
-  NAS_BACKUP     Manual бэкап с домашнего NAS
+  NAS_BACKUP     Бэкап с домашнего NAS (вручную + опц. авто-расписание)
   WATCHDOG       Disk health monitor (5min timer)
   SYS_MONITOR    CPU/temp/throttling/microSD-wear monitor (5min)
   POWER_MODE     Авто power-профиль (home/field/emergency)

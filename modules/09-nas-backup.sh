@@ -111,6 +111,72 @@ EXCLUDES=(
 EOF
         sudo chmod 600 "$CONFIG_DIR/nas-backup.conf"
     fi
+
+    # --- Авто-расписание (опционально) ---
+    # Спрашиваем только если конфиг есть (иначе бэкапить нечем).
+    if [[ -f "$CONFIG_DIR/nas-backup.conf" ]]; then
+        # Текущее состояние → дефолт в меню (чтобы re-run показывал что выбрано).
+        CUR="off"
+        if systemctl is-enabled nas-backup-auto.timer >/dev/null 2>&1; then
+            if grep -q 'Sun' /etc/systemd/system/nas-backup-auto.timer 2>/dev/null; then
+                CUR="weekly"
+            else
+                CUR="daily"
+            fi
+        fi
+        SCHED=$(whiptail --title "NAS авто-бэкап" --default-item "$CUR" --menu \
+"Запускать бэкап с NAS автоматически?
+Когда NAS недоступен (в поездке) — тихо пропускается, без алёртов." 15 72 3 \
+            "off"    "Только вручную (дашборд / бот)" \
+            "daily"  "Каждую ночь в 03:00" \
+            "weekly" "Раз в неделю — воскресенье 03:00" \
+            3>&1 1>&2 2>&3) || SCHED="$CUR"
+
+        case "$SCHED" in
+            daily)  CAL="*-*-* 03:00:00" ;;
+            weekly) CAL="Sun *-*-* 03:00:00" ;;
+            *)      CAL="" ;;
+        esac
+
+        if [[ -n "$CAL" ]]; then
+            write_systemd_unit nas-backup-auto.service << 'EOF'
+[Unit]
+Description=Automatic NAS backup (scheduled)
+After=network-online.target mnt-storage.mount
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=NAS_BACKUP_DETACHED=1
+Nice=15
+IOSchedulingClass=idle
+# Тихо пропустить если NAS недоступен (в поездке) — без фейла/алёрта.
+# NAS_BACKUP_DETACHED=1 → nas-backup.sh бежит прямо в этом oneshot, без re-exec.
+ExecStart=/bin/bash -c 'source /etc/travel-nas/nas-backup.conf 2>/dev/null; ping -c1 -W3 "$NAS_HOST" >/dev/null 2>&1 && exec /usr/local/bin/nas-backup.sh --run'
+EOF
+            write_systemd_unit nas-backup-auto.timer << EOF
+[Unit]
+Description=Scheduled NAS backup
+
+[Timer]
+OnCalendar=$CAL
+Persistent=true
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target
+EOF
+            sudo systemctl daemon-reload
+            sudo systemctl enable --now nas-backup-auto.timer
+            info "NAS авто-бэкап: $SCHED ($CAL)"
+        else
+            sudo systemctl disable --now nas-backup-auto.timer 2>/dev/null || true
+            sudo rm -f /etc/systemd/system/nas-backup-auto.timer \
+                       /etc/systemd/system/nas-backup-auto.service
+            sudo systemctl daemon-reload
+            info "NAS авто-бэкап: выключен (только вручную)"
+        fi
+    fi
 ); then
     mark_ok "NAS_BACKUP"
 else

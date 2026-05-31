@@ -46,7 +46,7 @@ sudo curl -fsSL "https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/ma
 | 📱 **TG_NOTIFY** | Telegram-уведомления (helper script) |
 | 📁 **SAMBA** | SMB-шара `smb://<host>.local/travel-nas` (open guest) |
 | 📷 **PHOTO_BACKUP** | udev + rsync — автокопирование USB/SD при подключении |
-| 🏠 **NAS_BACKUP** | Ручной бэкап с домашнего NAS через rsync daemon |
+| 🏠 **NAS_BACKUP** | Бэкап с домашнего NAS (rsync daemon) — вручную или опц. авто по расписанию (тихо skip когда NAS недоступен) |
 | 🐕 **WATCHDOG** | Мониторинг T7 (mount/SMART/temp/space) каждые 5 мин |
 | 💻 **SYS_MONITOR** | CPU temp / throttling / RAM / microSD wear каждые 5 мин |
 | 🔌 **POWER_MODE** | Авто-переключение CPU governor + Docker apps под условия питания |

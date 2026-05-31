@@ -23,6 +23,22 @@ Significant changes to travel-nas-setup. Newest first.
 - **chrony** добавлен в UTILS — точное время/NTP (для travel-устройства с
   возможным RTC-дрейфом).
 
+### NAS / Photo
+- **NAS авто-бэкап (опц.)** — в wizard'е NAS_BACKUP теперь спрашивается
+  расписание: off / каждую ночь 03:00 / еженедельно (воскр 03:00) → systemd
+  timer `nas-backup-auto`. Когда NAS недоступен (в поездке) — тихо пропускается
+  (ping-guard в ExecStart), без фейла юнита и без Telegram-алёрта. `Persistent=true`
+  — пропущенный из-за выключенного Pi бэкап догоняется при следующем включении.
+- **photo-backup guard** — отказ + Telegram-алёрт если storage-диск не
+  примонтирован (раньше тихо лил импорт на microSD; был инцидент 6.6 ГБ).
+
+### Универсальность (reflash-proof)
+- Имя пользователя больше не захардкожено `oleg` — резолвится из uid 1000
+  (юзер из Pi Imager): `getent passwd 1000` / `pwd.getpwuid(1000)`. Затронуты
+  chown в photo/nas-backup, fix-conf-perms, SSH-подсказки (+ `{user}` подстановка).
+- **security**: пароль убран из закоммиченных файлов (репо публичный); требуется
+  ротация пароля владельцем (остался в git-истории).
+
 > ⚠️ Миграция живого устройства: после `travel-nas-update` (fast) скрипты будут
 > ждать `/mnt/storage`, а диск ещё в `/mnt/t7`. Нужен полный `travel-nas-setup`
 > (выбрать минимум STORAGE_MOUNT + SAMBA + PHOTOVIEW + VERIFY) и **reboot** —

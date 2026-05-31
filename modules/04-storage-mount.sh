@@ -3,6 +3,29 @@
 info "=== Storage Mount ==="
 
 # =============================================================================
+# Pi 5 USB power — ОБЯЗАТЕЛЬНО ПЕРВЫМ, до детекта диска
+# =============================================================================
+# Без usb_max_current_enable=1 ядро Pi 5 зажимает суммарный USB-ток до 600mA
+# (пока PSU не сообщит 5V/5A — это только офиц. Pi 27W PSU). USB-SSD под
+# нагрузкой/при споте браунит → `device offline` / I/O error → диск исчезает
+# из lsblk, и wizard говорит «дисков не найдено» вместо «форматировать?».
+# Ставим РАНО и безусловно (не в mount-блоке) — иначе chicken-and-egg: диск
+# отваливается до того как успеем смонтировать и выставить флаг. Нужен REBOOT.
+# Pi 4 — другая USB-архитектура, флаг игнорируется (не ставим).
+STORAGE_USB_FLAG_ADDED=""
+PI_MODEL=$(tr -d '\0' < /proc/device-tree/model 2>/dev/null || echo "")
+if [[ "$PI_MODEL" == *"Pi 5"* ]]; then
+    BOOT_CFG=/boot/firmware/config.txt
+    if [[ -f "$BOOT_CFG" ]] && ! grep -qE '^usb_max_current_enable=1' "$BOOT_CFG"; then
+        echo "" | sudo tee -a "$BOOT_CFG" >/dev/null
+        echo "# travel-nas-setup: полный USB-ток для внешнего SSD (Pi 5)" | sudo tee -a "$BOOT_CFG" >/dev/null
+        echo "usb_max_current_enable=1" | sudo tee -a "$BOOT_CFG" >/dev/null
+        STORAGE_USB_FLAG_ADDED=1
+        warn "Pi 5: добавил usb_max_current_enable=1 — нужен REBOOT, иначе USB-SSD отваливается под нагрузкой."
+    fi
+fi
+
+# =============================================================================
 # Helpers
 # =============================================================================
 
@@ -139,7 +162,11 @@ if [[ -z "$STORAGE_DEV" ]]; then
 
     if [[ ${#MENU[@]} -eq 0 ]]; then
         mark_fail "STORAGE_MOUNT" "не найдено подходящих дисков (нужен ≥32GB, не системный)"
-        warn "Подключи внешний SSD/HDD и перезапусти setup.sh"
+        if [[ -n "$STORAGE_USB_FLAG_ADDED" ]]; then
+            warn "Похоже диск отвалился по USB-power (Pi 5). Флаг usb_max_current_enable=1 ТОЛЬКО ЧТО добавлен — СДЕЛАЙ REBOOT и запусти setup.sh снова, диск станет стабильным."
+        else
+            warn "Подключи внешний SSD/HDD и перезапусти setup.sh. Если Pi 5 и диск мигает — проверь dmesg на 'device offline' (USB-power) и что стоит usb_max_current_enable=1 + был reboot."
+        fi
     else
         SEL_DEV=$(whiptail --title "Travel-NAS storage" \
             --menu "Подключённые диски — выбери для хранилища:\n(размер · файловая система · метка · модель)" \
@@ -282,26 +309,8 @@ if [[ -n "$STORAGE_DEV" ]]; then
 
         STORAGE_UUID=$(sudo blkid -s UUID -o value "$STORAGE_DEV")
         sudo mkdir -p "$STORAGE_MOUNT" "$CONFIG_DIR"
+        # (usb_max_current_enable для Pi 5 уже выставлен в начале модуля)
 
-        # Pi 5-specific: usb_max_current_enable=1 для T7 SSD на USB.
-        # Без флага Pi 5 kernel зажимает суммарный USB ток до 600mA пока
-        # PSU не сообщит 5V/5A profile (есть только у официального Pi 27W
-        # PSU). T7 при rsync-пиках упирается → дисконнект / throttling.
-        #
-        # Pi 4 имеет другую USB power architecture (нет PMIC negotiation),
-        # этот флаг игнорируется → пропускаем (не плохо, просто бессмысленно).
-        PI_MODEL=$(tr -d '\0' < /proc/device-tree/model 2>/dev/null || echo "")
-        if [[ "$PI_MODEL" == *"Pi 5"* ]]; then
-            BOOT_CFG=/boot/firmware/config.txt
-            if [[ -f "$BOOT_CFG" ]] && ! grep -qE '^usb_max_current_enable=1' "$BOOT_CFG"; then
-                echo "" | sudo tee -a "$BOOT_CFG" >/dev/null
-                echo "# travel-nas-setup: разрешить полный USB ток для внешнего SSD (Pi 5)" | sudo tee -a "$BOOT_CFG" >/dev/null
-                echo "usb_max_current_enable=1" | sudo tee -a "$BOOT_CFG" >/dev/null
-                info "usb_max_current_enable=1 → $BOOT_CFG (применится после reboot)"
-            fi
-        else
-            info "Не Pi 5 ($PI_MODEL) — usb_max_current_enable пропущен"
-        fi
         if ! grep -q "$STORAGE_UUID" /etc/fstab; then
             echo "UUID=$STORAGE_UUID $STORAGE_MOUNT ext4 defaults,nofail,noatime 0 2" | sudo tee -a /etc/fstab > /dev/null
         fi

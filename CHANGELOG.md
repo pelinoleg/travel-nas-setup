@@ -29,12 +29,16 @@ Significant changes to travel-nas-setup. Newest first.
   `nas-backup-auto`. Когда NAS недоступен (в поездке) — тихо пропускается
   (ping-guard в ExecStart), без фейла юнита и без Telegram-алёрта. `Persistent=true`
   — пропущенный из-за выключенного Pi бэкап догоняется при следующем включении.
-- **Управление расписанием вынесено в `nas-schedule.sh`** (единый источник правды
-  для wizard'а и дашборда): `status|set <freq> <HH:MM>|off|toggle`. Toggle
-  запоминает выбор (`/var/lib/travel-nas/nas-schedule.pref`).
+- **Расписание живёт в `nas-backup.conf`** (`AUTO_BACKUP` / `AUTO_BACKUP_FREQ` /
+  `AUTO_BACKUP_TIME`, с кастомным временем HH:MM) — как все настройки проекта.
+  Правка руками применяется автоматически через path-unit `nas-schedule-apply`.
+  `nas-schedule.sh` (status/apply/set/off/toggle) синхронит systemd-timer с конфигом.
 - **Дашборд → NAS status**: строка `auto-backup: daily HH:MM` + кнопка **Auto on/off**
-  (через `sudo nas-schedule.sh toggle`). Низ страницы теперь `Back | Auto | Refresh`.
-  Смена дня/времени — в wizard'е. Новый sudoers-вызов → нужен двойной прогон update.
+  (`sudo nas-schedule.sh toggle` правит конфиг). Низ страницы `Back | Auto | Refresh`.
+  Новый sudoers-вызов → нужен двойной прогон update.
+- **Фикс**: миграция `/mnt/t7`→`/mnt/storage` теперь чинит и пути в
+  `/etc/travel-nas/*.conf` (DEST). Раньше старый DEST в конфиге ломал
+  nas-backup/photo-backup (писали/сканировали мёртвый путь) — статус показывал `?`.
 - **photo-backup guard** — отказ + Telegram-алёрт если storage-диск не
   примонтирован (раньше тихо лил импорт на microSD; был инцидент 6.6 ГБ).
 

@@ -9,6 +9,8 @@ if (
     fi
     fetch_script "nas-backup.sh"        "$SCRIPT_DIR/nas-backup.sh"
     fetch_script "nas-backup-status.py" "$SCRIPT_DIR/nas-backup-status.py"
+    # nas-schedule.sh нужен ДО создания конфига (path-unit дёрнет его apply).
+    fetch_script "nas-schedule.sh"      "$SCRIPT_DIR/nas-schedule.sh"
 
     # /var/lib/travel-nas (status JSONs) — oleg-owned для tg-listener offset etc
     sudo install -d -o "$(whoami)" -g "$(whoami)" -m 0755 /var/lib/travel-nas
@@ -38,6 +40,30 @@ WantedBy=timers.target
 EOF
     sudo systemctl daemon-reload
     sudo systemctl enable --now nas-backup-status.timer
+
+    # Path-unit: правка AUTO_BACKUP* в nas-backup.conf → авто-применение таймера
+    # (чтобы расписание менялось через конфиг, как все остальные настройки).
+    write_systemd_unit nas-schedule-apply.service << 'EOF'
+[Unit]
+Description=Apply NAS auto-backup schedule from nas-backup.conf
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/nas-schedule.sh apply
+EOF
+    write_systemd_unit nas-schedule-apply.path << 'EOF'
+[Unit]
+Description=Watch nas-backup.conf for schedule changes
+
+[Path]
+PathChanged=/etc/travel-nas/nas-backup.conf
+Unit=nas-schedule-apply.service
+
+[Install]
+WantedBy=paths.target
+EOF
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now nas-schedule-apply.path
 
     if [[ ! -f "$CONFIG_DIR/nas-backup.conf" ]]; then
         # Дефолты для retry-loop'а
@@ -82,6 +108,13 @@ NAS_USER="$NAS_USER"
 NAS_PASS="$NAS_PASS"
 DEST="$STORAGE_MOUNT/nas-backup"
 
+# --- Авто-бэкап по расписанию ---
+# Меняешь тут руками → применяется автоматически (path-unit nas-schedule-apply).
+# Или через дашборд: NAS status → кнопка Auto. Или: nas-schedule.sh set daily 04:30
+AUTO_BACKUP="off"          # on | off
+AUTO_BACKUP_FREQ="daily"   # daily | weekly (воскресенье)
+AUTO_BACKUP_TIME="03:00"   # HH:MM, 24ч
+
 # Модули для бэкапа (формат: "rsync_module|local_folder")
 #
 # Список доступных модулей: sshpass -p "\$NAS_PASS" rsync "\$NAS_USER@\$NAS_HOST::"
@@ -113,9 +146,8 @@ EOF
     fi
 
     # --- Авто-расписание (опционально) ---
-    # Логика таймера вынесена в nas-schedule.sh (его же дёргает дашборд).
-    fetch_script "nas-schedule.sh" "$SCRIPT_DIR/nas-schedule.sh"
-
+    # Логика в nas-schedule.sh (его дёргают дашборд и path-unit). Источник правды —
+    # ключи AUTO_BACKUP* в nas-backup.conf; wizard просто их записывает.
     # Спрашиваем только если конфиг есть (иначе бэкапить нечем).
     if [[ -f "$CONFIG_DIR/nas-backup.conf" ]]; then
         # Текущее состояние → дефолт в меню (чтобы re-run показывал что выбрано).

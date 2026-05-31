@@ -1,44 +1,59 @@
 #!/bin/bash
 # =============================================================================
-# nas-schedule.sh — управление авто-расписанием NAS-бэкапа (systemd timer)
+# nas-schedule.sh — авто-расписание NAS-бэкапа
 # =============================================================================
-# Единый источник правды: дёргается и wizard'ом (09-nas-backup), и дашбордом.
+# ИСТОЧНИК ПРАВДЫ — /etc/travel-nas/nas-backup.conf (как все настройки проекта):
+#   AUTO_BACKUP="on|off"
+#   AUTO_BACKUP_FREQ="daily|weekly"     # weekly = воскресенье
+#   AUTO_BACKUP_TIME="HH:MM"            # 24ч
 #
-#   nas-schedule.sh status            → "off" | "daily HH:MM" | "weekly HH:MM"
-#   nas-schedule.sh set daily 03:00   → включить ежедневно
-#   nas-schedule.sh set weekly 04:30  → включить еженедельно (воскресенье)
-#   nas-schedule.sh off               → выключить (выбор запоминается для toggle)
-#   nas-schedule.sh toggle            → off↔on (on восстанавливает запомненное)
+# Меняешь конфиг руками → path-unit `nas-schedule-apply` сам применяет (как
+# другие настройки). Этот скрипт только синхронизирует systemd-timer с конфигом.
 #
-# status — read-only (без root). set/off/toggle меняют systemd → нужен root
+#   status            → "off" | "daily HH:MM" | "weekly HH:MM"   (читает конфиг)
+#   apply             → привести systemd-timer в соответствие с конфигом   (root)
+#   set <freq> <time> → записать в конфиг + apply                          (root)
+#   off               → AUTO_BACKUP=off + apply                            (root)
+#   toggle            → флип on/off + apply                                (root)
+#
+# status — read-only (без root). Остальное меняет systemd/конфиг → нужен root
 # (скрипт сам перевызовётся через sudo, если запущен не от root).
 # =============================================================================
 set -u
 
+CONF="/etc/travel-nas/nas-backup.conf"
 TIMER_NAME="nas-backup-auto.timer"
 SERVICE_PATH="/etc/systemd/system/nas-backup-auto.service"
 TIMER_PATH="/etc/systemd/system/nas-backup-auto.timer"
-PREF_FILE="/var/lib/travel-nas/nas-schedule.pref"   # запоминает выбор для toggle
 
-is_on()      { systemctl is-enabled "$TIMER_NAME" >/dev/null 2>&1; }
-valid_time() { [[ "$1" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]]; }
 need_root()  { [[ $EUID -eq 0 ]] || exec sudo "$0" "$@"; }
+valid_time() { [[ "$1" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]]; }
 
-current() {   # echo "freq HH:MM" из активного таймера, или ничего
-    [[ -f "$TIMER_PATH" ]] || return
-    local cal time
-    cal=$(grep -m1 '^OnCalendar=' "$TIMER_PATH" | cut -d= -f2-)
-    time=$(echo "$cal" | grep -oE '[0-9]{2}:[0-9]{2}' | head -1)
-    if echo "$cal" | grep -q '^Sun'; then echo "weekly ${time}"; else echo "daily ${time}"; fi
+# Читаем наши ключи из конфига. Source в субшелле — массивы/секреты не утекают.
+read_conf() {
+    AUTO_BACKUP="off"; AUTO_BACKUP_FREQ="daily"; AUTO_BACKUP_TIME="03:00"
+    [[ -f "$CONF" ]] || return
+    eval "$(
+        # shellcheck disable=SC1090
+        source "$CONF" 2>/dev/null
+        printf 'AUTO_BACKUP=%q\n'      "${AUTO_BACKUP:-off}"
+        printf 'AUTO_BACKUP_FREQ=%q\n' "${AUTO_BACKUP_FREQ:-daily}"
+        printf 'AUTO_BACKUP_TIME=%q\n' "${AUTO_BACKUP_TIME:-03:00}"
+    )"
 }
 
-write_and_enable() {   # $1=freq  $2=HH:MM
-    local freq="$1" time="$2" cal
-    case "$freq" in
-        daily)  cal="*-*-* ${time}:00" ;;
-        weekly) cal="Sun *-*-* ${time}:00" ;;
-        *) echo "bad freq: $freq" >&2; return 1 ;;
-    esac
+# Записать/обновить ключ в конфиге (создаёт блок если ключей ещё нет).
+set_key() {
+    local k="$1" v="$2"
+    [[ -f "$CONF" ]] || return 1
+    if grep -qE "^[[:space:]]*${k}=" "$CONF"; then
+        sed -i "s#^[[:space:]]*${k}=.*#${k}=\"${v}\"#" "$CONF"
+    else
+        printf '%s="%s"\n' "$k" "$v" >> "$CONF"
+    fi
+}
+
+write_units() {   # $1 = OnCalendar
     cat > "$SERVICE_PATH" <<'EOF'
 [Unit]
 Description=Automatic NAS backup (scheduled)
@@ -58,15 +73,13 @@ EOF
 Description=Scheduled NAS backup
 
 [Timer]
-OnCalendar=$cal
+OnCalendar=$1
 Persistent=true
 RandomizedDelaySec=5min
 
 [Install]
 WantedBy=timers.target
 EOF
-    mkdir -p "$(dirname "$PREF_FILE")"
-    echo "$freq $time" > "$PREF_FILE"
     systemctl daemon-reload
     systemctl enable --now "$TIMER_NAME"
 }
@@ -77,35 +90,65 @@ disable_all() {
     systemctl daemon-reload
 }
 
+do_apply() {
+    read_conf
+    if [[ "$AUTO_BACKUP" != "on" ]]; then
+        disable_all
+        return
+    fi
+    valid_time "$AUTO_BACKUP_TIME" || AUTO_BACKUP_TIME="03:00"
+    local cal
+    case "$AUTO_BACKUP_FREQ" in
+        weekly) cal="Sun *-*-* ${AUTO_BACKUP_TIME}:00" ;;
+        *)      cal="*-*-* ${AUTO_BACKUP_TIME}:00" ;;
+    esac
+    write_units "$cal"
+}
+
 case "${1:-status}" in
     status)
-        if is_on; then current; else echo "off"; fi
+        read_conf
+        if [[ "$AUTO_BACKUP" == "on" ]]; then
+            echo "${AUTO_BACKUP_FREQ} ${AUTO_BACKUP_TIME}"
+        else
+            echo "off"
+        fi
+        ;;
+    apply)
+        need_root "$@"
+        do_apply
         ;;
     set)
         need_root "$@"
         freq="${2:-daily}"; time="${3:-03:00}"
         valid_time "$time" || { echo "bad time (HH:MM): $time" >&2; exit 1; }
-        write_and_enable "$freq" "$time" && echo "$freq $time"
+        [[ "$freq" == daily || "$freq" == weekly ]] || { echo "bad freq: $freq" >&2; exit 1; }
+        set_key AUTO_BACKUP on
+        set_key AUTO_BACKUP_FREQ "$freq"
+        set_key AUTO_BACKUP_TIME "$time"
+        do_apply
+        echo "$freq $time"
         ;;
     off)
         need_root "$@"
-        disable_all; echo "off"
+        set_key AUTO_BACKUP off
+        do_apply
+        echo "off"
         ;;
     toggle)
         need_root "$@"
-        if is_on; then
-            disable_all; echo "off"
+        read_conf
+        if [[ "$AUTO_BACKUP" == "on" ]]; then
+            set_key AUTO_BACKUP off
         else
-            pref=$(cat "$PREF_FILE" 2>/dev/null)
-            freq=$(echo "$pref" | awk '{print $1}')
-            time=$(echo "$pref" | awk '{print $2}')
-            [[ "$freq" == daily || "$freq" == weekly ]] || freq="daily"
-            valid_time "${time:-}" || time="03:00"
-            write_and_enable "$freq" "$time" && echo "$freq $time"
+            set_key AUTO_BACKUP on
         fi
+        do_apply
+        read_conf
+        [[ "$AUTO_BACKUP" == "on" ]] && echo "${AUTO_BACKUP_FREQ} ${AUTO_BACKUP_TIME}" || echo "off"
         ;;
     *)
-        echo "usage: nas-schedule.sh {status|set <daily|weekly> <HH:MM>|off|toggle}" >&2
+        echo "usage: nas-schedule.sh {status|apply|set <daily|weekly> <HH:MM>|off|toggle}" >&2
         exit 1
         ;;
 esac

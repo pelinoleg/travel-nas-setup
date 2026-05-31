@@ -267,6 +267,17 @@ if [[ -n "$STORAGE_DEV" ]]; then
         fi
         sudo rmdir "$STORAGE_LEGACY_MOUNT" 2>/dev/null || true
 
+        # Legacy-миграция путей в конфигах юзера. /etc/travel-nas/*.conf миграция
+        # обычно НЕ трогает, но DEST="/mnt/t7/..." после смены пути ломает
+        # nas-backup / photo-backup (пишут/сканируют мёртвый путь). Чиним один раз.
+        for cf in "$CONFIG_DIR"/*.conf; do
+            [[ -f "$cf" ]] || continue
+            if grep -q "$STORAGE_LEGACY_MOUNT/" "$cf" 2>/dev/null; then
+                sudo sed -i "s#${STORAGE_LEGACY_MOUNT}/#${STORAGE_MOUNT}/#g" "$cf"
+                info "Мигрировал путь в $(basename "$cf"): $STORAGE_LEGACY_MOUNT → $STORAGE_MOUNT"
+            fi
+        done
+
         STORAGE_UUID=$(sudo blkid -s UUID -o value "$STORAGE_DEV")
         sudo mkdir -p "$STORAGE_MOUNT" "$CONFIG_DIR"
 

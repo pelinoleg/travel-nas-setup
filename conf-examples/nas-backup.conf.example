@@ -9,6 +9,14 @@ NAS_PASS=""
 # Куда сохранять
 DEST="/mnt/storage/nas-backup"
 
+# --- Авто-бэкап по расписанию ---
+# Меняешь тут руками → применяется автоматически (path-unit nas-schedule-apply).
+# Или через дашборд: NAS status → кнопка Auto. Или: nas-schedule.sh set daily 04:30
+# В поездке (NAS недоступен) запуск тихо пропускается, без алёртов.
+AUTO_BACKUP="off"          # on | off
+AUTO_BACKUP_FREQ="daily"   # daily | weekly (воскресенье)
+AUTO_BACKUP_TIME="03:00"   # HH:MM, 24ч
+
 # Модули для бэкапа (формат: "rsync_module|local_folder")
 #
 # Список доступных модулей: `sshpass -p "$NAS_PASS" rsync "$NAS_USER@$NAS_HOST::"`

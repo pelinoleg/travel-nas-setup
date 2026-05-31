@@ -40,6 +40,13 @@ POWER_PREF_FILE    = Path("/var/lib/travel-nas/power-mode-pref")
 OFFSET_FILE        = Path("/var/lib/travel-nas/tg-listener.offset")
 STORAGE_LOGS            = Path("/mnt/storage/_logs")
 
+# Имя человека-юзера = uid 1000 (кого создал Pi Imager). Не хардкодим имя.
+try:
+    import pwd
+    SSH_USER = pwd.getpwuid(1000).pw_name
+except Exception:
+    SSH_USER = "user"
+
 # Pending confirmations: {chat_id: (action, expires_ts)}
 pending = {}
 CONFIRM_TTL = 30  # seconds
@@ -982,7 +989,7 @@ DNS:       `{dns_name}`
 *Peers* ({len(peers)}):
 {peers_block}
 
-_Через tailnet ssh:_ `ssh oleg@{dns_name.split('.')[0] if dns_name != '—' else 'travel-nas'}`""")
+_Через tailnet ssh:_ `ssh {SSH_USER}@{dns_name.split('.')[0] if dns_name != '—' else 'travel-nas'}`""")
 
 
 def cmd_screenshot(token, chat_id, args):

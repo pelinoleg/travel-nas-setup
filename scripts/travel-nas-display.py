@@ -52,12 +52,20 @@ NAS_STATUS_JSON    = Path("/var/lib/travel-nas/nas-backup-status.json")
 DAILY_SUMMARY_JSON = Path("/var/lib/travel-nas/daily-summary.json")
 POWER_MODE_FILE    = Path("/var/lib/travel-nas/power-mode.txt")
 POWER_PREF_FILE    = Path("/var/lib/travel-nas/power-mode-pref")
+# Имя человека-юзера = uid 1000 (кого создал Pi Imager). Не хардкодим — работает
+# при любом имени из прошивки. Используется в SSH-подсказках ({user}).
+try:
+    import pwd
+    SSH_USER = pwd.getpwuid(1000).pw_name
+except Exception:
+    SSH_USER = "user"
+
 SERVICES_DEFAULTS = [
     ("CasaOS",      "http://{host}"),
     ("Photoview",   "http://{host}:8000"),
     ("yt-archiver", "http://{host}:8081"),
     ("Samba",       "smb://{host}/travel-nas"),
-    ("SSH",         "ssh oleg@{host}"),
+    ("SSH",         "ssh {user}@{host}"),
 ]
 
 LOG_OPTIONS = [
@@ -727,8 +735,8 @@ def load_services():
     host = f"{socket.gethostname()}.local"
     return [
         (n,
-         u.replace("{host}", host).replace("{ip}", ip),
-         [note.replace("{host}", host).replace("{ip}", ip) for note in notes],
+         u.replace("{host}", host).replace("{ip}", ip).replace("{user}", SSH_USER),
+         [note.replace("{host}", host).replace("{ip}", ip).replace("{user}", SSH_USER) for note in notes],
          inline)
         for n, u, notes, inline in items
     ]
@@ -3123,7 +3131,7 @@ def page_ap_info():
     if not (ip and ip.startswith("10.41.")):
         screen.blit(F_SMALL.render(f"Current IP: {ip}", True, MUTED), (8, y)); y += 16
     screen.blit(F_SMALL.render(f"Web:  http://{ip}{port_suffix}", True, FG), (8, y)); y += 16
-    screen.blit(F_SMALL.render(f"SSH:  ssh oleg@{ip}", True, FG), (8, y))
+    screen.blit(F_SMALL.render(f"SSH:  ssh {SSH_USER}@{ip}", True, FG), (8, y))
 
     back = Btn("Back", "back_to_prev", pygame.Rect(8, SCREEN_H - 54, SCREEN_W - 16, 46), MUTED)
     draw_button(back); return [back]

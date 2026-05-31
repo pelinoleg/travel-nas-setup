@@ -43,6 +43,11 @@ STORAGE_UUID="${STORAGE_UUID:-}"
 MIN_SIZE="${MIN_SIZE:-1}"
 WAIT_FOR_DEVMON="${WAIT_FOR_DEVMON:-3}"
 
+# Владелец импортов = человек из Pi Imager (uid 1000). Скрипт бежит от root,
+# поэтому whoami=root не подходит — берём uid 1000. Не хардкодим имя.
+OWNER_USER="$(getent passwd 1000 2>/dev/null | cut -d: -f1)"
+[[ -z "$OWNER_USER" ]] && OWNER_USER="root"
+
 # Папки
 mkdir -p "$LOG_DIR" "$LOCK_DIR"
 
@@ -220,7 +225,7 @@ if [[ -x "$PROGRESS_WRITER" ]]; then
     stdbuf -o0 rsync -avh \
         --info=progress2 --no-inc-recursive --outbuf=N \
         --stats \
-        --no-owner --no-group --no-perms --chown=oleg:oleg \
+        --no-owner --no-group --no-perms --chown=$OWNER_USER:$OWNER_USER \
         --min-size="${MIN_SIZE}" \
         --exclude='*$recycle.bin/*' \
         --exclude='*trash*' \
@@ -242,7 +247,7 @@ else
     rsync -avh \
         --info=progress2 --no-inc-recursive --outbuf=N \
         --stats \
-        --no-owner --no-group --no-perms --chown=oleg:oleg \
+        --no-owner --no-group --no-perms --chown=$OWNER_USER:$OWNER_USER \
         --min-size="${MIN_SIZE}" \
         --exclude='*$recycle.bin/*' \
         --exclude='*trash*' \

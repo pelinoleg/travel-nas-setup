@@ -145,8 +145,10 @@ done
 
 # Dashboard — перезапуск только если бежит и есть X-сессия.
 # Внутри скрипт root (после exec sudo), но dashboard должен бежать от юзера
-# (его X-сессия). Берём оригинального юзера из SUDO_USER, fallback на logname.
+# (его X-сессия). Берём оригинального юзера из SUDO_USER, fallback на logname,
+# затем на uid 1000 (юзер из Pi Imager) — на случай запуска без SUDO_USER (cron).
 USER_LOGIN="${SUDO_USER:-$(logname 2>/dev/null || echo "")}"
+[[ -z "$USER_LOGIN" ]] && USER_LOGIN="$(getent passwd 1000 2>/dev/null | cut -d: -f1)"
 USER_HOME="/home/$USER_LOGIN"
 
 if pgrep -f /usr/local/bin/travel-nas-display.py >/dev/null; then
@@ -186,7 +188,8 @@ fi
 # setup wizard'а, что неудобно.
 SUDOERS_FILE="/etc/sudoers.d/travel-nas-dashboard"
 USER_NAME="${SUDO_USER:-$(logname 2>/dev/null || echo "")}"
-[[ -z "$USER_NAME" ]] && USER_NAME="oleg"
+[[ -z "$USER_NAME" ]] && USER_NAME="$(getent passwd 1000 2>/dev/null | cut -d: -f1)"
+[[ -z "$USER_NAME" ]] && USER_NAME="root"
 
 REQUIRED_CMDS=(
     "/usr/local/bin/nas-backup.sh"

@@ -16,19 +16,23 @@ set -u
 
 CONF_DIR="/etc/travel-nas"
 LOG="/var/lib/travel-nas/fix-conf-perms.log"
-TARGET_USER="oleg"
+# Юзер = первый человек, созданный Pi Imager'ом (uid 1000). Не хардкодим имя —
+# скрипт работает при любом имени, заданном при прошивке.
+TARGET_USER="$(getent passwd 1000 2>/dev/null | cut -d: -f1)"
+[[ -z "$TARGET_USER" ]] && TARGET_USER="${SUDO_USER:-$(logname 2>/dev/null)}"
+[[ -z "$TARGET_USER" ]] && TARGET_USER="root"
 
 # Кто должен быть owner и какие права. Формат "owner:group mode".
 # Файлы с секретами (passwords/tokens) → 600. Остальные 644.
 declare -A SPECS=(
-    [tg-notify.conf]="oleg:oleg 600"
-    [nas-backup.conf]="oleg:oleg 600"
-    [services.conf]="oleg:oleg 644"
-    [thermal-guard.conf]="oleg:oleg 644"
-    [photo-backup.conf]="oleg:oleg 644"
-    [power-mode.conf]="oleg:oleg 644"
-    [yt-archiver.conf]="oleg:oleg 644"
-    [storage-info.conf]="oleg:oleg 644"
+    [tg-notify.conf]="$TARGET_USER:$TARGET_USER 600"
+    [nas-backup.conf]="$TARGET_USER:$TARGET_USER 600"
+    [services.conf]="$TARGET_USER:$TARGET_USER 644"
+    [thermal-guard.conf]="$TARGET_USER:$TARGET_USER 644"
+    [photo-backup.conf]="$TARGET_USER:$TARGET_USER 644"
+    [power-mode.conf]="$TARGET_USER:$TARGET_USER 644"
+    [yt-archiver.conf]="$TARGET_USER:$TARGET_USER 644"
+    [storage-info.conf]="$TARGET_USER:$TARGET_USER 644"
 )
 
 mkdir -p "$(dirname "$LOG")" 2>/dev/null

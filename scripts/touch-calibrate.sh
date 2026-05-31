@@ -18,7 +18,7 @@
 set -u
 
 CALIB_FILE="/etc/X11/xorg.conf.d/99-calibration.conf"
-USER_LOGIN="${SUDO_USER:-$(logname 2>/dev/null || echo oleg)}"
+USER_LOGIN="${SUDO_USER:-$(logname 2>/dev/null || getent passwd 1000 | cut -d: -f1)}"
 USER_HOME="/home/$USER_LOGIN"
 
 if [[ "$EUID" -ne 0 ]]; then

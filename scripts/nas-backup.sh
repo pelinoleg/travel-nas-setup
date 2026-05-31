@@ -17,6 +17,11 @@
 
 set -u
 
+# Владелец синхронизированных файлов = человек из Pi Imager (uid 1000).
+# Скрипт бежит от root (systemd-run) — не хардкодим имя.
+OWNER_USER="$(getent passwd 1000 2>/dev/null | cut -d: -f1)"
+[[ -z "$OWNER_USER" ]] && OWNER_USER="root"
+
 # =============================================================================
 # Self-reexec через systemd-run для outliving вызывающего процесса
 # =============================================================================
@@ -173,7 +178,7 @@ run_module() {
     local rsync_args=(
         -rltD
         --info=progress2 --no-inc-recursive --outbuf=N
-        --no-owner --no-group --no-perms --chown=oleg:oleg
+        --no-owner --no-group --no-perms --chown=$OWNER_USER:$OWNER_USER
         --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r
         --omit-dir-times
         --human-readable

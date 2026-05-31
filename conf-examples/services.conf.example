@@ -14,6 +14,7 @@
 # Подстановки в URL и заметках:
 #   {host}  → travel-nas.local (mDNS — работает в локальной сети)
 #   {ip}    → текущий IP (192.168.x.x или 10.41.x.x в AP режиме)
+#   {user}  → имя юзера устройства (uid 1000, заданное в Pi Imager)
 #
 # На дашборде:
 #   - NAME — синим (заголовок)
@@ -35,5 +36,5 @@ YT-Archiver=http://{host}:8081
 
 # Компактный inline для коротких записей:
 >Samba=smb://{host}/travel-nas
->SSH=ssh oleg@{host}
+>SSH=ssh {user}@{host}
     pass: <твой-пароль>

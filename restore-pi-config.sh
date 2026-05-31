@@ -5,10 +5,10 @@
 # Запускать ПОСЛЕ:
 #   1. Чистой установки PiOS Desktop
 #   2. travel-nas-setup (создаёт юзера, ставит ПО)
-#   3. Монтирования T7 (T7_MOUNT блок)
+#   3. Монтирования T7 (STORAGE_MOUNT блок)
 #
 # Использование:
-#   bash restore-pi-config.sh                       # auto-find в /mnt/t7/pi-config-backups
+#   bash restore-pi-config.sh                       # auto-find в /mnt/storage/pi-config-backups
 #   bash restore-pi-config.sh /path/to/backup       # из конкретной папки
 #
 # Бэкапы имеют зеркальную структуру:
@@ -46,7 +46,7 @@ BACKUP_ROOT="${1%/}"
 
 if [[ -z "$BACKUP_ROOT" ]]; then
     SEARCH_PATHS=(
-        "/mnt/t7/pi-config-backups"
+        "/mnt/storage/pi-config-backups"
         "/home/$(whoami)/pi-config-backups"
     )
     FOUND_ROOT=""

@@ -152,7 +152,7 @@ Tree-sidebar + main file list. Внутри content тоже две колонк
 ┌──────────────┬─────────────────────────────────────────────────────┐
 │  sidebar     │  Files                          ⟳   + New   ⋮       │
 │              ├──────────────┬──────────────────────────────────────┤
-│              │ /mnt/t7      │  📁 Personal      1.6T    2d ago  ⋮  │
+│              │ /mnt/storage      │  📁 Personal      1.6T    2d ago  ⋮  │
 │              │ ├─usb-imports│  📁 Music          666G   3d ago  ⋮  │
 │              │ ├─nas-backup │  📁 Docker          33G   2h ago  ⋮  │
 │              │ │ ├─Personal │  📁 Cloud          172G  10m ago  ⋮  │
@@ -282,7 +282,7 @@ Bottom-bar **скрывается** во время running mode — фокус 
 │              ├─────────────────────────────────────────────────────┤
 │              │  ▼ photo-backup.log    ▼ nas-backup.log    ▼ all  ⋮ │
 │              ├─────────────────────────────────────────────────────┤
-│              │  [INFO]  Mounted /mnt/t7                            │
+│              │  [INFO]  Mounted /mnt/storage                            │
 │              │  [INFO]  rsync started: Personal                    │
 │              │  [WARN]  skipped: /Volume1/.DS_Store                │
 │              │  [INFO]  scanned 124,891 files                      │
@@ -309,7 +309,7 @@ Bottom-bar **скрывается** во время running mode — фокус 
 │              ├─────────────────────────────────────────────────────┤
 │              │  Photoview                    http://pi.local:8000  │
 │              │  Login: admin / hammett                     [📱 QR] │
-│              │  /t7/usb-imports                                    │
+│              │  /storage/usb-imports                                    │
 │              ├─────────────────────────────────────────────────────┤
 │              │  Samba                        smb://pi.local/…      │
 │              │  open guest, без auth                       [📱 QR] │

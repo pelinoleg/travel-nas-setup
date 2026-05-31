@@ -9,7 +9,7 @@
 set -u
 
 TG_NOTIFY="/usr/local/bin/tg-notify.sh"
-LOG="/mnt/t7/_logs/system-monitor.log"
+LOG="/mnt/storage/_logs/system-monitor.log"
 STATE_DIR="/var/lib/travel-nas"
 STATE_FILE="$STATE_DIR/system-monitor-state.txt"
 

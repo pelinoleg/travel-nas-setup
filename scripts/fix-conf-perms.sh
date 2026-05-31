@@ -28,7 +28,7 @@ declare -A SPECS=(
     [photo-backup.conf]="oleg:oleg 644"
     [power-mode.conf]="oleg:oleg 644"
     [yt-archiver.conf]="oleg:oleg 644"
-    [t7-info.conf]="oleg:oleg 644"
+    [storage-info.conf]="oleg:oleg 644"
 )
 
 mkdir -p "$(dirname "$LOG")" 2>/dev/null

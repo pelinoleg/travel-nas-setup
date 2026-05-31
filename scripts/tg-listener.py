@@ -5,10 +5,10 @@
 # Long-polling via getUpdates. Slim: только stdlib + requests.
 #
 # Команды:
-#   /status     снимок (uptime, T7, CPU, бэкапы сегодня, режим питания)
+#   /status     снимок (uptime, Disk, CPU, бэкапы сегодня, режим питания)
 #   /backup     запустить NAS backup
 #   /backup dry dry-run
-#   /logs [N]   последние N строк всех логов на T7 (default 30)
+#   /logs [N]   последние N строк всех логов на диске (default 30)
 #   /reboot     перезагрузка Pi (с подтверждением)
 #   /shutdown   выключение Pi (с подтверждением)
 #   /power MODE home/field/emergency/auto
@@ -38,7 +38,7 @@ NAS_STATUS_JSON    = Path("/var/lib/travel-nas/nas-backup-status.json")
 POWER_MODE_FILE    = Path("/var/lib/travel-nas/power-mode.txt")
 POWER_PREF_FILE    = Path("/var/lib/travel-nas/power-mode-pref")
 OFFSET_FILE        = Path("/var/lib/travel-nas/tg-listener.offset")
-T7_LOGS            = Path("/mnt/t7/_logs")
+STORAGE_LOGS            = Path("/mnt/storage/_logs")
 
 # Pending confirmations: {chat_id: (action, expires_ts)}
 pending = {}
@@ -155,7 +155,7 @@ def cmd_help(token, chat_id, args):
     send(token, chat_id, """*Travel-NAS bot* — все команды:
 
 📊 *Статус*
-`/status` `/today` — snapshot (uptime, CPU, T7, throttle)
+`/status` `/today` — snapshot (uptime, CPU, Disk, throttle)
 `/screenshot` `/screen` — PNG-снимок текущего экрана дашборда
 `/sleep` — auto-sleep таймаут (`/sleep 5m`, `/sleep never`)
 `/nas` — статус NAS-бэкапов (модули, размеры, last-run)
@@ -165,7 +165,7 @@ def cmd_help(token, chat_id, args):
 `/services` — все URL установленных сервисов
 `/configs` — `/etc/travel-nas/` файлы + где что лежит
 `/tailscale` `/ts` — статус Tailscale VPN + peers
-`/verify` — последний bit-rot/IO scrub T7 (`/verify run` чтоб запустить сейчас)
+`/verify` — последний bit-rot/IO scrub диска (`/verify run` чтоб запустить сейчас)
 `/rotate` `/flip` — flip ориентации экрана 0°↔180° + ребут
 `/thermal` — sustained-temp защита (`enable`/`disable`/`mode`/`restore`)
 
@@ -198,13 +198,13 @@ def cmd_status(token, chat_id, args):
             d = json.loads(DAILY_SUMMARY_JSON.read_text())
             up = d.get("uptime", "?")
             cpu = d.get("cpu_temp")
-            t7 = d.get("t7") or {}
+            st = d.get("storage") or {}
             ph = d.get("photo_today") or {}
             th = d.get("throttle") or {}
             parts.append(f"⏱ Up: `{up}`")
             if cpu is not None: parts.append(f"🌡 CPU: `{cpu}°C`")
-            if t7.get("mounted"):
-                parts.append(f"💾 T7: `{t7.get('used','?')} / {t7.get('total','?')}` ({t7.get('pct','?')}%)")
+            if st.get("mounted"):
+                parts.append(f"💾 Disk: `{st.get('used','?')} / {st.get('total','?')}` ({st.get('pct','?')}%)")
             if th.get("now"):
                 parts.append("⚡ *UNDER-VOLTAGE NOW*")
             elif th.get("past"):
@@ -258,8 +258,8 @@ def cmd_logs(token, chat_id, args):
         n = 30
     n = max(5, min(200, n))
     lines = []
-    if T7_LOGS.is_dir():
-        for log in sorted(T7_LOGS.glob("*.log"),
+    if STORAGE_LOGS.is_dir():
+        for log in sorted(STORAGE_LOGS.glob("*.log"),
                           key=lambda p: p.stat().st_mtime, reverse=True):
             try:
                 tail = subprocess.check_output(
@@ -457,7 +457,7 @@ def cmd_configs(token, chat_id, args):
         ("/etc/travel-nas/services.conf",      "Dashboard URLs"),
         ("/etc/travel-nas/power-mode.conf",    "Home WiFi SSIDs"),
         ("/etc/travel-nas/photo-backup.conf",  "USB backup settings"),
-        ("/etc/travel-nas/t7-info.conf",       "T7 UUID (auto-generated)"),
+        ("/etc/travel-nas/storage-info.conf",       "Disk UUID (auto-generated)"),
     ]
     lines = ["*Configs* `/etc/travel-nas/`", ""]
     for path, desc in confs:
@@ -472,11 +472,11 @@ def cmd_configs(token, chat_id, args):
         "• Systemd — `/etc/systemd/system/`",
         "• Sudoers — `/etc/sudoers.d/travel-nas-dashboard`",
         "• Runtime state — `/var/lib/travel-nas/`",
-        "• Logs — `/mnt/t7/_logs/`",
-        "• Pi-config backups — `/mnt/t7/pi-config-backups/`",
+        "• Logs — `/mnt/storage/_logs/`",
+        "• Pi-config backups — `/mnt/storage/pi-config-backups/`",
         "",
         "*Save before re-flash*",
-        "`sudo cp -r /etc/travel-nas /mnt/t7/_etc-backup`",
+        "`sudo cp -r /etc/travel-nas /mnt/storage/_etc-backup`",
     ]
     send(token, chat_id, "\n".join(lines))
 
@@ -729,7 +729,7 @@ def cmd_nas(token, chat_id, args):
     lines = ["*NAS backup status*"]
     di = d.get("disk") or {}
     if di:
-        lines.append(f"💾 T7: `{di.get('used','?')} / {di.get('total','?')}` ({di.get('pct','?')}%, {di.get('avail','?')} free)")
+        lines.append(f"💾 Disk: `{di.get('used','?')} / {di.get('total','?')}` ({di.get('pct','?')}%, {di.get('avail','?')} free)")
     upd = d.get("updated")
     if upd:
         lines.append(f"_updated {_ago_short(upd)} ago_")
@@ -858,7 +858,7 @@ _(применяется только после reboot — kernel-overlay)_""")
         send(token, chat_id, f"❌ screen-rotate.sh упал: `{e}`")
         return
 
-    # Ребут через fast-reboot.sh (T7-aware, c SysRq-fallback'ом)
+    # Ребут через fast-reboot.sh (disk-aware, c SysRq-fallback'ом)
     new_r = "180" if cur == "0" else "0"
     send(token, chat_id, f"""🔄 *Rotation → `{new_r}°`*
 
@@ -889,7 +889,7 @@ def cmd_verify(token, chat_id, args):
             )
             send(token, chat_id, """🔍 *Verify запущен.*
 
-Сканирует T7 (~30-60 мин на ~600GB). Алёрт придёт автоматически если что-то нашёл; иначе тишина.
+Сканирует диск (~30-60 мин на ~600GB). Алёрт придёт автоматически если что-то нашёл; иначе тишина.
 
 Текущий прогресс смотри в `journalctl -u nas-verify.service -f` или через `/logs verify`.""")
         except Exception as e:

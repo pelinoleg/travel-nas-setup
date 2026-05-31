@@ -2,7 +2,7 @@
 # =============================================================================
 # nas-backup-status.py
 # =============================================================================
-# Сканирует /mnt/t7/nas-backup/ и пишет JSON статус для dashboard.
+# Сканирует /mnt/storage/nas-backup/ и пишет JSON статус для dashboard.
 # Запускается:
 #  1. systemd timer'ом раз в час (фоновое обновление размеров)
 #  2. из nas-backup.sh в конце успешного бэкапа (сразу обновить)
@@ -21,7 +21,7 @@ from pathlib import Path
 
 CONFIG_PATH  = Path("/etc/travel-nas/nas-backup.conf")
 STATUS_FILE  = Path("/var/lib/travel-nas/nas-backup-status.json")
-DEFAULT_DEST = "/mnt/t7/nas-backup"
+DEFAULT_DEST = "/mnt/storage/nas-backup"
 
 # Кэш source-sizes между запусками. Сюда сохраняем результат
 # rsync --dry-run --stats, чтобы не дёргать NAS на каждом scan'е.

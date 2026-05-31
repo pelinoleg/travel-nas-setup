@@ -6,8 +6,8 @@ if (
     if ! command -v smbd &>/dev/null; then
         apt_install samba samba-common-bin
     fi
-    if mountpoint -q "$T7_MOUNT"; then
-        SHARE_PATH="$T7_MOUNT"
+    if mountpoint -q "$STORAGE_MOUNT"; then
+        SHARE_PATH="$STORAGE_MOUNT"
     else
         SHARE_PATH="/home/$(whoami)/share"
         sudo mkdir -p "$SHARE_PATH"

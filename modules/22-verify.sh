@@ -8,9 +8,9 @@ if (
 
     write_systemd_unit nas-verify.service << 'EOF'
 [Unit]
-Description=Travel-NAS T7 verify scrub (sha256 manifest + I/O check)
-After=mnt-t7.mount
-RequiresMountsFor=/mnt/t7
+Description=Travel-NAS storage verify scrub (sha256 manifest + I/O check)
+After=mnt-storage.mount
+RequiresMountsFor=/mnt/storage
 
 [Service]
 Type=oneshot

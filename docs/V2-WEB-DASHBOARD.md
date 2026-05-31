@@ -37,9 +37,9 @@ sudo dashboard-mode.sh status   # что сейчас активно
 ### Уже точно нужно (из текущего разговора)
 
 - [ ] **Графики** — CPU temp 24ч, T7 used бар во времени, throughput backups, throttle events
-- [ ] **File browser** `/mnt/t7/` с thumbnail'ами (libvips/sharp для preview), delete/move/rename
+- [ ] **File browser** `/mnt/storage/` с thumbnail'ами (libvips/sharp для preview), delete/move/rename
 - [ ] **Backup folder picker** — tree-view выбор папок NAS-модулей, чекбоксы. Заменяет ручное редактирование `nas-backup.conf`.
-- [ ] **Логи с фильтром/поиском** — все `/mnt/t7/_logs/*.log` в одном UI, regex search, follow tail, syntax highlight для ERROR/WARN
+- [ ] **Логи с фильтром/поиском** — все `/mnt/storage/_logs/*.log` в одном UI, regex search, follow tail, syntax highlight для ERROR/WARN
 - [ ] **Тестовый ввод** — токены TG, NAS-password, services-conf редактор прямо в UI (сейчас pygame не умеет input)
 - [ ] **Удалить файлы** — корзина с move-to-trash (как `_deleted/`)
 
@@ -75,7 +75,7 @@ sudo dashboard-mode.sh status   # что сейчас активно
 
 ### Media / fun
 
-- [ ] **Music player** — листание `/mnt/t7/Music/`, cover art, queue, play (mpd/mpv бэкендом). Bluetooth наушники → travel-плеер.
+- [ ] **Music player** — листание `/mnt/storage/Music/`, cover art, queue, play (mpd/mpv бэкендом). Bluetooth наушники → travel-плеер.
 - [ ] **Photo slideshow** — авто-показ последнего USB-import'а после копирования (отдельная full-screen mode)
 - [ ] **DLNA-каст** — на ТВ в отеле «Сast to TV»
 - [ ] **Internet radio** — стримы в дороге

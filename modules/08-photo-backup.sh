@@ -7,15 +7,15 @@ if (
     fetch_script "photo-backup.sh" "$SCRIPT_DIR/photo-backup.sh"
     # Progress writer нужен photo-backup для прогресс-плашки в dashboard
     fetch_script "backup-progress-writer.py" "$SCRIPT_DIR/backup-progress-writer.py"
-    T7_UUID=""
-    if [[ -f "$CONFIG_DIR/t7-info.conf" ]]; then
-        source "$CONFIG_DIR/t7-info.conf"
+    STORAGE_UUID=""
+    if [[ -f "$CONFIG_DIR/storage-info.conf" ]]; then
+        source "$CONFIG_DIR/storage-info.conf"
     fi
     if [[ ! -f "$CONFIG_DIR/photo-backup.conf" ]]; then
         sudo tee "$CONFIG_DIR/photo-backup.conf" > /dev/null << EOF
-DEST="$T7_MOUNT/usb-imports"
+DEST="$STORAGE_MOUNT/usb-imports"
 AUTO_UMOUNT=true
-T7_UUID="${T7_UUID:-}"
+STORAGE_UUID="${STORAGE_UUID:-}"
 MIN_SIZE=1
 WAIT_FOR_DEVMON=3
 EOF

@@ -19,8 +19,16 @@ info()  { echo -e "${BLUE}[INFO]${NC} $*"; }
 
 # ----- Базовые переменные -----
 REPO_RAW="https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/main"
-T7_LABEL="t7"
-T7_MOUNT="/mnt/t7"
+# STORAGE_LABEL — лишь дефолтное имя для нового диска в wizard'е. Идентичность
+# диска НЕ завязана на него: «свой» диск опознаётся по файлу-маркеру
+# STORAGE_MARKER в корне ФС (любой label, переживает переустановку OS).
+STORAGE_LABEL="storage"
+STORAGE_MARKER=".travel-nas-storage"
+STORAGE_MOUNT="/mnt/storage"
+# Legacy: до перехода на универсальную схему диск звался label 't7' и
+# монтировался в /mnt/t7. Нужно для авто-миграции старых установок.
+STORAGE_LEGACY_LABEL="t7"
+STORAGE_LEGACY_MOUNT="/mnt/t7"
 CONFIG_DIR="/etc/travel-nas"
 SCRIPT_DIR="/usr/local/bin"
 

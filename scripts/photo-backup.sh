@@ -6,23 +6,23 @@
 #
 # Логика:
 #  1. Получает /dev/sdX1 от systemd
-#  2. Проверяет что это НЕ наш T7 (по UUID)
+#  2. Проверяет что это НЕ наш storage disk (по UUID)
 #  3. Использует flock — параллельные запуски пропускаются
 #  4. Ждёт пока CasaOS devmon примонтирует, или монтирует сам read-only
 #  5. rsync со всеми файлами (что воткнули — то и копируем)
-#  6. Имя: /mnt/t7/usb-imports/DD-MM-YYYY/HH-MM_<label>_<uuid>/
+#  6. Имя: /mnt/storage/usb-imports/DD-MM-YYYY/HH-MM_<label>_<uuid>/
 #  7. Auto-umount после завершения
 #  8. Telegram уведомления через tg-notify
 #
 # Конфиг: /etc/travel-nas/photo-backup.conf
-# Логи: /mnt/t7/_logs/photo-backup.log
+# Логи: /mnt/storage/_logs/photo-backup.log
 # =============================================================================
 
 set -u
 
 CONFIG="/etc/travel-nas/photo-backup.conf"
 TG_NOTIFY="/usr/local/bin/tg-notify.sh"
-LOG_DIR="/mnt/t7/_logs"
+LOG_DIR="/mnt/storage/_logs"
 LOG="$LOG_DIR/photo-backup.log"
 LOCK_DIR="/var/run/travel-nas"
 
@@ -37,9 +37,9 @@ fi
 source "$CONFIG"
 
 # Дефолты если не заданы в конфиге
-DEST="${DEST:-/mnt/t7/usb-imports}"
+DEST="${DEST:-/mnt/storage/usb-imports}"
 AUTO_UMOUNT="${AUTO_UMOUNT:-true}"
-T7_UUID="${T7_UUID:-}"
+STORAGE_UUID="${STORAGE_UUID:-}"
 MIN_SIZE="${MIN_SIZE:-1}"
 WAIT_FOR_DEVMON="${WAIT_FOR_DEVMON:-3}"
 
@@ -78,20 +78,20 @@ if [[ "$DEVICE" =~ nvme || "$DEVICE" =~ mmcblk ]]; then
     exit 0
 fi
 
-# КРИТИЧНО: проверяем что это НЕ наш T7
+# КРИТИЧНО: проверяем что это НЕ наш storage disk
 DEVICE_UUID=$(lsblk -no UUID "$DEVICE" 2>/dev/null | head -1)
-if [[ -n "$T7_UUID" && "$DEVICE_UUID" == "$T7_UUID" ]]; then
-    log_msg "Skipping T7 (target disk): $DEVICE"
+if [[ -n "$STORAGE_UUID" && "$DEVICE_UUID" == "$STORAGE_UUID" ]]; then
+    log_msg "Skipping storage disk (target disk): $DEVICE"
     exit 0
 fi
 
-# Игнорируем также если parent device = наш T7 (sda1 от sda с UUID T7)
+# Игнорируем также если parent device = наш storage disk (sda1 от sda с UUID storage disk)
 PARENT=$(lsblk -no PKNAME "$DEVICE" 2>/dev/null | head -1)
 if [[ -n "$PARENT" ]]; then
     for part in /dev/${PARENT}*; do
         PART_UUID=$(lsblk -no UUID "$part" 2>/dev/null | head -1)
-        if [[ "$PART_UUID" == "$T7_UUID" ]]; then
-            log_msg "Skipping partition of T7: $DEVICE (parent has T7 UUID)"
+        if [[ "$PART_UUID" == "$STORAGE_UUID" ]]; then
+            log_msg "Skipping partition of storage disk: $DEVICE (parent has storage disk UUID)"
             exit 0
         fi
     done
@@ -293,7 +293,7 @@ Path: \`$DATE_DIR/$BACKUP_NAME\`"
             set_led error
             tg_notify error "Backup failed (.incomplete kept)" "Only $FILE_COUNT_DST/$FILE_COUNT_SRC files copied (${SUCCESS_PCT}%)
 Card may be damaged. Folder marked .incomplete.
-Check log: /mnt/t7/_logs/photo-backup.log"
+Check log: /mnt/storage/_logs/photo-backup.log"
         fi
         ;;
     *)
@@ -305,7 +305,7 @@ Rsync exit: $RSYNC_EXIT
 Files: $FILE_COUNT_DST/$FILE_COUNT_SRC
 Folder marked .incomplete.
 
-Check log: \`/mnt/t7/_logs/photo-backup.log\`"
+Check log: \`/mnt/storage/_logs/photo-backup.log\`"
         ;;
 esac
 

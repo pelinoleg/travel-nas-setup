@@ -35,7 +35,7 @@ from pathlib import Path
 
 CONF        = Path("/etc/travel-nas/thermal-guard.conf")
 STATE       = Path("/var/lib/travel-nas/thermal-guard.state.json")
-LOG         = Path("/mnt/t7/_logs/thermal-guard.log")
+LOG         = Path("/mnt/storage/_logs/thermal-guard.log")
 TG_NOTIFY   = Path("/usr/local/bin/tg-notify.sh")
 BACKUP_UNIT = "nas-backup-runtime"
 

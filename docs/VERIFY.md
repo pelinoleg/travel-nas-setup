@@ -7,7 +7,7 @@
 
 ## Как работает
 
-1. Обходит `/mnt/t7/usb-imports` и `/mnt/t7/nas-backup` (можно переопределить через `--target`).
+1. Обходит `/mnt/storage/usb-imports` и `/mnt/storage/nas-backup` (можно переопределить через `--target`).
 2. Для каждого файла:
    - Читает все байты → ловит I/O ошибки на уровне ядра (попадают в `dmesg`)
    - Считает `sha256` → попадает в манифест `_logs/verify-manifests/YYYYMMDD-HHMMSS.tsv`
@@ -39,7 +39,7 @@ nas-verify.py --status                           # JSON последнего з�
 sudo nas-verify.py --target usb-imports          # только photo-имматериал
 
 # Список манифестов (последние 6 хранятся)
-ls -lt /mnt/t7/_logs/verify-manifests/
+ls -lt /mnt/storage/_logs/verify-manifests/
 ```
 
 ```

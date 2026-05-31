@@ -1,9 +1,9 @@
 #!/bin/bash
 # =============================================================================
-# disk-watchdog.sh - Мониторинг T7 (раз в 5 минут через systemd timer)
+# disk-watchdog.sh - Мониторинг Disk (раз в 5 минут через systemd timer)
 # =============================================================================
 # Проверяет:
-#  - Примонтирован ли T7 (если нет — попытка mount + alert)
+#  - Примонтирован ли Disk (если нет — попытка mount + alert)
 #  - Read-only режим из-за ошибок ext4
 #  - Температуру (SMART)
 #  - SMART warnings (Critical, Media errors)
@@ -16,11 +16,11 @@
 set -u
 
 TG_NOTIFY="/usr/local/bin/tg-notify.sh"
-T7_MOUNT="/mnt/t7"
-LOG="$T7_MOUNT/_logs/disk-watchdog.log"
+STORAGE_MOUNT="/mnt/storage"
+LOG="$STORAGE_MOUNT/_logs/disk-watchdog.log"
 STATE_DIR="/var/lib/travel-nas"
 STATE_FILE="$STATE_DIR/disk-watchdog-state.txt"
-NAS_BACKUP_DIR="$T7_MOUNT/nas-backup"
+NAS_BACKUP_DIR="$STORAGE_MOUNT/nas-backup"
 
 # Thresholds
 TEMP_WARN=60         # °C — предупреждение
@@ -75,30 +75,30 @@ can_alert() {
     return 1
 }
 
-# === Проверка 1: T7 примонтирован? ===
+# === Проверка 1: Disk примонтирован? ===
 check_mount() {
-    if mountpoint -q "$T7_MOUNT"; then
+    if mountpoint -q "$STORAGE_MOUNT"; then
         # Был ли он отмонтирован раньше?
         local last_state
         last_state=$(get_state "mount" | cut -d: -f3)
         if [[ "$last_state" == "down" ]]; then
-            tg_notify success "T7 reconnected" "Disk mounted again at \`$T7_MOUNT\`"
-            log_msg "T7 reconnected"
+            tg_notify success "Disk reconnected" "Disk mounted again at \`$STORAGE_MOUNT\`"
+            log_msg "Disk reconnected"
         fi
         set_state "mount" "up"
         return 0
     else
         # Не примонтирован — пробуем смонтировать
-        log_msg "T7 not mounted, attempting mount -a"
-        if mount -a 2>/dev/null && mountpoint -q "$T7_MOUNT"; then
+        log_msg "Disk not mounted, attempting mount -a"
+        if mount -a 2>/dev/null && mountpoint -q "$STORAGE_MOUNT"; then
             log_msg "Successfully mounted via mount -a"
             set_state "mount" "up"
             return 0
         fi
         # Не получилось
-        log_msg "ERROR: T7 not mounted and cannot be mounted"
+        log_msg "ERROR: Disk not mounted and cannot be mounted"
         if can_alert "mount"; then
-            tg_notify critical "T7 disconnected!" "Disk not mounted at \`$T7_MOUNT\`
+            tg_notify critical "Disk disconnected!" "Disk not mounted at \`$STORAGE_MOUNT\`
 Try: \`sudo mount -a\`
 Check: \`lsblk -f\`"
         fi
@@ -109,11 +109,11 @@ Check: \`lsblk -f\`"
 
 # === Проверка 2: Read-only режим? ===
 check_readonly() {
-    if mount | grep "$T7_MOUNT" | grep -qE 'emergency_ro|\bro\b'; then
-        log_msg "ERROR: T7 in read-only mode!"
+    if mount | grep "$STORAGE_MOUNT" | grep -qE 'emergency_ro|\bro\b'; then
+        log_msg "ERROR: Disk in read-only mode!"
         if can_alert "readonly"; then
-            tg_notify critical "T7 is READ-ONLY!" "Filesystem errors detected.
-Mount info: $(mount | grep "$T7_MOUNT")
+            tg_notify critical "Disk is READ-ONLY!" "Filesystem errors detected.
+Mount info: $(mount | grep "$STORAGE_MOUNT")
 Check: \`sudo dmesg | grep -i ext4\`
 Likely need fsck."
         fi
@@ -127,7 +127,7 @@ Likely need fsck."
 # Тип "успешного" обнаружения SMART кешируется в /var/lib/travel-nas/smart-type.txt
 check_smart() {
     local device
-    device=$(findmnt -n -o SOURCE "$T7_MOUNT" 2>/dev/null | sed 's/[0-9]*$//')
+    device=$(findmnt -n -o SOURCE "$STORAGE_MOUNT" 2>/dev/null | sed 's/[0-9]*$//')
     if [[ -z "$device" ]]; then
         return 0
     fi
@@ -186,12 +186,12 @@ check_smart() {
     if [[ -n "$temp" && "$temp" -gt 10 && "$temp" -lt 100 ]]; then
         if [[ "$temp" -ge "$TEMP_CRITICAL" ]]; then
             if can_alert "temp_critical"; then
-                tg_notify critical "T7 CRITICAL temperature" "Current: ${temp}°C (>${TEMP_CRITICAL}°C)
+                tg_notify critical "Disk CRITICAL temperature" "Current: ${temp}°C (>${TEMP_CRITICAL}°C)
 Stop heavy writes immediately."
             fi
         elif [[ "$temp" -ge "$TEMP_WARN" ]]; then
             if can_alert "temp_warn"; then
-                tg_notify warning "T7 temperature high" "Current: ${temp}°C (>${TEMP_WARN}°C)"
+                tg_notify warning "Disk temperature high" "Current: ${temp}°C (>${TEMP_WARN}°C)"
             fi
         fi
     fi
@@ -203,7 +203,7 @@ Stop heavy writes immediately."
 
     if echo "$health_out" | grep -qE "result:[[:space:]]+FAILED|Health Status:[[:space:]]+FAILED"; then
         if can_alert "smart_failed"; then
-            tg_notify critical "T7 SMART FAILED" "Disk reports failure!
+            tg_notify critical "Disk SMART FAILED" "Disk reports failure!
 Backup important data NOW.
 Run: \`sudo smartctl -a -d $smart_type $device\`"
         fi
@@ -213,18 +213,18 @@ Run: \`sudo smartctl -a -d $smart_type $device\`"
 # === Проверка 4: Свободное место ===
 check_space() {
     local usage
-    usage=$(df --output=pcent "$T7_MOUNT" 2>/dev/null | tail -1 | tr -d ' %')
+    usage=$(df --output=pcent "$STORAGE_MOUNT" 2>/dev/null | tail -1 | tr -d ' %')
     if [[ -z "$usage" ]]; then
         return 0
     fi
 
     local avail
-    avail=$(df -h --output=avail "$T7_MOUNT" 2>/dev/null | tail -1 | tr -d ' ')
+    avail=$(df -h --output=avail "$STORAGE_MOUNT" 2>/dev/null | tail -1 | tr -d ' ')
 
     if [[ "$usage" -ge "$SPACE_CRITICAL" ]]; then
-        log_msg "CRITICAL: T7 ${usage}% used, ${avail} available"
+        log_msg "CRITICAL: Disk ${usage}% used, ${avail} available"
         if can_alert "space_critical"; then
-            tg_notify critical "T7 almost full" "Used: ${usage}%
+            tg_notify critical "Disk almost full" "Used: ${usage}%
 Available: ${avail}
 
 Auto-cleanup nas-backup will start..."
@@ -232,9 +232,9 @@ Auto-cleanup nas-backup will start..."
         # Запускаем автоочистку только nas-backup (НЕ photos!)
         cleanup_nas_backup
     elif [[ "$usage" -ge "$SPACE_WARN" ]]; then
-        log_msg "WARN: T7 ${usage}% used, ${avail} available"
+        log_msg "WARN: Disk ${usage}% used, ${avail} available"
         if can_alert "space_warn"; then
-            tg_notify warning "T7 getting full" "Used: ${usage}%
+            tg_notify warning "Disk getting full" "Used: ${usage}%
 Available: ${avail}
 
 Cleanup will trigger at ${SPACE_CRITICAL}%"
@@ -250,12 +250,12 @@ cleanup_nas_backup() {
 
     log_msg "Auto-cleanup: removing _deleted folders older than 30 days"
     local freed_before
-    freed_before=$(df --output=avail "$T7_MOUNT" | tail -1)
+    freed_before=$(df --output=avail "$STORAGE_MOUNT" | tail -1)
 
     find "$NAS_BACKUP_DIR/_deleted" -maxdepth 1 -type d -mtime +30 -exec rm -rf {} \; 2>/dev/null
 
     local freed_after
-    freed_after=$(df --output=avail "$T7_MOUNT" | tail -1)
+    freed_after=$(df --output=avail "$STORAGE_MOUNT" | tail -1)
     local freed_kb=$((freed_after - freed_before))
     local freed_mb=$((freed_kb / 1024))
 

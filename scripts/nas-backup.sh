@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# nas-backup.sh - Бэкап с UGREEN NAS на T7 через rsync daemon
+# nas-backup.sh - Бэкап с UGREEN NAS на диск через rsync daemon
 # =============================================================================
 # Адаптирован для travel-NAS Pi из домашнего Mac-скрипта.
 #
@@ -12,7 +12,7 @@
 #   nas-backup.sh --config         # отредактировать конфиг
 #
 # Конфиг: /etc/travel-nas/nas-backup.conf
-# Логи: /mnt/t7/nas-backup/_logs/
+# Логи: /mnt/storage/nas-backup/_logs/
 # =============================================================================
 
 set -u
@@ -46,7 +46,7 @@ if [[ -z "${NAS_BACKUP_DETACHED:-}" ]] && \
     if [[ -t 1 ]]; then
         echo "[INFO] Detached as systemd unit: $UNIT"
         echo "[INFO] Progress: /var/run/travel-nas/backup-progress.json"
-        echo "[INFO] Log:      /mnt/t7/nas-backup/_logs/"
+        echo "[INFO] Log:      /mnt/storage/nas-backup/_logs/"
         echo "[INFO] Stop:     sudo systemctl stop $UNIT"
         echo "[INFO] Live:     sudo journalctl -fu $UNIT"
     fi
@@ -61,7 +61,7 @@ fi
 
 CONFIG="/etc/travel-nas/nas-backup.conf"
 TG_NOTIFY="/usr/local/bin/tg-notify.sh"
-DEFAULT_DEST="/mnt/t7/nas-backup"
+DEFAULT_DEST="/mnt/storage/nas-backup"
 
 # Cleanup progress JSON при любом exit'е, включая SIGTERM от `systemctl stop`.
 # Bash-trap отрабатывает на сигналы надёжно (Python finally — нет, когда
@@ -339,7 +339,7 @@ do_diff() {
 interactive_menu() {
     while true; do
         local choice
-        choice=$(whiptail --title "NAS Backup → T7" \
+        choice=$(whiptail --title "NAS Backup → Disk" \
             --menu "Choose action:" 16 60 8 \
             "1" "Run backup" \
             "2" "Dry-run (simulate)" \
@@ -429,7 +429,7 @@ Usage: $0 [OPTIONS]
 
   --run         Run backup immediately
   --dry-run     Simulate backup (no files copied)
-  --diff        Show differences NAS vs T7
+  --diff        Show differences NAS vs Disk
   --config      Edit config file
   (no args)     Interactive menu
 

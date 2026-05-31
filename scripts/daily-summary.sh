@@ -12,9 +12,9 @@
 set -u
 
 TG_NOTIFY="/usr/local/bin/tg-notify.sh"
-T7_MOUNT="/mnt/t7"
+STORAGE_MOUNT="/mnt/storage"
 SUMMARY_QUEUE="/var/lib/travel-nas/summary-queue.txt"
-LOG="$T7_MOUNT/_logs/daily-summary.log"
+LOG="$STORAGE_MOUNT/_logs/daily-summary.log"
 STATUS_FILE="/var/lib/travel-nas/daily-summary.json"
 
 MODE="full"   # full | json
@@ -49,18 +49,18 @@ if command -v vcgencmd &>/dev/null; then
     CPU_TEMP=$(vcgencmd measure_temp 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | cut -d. -f1)
 fi
 
-T7_USED=""; T7_TOTAL=""; T7_PCT=""; T7_AVAIL=""; T7_TEMP=""; T7_MOUNTED="no"
-if mountpoint -q "$T7_MOUNT"; then
-    T7_MOUNTED="yes"
-    T7_USED=$(df -h "$T7_MOUNT" --output=used 2>/dev/null | tail -1 | tr -d ' ')
-    T7_TOTAL=$(df -h "$T7_MOUNT" --output=size 2>/dev/null | tail -1 | tr -d ' ')
-    T7_AVAIL=$(df -h "$T7_MOUNT" --output=avail 2>/dev/null | tail -1 | tr -d ' ')
-    T7_PCT=$(df --output=pcent "$T7_MOUNT" 2>/dev/null | tail -1 | tr -d ' %')
+STORAGE_USED=""; STORAGE_TOTAL=""; STORAGE_PCT=""; STORAGE_AVAIL=""; STORAGE_TEMP=""; STORAGE_MOUNTED="no"
+if mountpoint -q "$STORAGE_MOUNT"; then
+    STORAGE_MOUNTED="yes"
+    STORAGE_USED=$(df -h "$STORAGE_MOUNT" --output=used 2>/dev/null | tail -1 | tr -d ' ')
+    STORAGE_TOTAL=$(df -h "$STORAGE_MOUNT" --output=size 2>/dev/null | tail -1 | tr -d ' ')
+    STORAGE_AVAIL=$(df -h "$STORAGE_MOUNT" --output=avail 2>/dev/null | tail -1 | tr -d ' ')
+    STORAGE_PCT=$(df --output=pcent "$STORAGE_MOUNT" 2>/dev/null | tail -1 | tr -d ' %')
 
     if command -v smartctl &>/dev/null; then
-        T7_DEV=$(findmnt -n -o SOURCE "$T7_MOUNT" 2>/dev/null | sed 's/[0-9]*$//')
-        if [[ -n "$T7_DEV" ]]; then
-            T7_TEMP=$(sudo -n smartctl -a -d sat "$T7_DEV" 2>/dev/null \
+        STORAGE_DEV=$(findmnt -n -o SOURCE "$STORAGE_MOUNT" 2>/dev/null | sed 's/[0-9]*$//')
+        if [[ -n "$STORAGE_DEV" ]]; then
+            STORAGE_TEMP=$(sudo -n smartctl -a -d sat "$STORAGE_DEV" 2>/dev/null \
                 | grep -iE "Temperature_Celsius|Current Drive Temperature|Temperature:" \
                 | head -1 | grep -oE '[0-9]+' | head -1)
         fi
@@ -86,20 +86,20 @@ TODAY=$(date '+%d-%m-%Y')
 PHOTO_COUNT=0
 PHOTO_FILES=0
 PHOTO_SIZE="0"
-if [[ -d "$T7_MOUNT/usb-imports/$TODAY" ]]; then
-    PHOTO_COUNT=$(find "$T7_MOUNT/usb-imports/$TODAY" -maxdepth 1 -mindepth 1 -type d \
+if [[ -d "$STORAGE_MOUNT/usb-imports/$TODAY" ]]; then
+    PHOTO_COUNT=$(find "$STORAGE_MOUNT/usb-imports/$TODAY" -maxdepth 1 -mindepth 1 -type d \
         ! -name '*.incomplete' 2>/dev/null | wc -l)
     if [[ "$PHOTO_COUNT" -gt 0 ]]; then
-        PHOTO_FILES=$(find "$T7_MOUNT/usb-imports/$TODAY" -type f \
+        PHOTO_FILES=$(find "$STORAGE_MOUNT/usb-imports/$TODAY" -type f \
             ! -path '*.incomplete/*' 2>/dev/null | wc -l)
-        PHOTO_SIZE=$(du -sh "$T7_MOUNT/usb-imports/$TODAY" 2>/dev/null | awk '{print $1}')
+        PHOTO_SIZE=$(du -sh "$STORAGE_MOUNT/usb-imports/$TODAY" 2>/dev/null | awk '{print $1}')
     fi
 fi
 
 # Incomplete folders across all dates — оборвавшиеся бэкапы
 INCOMPLETE_COUNT=0
-if [[ -d "$T7_MOUNT/usb-imports" ]]; then
-    INCOMPLETE_COUNT=$(find "$T7_MOUNT/usb-imports" -maxdepth 2 -mindepth 2 -type d \
+if [[ -d "$STORAGE_MOUNT/usb-imports" ]]; then
+    INCOMPLETE_COUNT=$(find "$STORAGE_MOUNT/usb-imports" -maxdepth 2 -mindepth 2 -type d \
         -name '*.incomplete' 2>/dev/null | wc -l)
 fi
 
@@ -111,15 +111,15 @@ if [[ -r /sys/block/mmcblk0/device/life_time ]]; then
 fi
 
 NAS_BACKUP_TODAY="no"
-if [[ -d "$T7_MOUNT/nas-backup/_logs" ]]; then
-    if find "$T7_MOUNT/nas-backup/_logs" -name "${TODAY}_*.log" -type f 2>/dev/null | grep -q .; then
+if [[ -d "$STORAGE_MOUNT/nas-backup/_logs" ]]; then
+    if find "$STORAGE_MOUNT/nas-backup/_logs" -name "${TODAY}_*.log" -type f 2>/dev/null | grep -q .; then
         NAS_BACKUP_TODAY="yes"
     fi
 fi
 
 ERRORS_TODAY=0
-if [[ -d "$T7_MOUNT/_logs" ]]; then
-    ERRORS_TODAY=$(find "$T7_MOUNT/_logs" -type f -name "*.log" -mtime -1 \
+if [[ -d "$STORAGE_MOUNT/_logs" ]]; then
+    ERRORS_TODAY=$(find "$STORAGE_MOUNT/_logs" -type f -name "*.log" -mtime -1 \
         -exec grep -l "ERROR\|CRITICAL\|FAILED" {} \; 2>/dev/null | wc -l)
 fi
 
@@ -145,7 +145,7 @@ fi
 TMP_JSON="${STATUS_FILE}.tmp"
 # os.environ читает только exported переменные
 export TODAY UPTIME CPU_TEMP IP_ADDR SSID
-export T7_MOUNTED T7_USED T7_AVAIL T7_TOTAL T7_PCT T7_TEMP
+export STORAGE_MOUNTED STORAGE_USED STORAGE_AVAIL STORAGE_TOTAL STORAGE_PCT STORAGE_TEMP
 export THROTTLE_VAL THROTTLE_NOW THROTTLE_PAST
 export PHOTO_COUNT PHOTO_FILES PHOTO_SIZE
 export NAS_BACKUP_TODAY ERRORS_TODAY EVENTS_JSON INCOMPLETE_COUNT SD_WEAR_PCT
@@ -158,13 +158,13 @@ data = {
     "cpu_temp": int(os.environ["CPU_TEMP"]) if os.environ.get("CPU_TEMP") else None,
     "ip":      os.environ.get("IP_ADDR") or None,
     "ssid":    os.environ.get("SSID") or None,
-    "t7": {
-        "mounted":  os.environ.get("T7_MOUNTED") == "yes",
-        "used":     os.environ.get("T7_USED") or None,
-        "avail":    os.environ.get("T7_AVAIL") or None,
-        "total":    os.environ.get("T7_TOTAL") or None,
-        "pct":      int(os.environ["T7_PCT"]) if os.environ.get("T7_PCT") else None,
-        "temp":     int(os.environ["T7_TEMP"]) if os.environ.get("T7_TEMP") else None,
+    "storage": {
+        "mounted":  os.environ.get("STORAGE_MOUNTED") == "yes",
+        "used":     os.environ.get("STORAGE_USED") or None,
+        "avail":    os.environ.get("STORAGE_AVAIL") or None,
+        "total":    os.environ.get("STORAGE_TOTAL") or None,
+        "pct":      int(os.environ["STORAGE_PCT"]) if os.environ.get("STORAGE_PCT") else None,
+        "temp":     int(os.environ["STORAGE_TEMP"]) if os.environ.get("STORAGE_TEMP") else None,
     },
     "throttle": {
         "raw":  os.environ.get("THROTTLE_VAL") or None,
@@ -216,16 +216,16 @@ $(date '+%d-%m-%Y %H:%M')
 🌡  CPU: \`${CPU_TEMP}°C\`
 📡 IP: \`${IP_ADDR}\` ${SSID:+(${SSID})}${THROTTLE_LINE}"
 
-# T7 temp на USB-bridge почти всегда unavailable → не показываем "?°C"
-if [[ -n "$T7_TEMP" ]]; then
+# Disk temp на USB-bridge почти всегда unavailable → не показываем "?°C"
+if [[ -n "$STORAGE_TEMP" ]]; then
     MSG+="
-🌡  T7: \`${T7_TEMP}°C\`"
+🌡  Disk: \`${STORAGE_TEMP}°C\`"
 fi
 
 MSG+="
 
 *Storage*
-💾 T7: \`${T7_USED} / ${T7_TOTAL} (${T7_PCT}%)\`"
+💾 Disk: \`${STORAGE_USED} / ${STORAGE_TOTAL} (${STORAGE_PCT}%)\`"
 
 if [[ "$PHOTO_COUNT" -gt 0 ]]; then
     MSG+="
@@ -247,7 +247,7 @@ if [[ "$ERRORS_TODAY" -gt 0 ]]; then
     MSG+="
 
 ⚠️ *Issues:* $ERRORS_TODAY log(s) with errors
-Check: \`/mnt/t7/_logs/\`"
+Check: \`/mnt/storage/_logs/\`"
 fi
 
 if [[ "$INCOMPLETE_COUNT" -gt 0 ]]; then
@@ -255,7 +255,7 @@ if [[ "$INCOMPLETE_COUNT" -gt 0 ]]; then
 
 🔶 *Incomplete backups:* $INCOMPLETE_COUNT
 Folders with .incomplete suffix exist — backup was interrupted.
-Check: \`/mnt/t7/usb-imports/\`"
+Check: \`/mnt/storage/usb-imports/\`"
 fi
 
 if [[ -f "$SUMMARY_QUEUE" && -s "$SUMMARY_QUEUE" ]]; then

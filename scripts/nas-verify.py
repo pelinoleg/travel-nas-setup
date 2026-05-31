@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # =============================================================================
-# nas-verify.py — bit-rot / disk-error scrub для T7
+# nas-verify.py — bit-rot / disk-error scrub для диска
 # =============================================================================
 # Что делает (раз в месяц по systemd-timer):
-#   1. Идёт по всем файлам в /mnt/t7/usb-imports + /mnt/t7/nas-backup
+#   1. Идёт по всем файлам в /mnt/storage/usb-imports + /mnt/storage/nas-backup
 #   2. Читает каждый байт → считает sha256. Чтение всех байт заставляет
 #      SSD пройти все сектора → bad-sector ошибки в dmesg видно сразу.
 #   3. Сохраняет манифест: hash mtime size path. Сравнивает с прошлым:
@@ -32,9 +32,9 @@ import sys
 import time
 from pathlib import Path
 
-T7_MOUNT = Path("/mnt/t7")
-LOG_FILE = T7_MOUNT / "_logs" / "verify.log"
-MANIFEST_DIR = T7_MOUNT / "_logs" / "verify-manifests"
+STORAGE_MOUNT = Path("/mnt/storage")
+LOG_FILE = STORAGE_MOUNT / "_logs" / "verify.log"
+MANIFEST_DIR = STORAGE_MOUNT / "_logs" / "verify-manifests"
 STATUS_JSON = Path("/var/lib/travel-nas/verify-status.json")
 TG_NOTIFY = Path("/usr/local/bin/tg-notify.sh")
 
@@ -81,7 +81,7 @@ def sha256_file(path):
 def iter_files(targets):
     """Все обычные файлы в targets, пропуская SKIP_PATTERNS и не-regular."""
     for t in targets:
-        base = T7_MOUNT / t
+        base = STORAGE_MOUNT / t
         if not base.exists():
             continue
         for dirpath, dirnames, filenames in os.walk(base):
@@ -93,7 +93,7 @@ def iter_files(targets):
                 full = os.path.join(dirpath, fn)
                 if any(p in full for p in SKIP_PATTERNS):
                     continue
-                # symlinks мимо — не следуем (могут уйти за T7)
+                # symlinks мимо — не следуем (могут уйти за диск)
                 try:
                     st = os.lstat(full)
                     if not st.st_mode & 0o170000 == 0o100000:  # regular file
@@ -159,7 +159,7 @@ def main():
     ap.add_argument("--status", action="store_true",
                     help="Печатает JSON прошлого запуска и выходит")
     ap.add_argument("--target", action="append",
-                    help="Подпапка(и) T7 вместо дефолтных")
+                    help="Подпапка(и) диска вместо дефолтных")
     args = ap.parse_args()
 
     if args.status:
@@ -269,8 +269,8 @@ def main():
     if not status_ok:
         sample = "\n".join(f"• {p}" for p in changed_bitrot[:5]) or "_(none)_"
         tg_alert(
-            "T7 verify alert",
-            f"""Verify нашёл проблемы на T7:
+            "Disk verify alert",
+            f"""Verify нашёл проблемы на диске:
 
 • BIT-ROT (hash сменился без mtime): {len(changed_bitrot)}
 • Read failures (bad sector?): {read_errors}

@@ -2,6 +2,33 @@
 
 Significant changes to travel-nas-setup. Newest first.
 
+## 2026-05-31 — универсальный storage-диск (без привязки к `t7`) + chrony
+
+### Storage
+- **Диск больше не завязан на имя `t7`.** «Свой» диск опознаётся по файлу-маркеру
+  `.travel-nas-storage` в корне ФС — с ЛЮБЫМ label, переживает переустановку OS.
+  Порядок детекта: UUID из conf → скан маркера → legacy-label `t7` → wizard.
+- **Путь `/mnt/t7` → `/mnt/storage`** во всех скриптах, конфигах, сервисах,
+  systemd-юнитах и Docker bind-mount'ах. Старые установки мигрируют автоматически
+  при первом прогоне `04-storage-mount` (убирает legacy fstab-запись `/mnt/t7`,
+  перемонтирует в `/mnt/storage`).
+- Переименовано: модуль `04-t7-mount.sh` → `04-storage-mount.sh`, conf
+  `t7-info.conf` → `storage-info.conf`, JSON-ключ статуса `t7` → `storage`,
+  переменные `T7_*` → `STORAGE_*`, контейнерный путь Photoview `/t7` → `/storage`.
+- **Wizard переработан:** показывает все подключённые диски (размер · ФС · метка ·
+  модель), даёт выбрать. Уже ext4 и здоров (`e2fsck -fn`) → «Использовать как
+  есть» (данные целы). Чужой/пустой диск → формат в ext4 с запросом имени диска.
+
+### Utils
+- **chrony** добавлен в UTILS — точное время/NTP (для travel-устройства с
+  возможным RTC-дрейфом).
+
+> ⚠️ Миграция живого устройства: после `travel-nas-update` (fast) скрипты будут
+> ждать `/mnt/storage`, а диск ещё в `/mnt/t7`. Нужен полный `travel-nas-setup`
+> (выбрать минимум STORAGE_MOUNT + SAMBA + PHOTOVIEW + VERIFY) и **reboot** —
+> модуль мигрирует fstab и перемонтирует, остальные модули перегенерят конфиги
+> с новым путём. CasaOS-апы с ручным bind-mount на `/mnt/t7` поправить вручную.
+
 ## 2026-05-28 — power-mode v2, flat menu, screenshot, NAS source size
 
 ### Dashboard

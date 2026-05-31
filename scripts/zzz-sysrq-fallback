@@ -5,7 +5,7 @@
 # Вызывается systemd-shutdown ПОСЛЕ всех unit stops и unmount'ов,
 # прямо перед halt syscall. argv[1] = halt|poweroff|reboot|kexec.
 #
-# Что делает: пытается размонтировать любые USB-блок устройства (T7),
+# Что делает: пытается размонтировать любые USB-блок устройства (USB-SSD),
 # которые могут блокировать power-down. Потом форкает SysRq emergency,
 # которая срабатывает через 8 сек если halt syscall завис.
 #
@@ -15,8 +15,8 @@
 set -u
 ACTION="${1:-poweroff}"
 
-# Принудительно отмонтируем USB-storage (T7) — известный блокер halt на Pi 5
-for m in /mnt/t7 /mnt/usb*; do
+# Принудительно отмонтируем USB-storage (USB-SSD) — известный блокер halt на Pi 5
+for m in /mnt/storage /mnt/usb*; do
     [[ -d "$m" ]] && umount -l "$m" 2>/dev/null
 done
 # То же для всех USB block devices

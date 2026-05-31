@@ -58,7 +58,7 @@ fi
 MODULES=(
     01-update
     02-utils
-    04-t7-mount
+    04-storage-mount
     05-tg-notify
     06-samba
     07-pi-backup
@@ -123,7 +123,7 @@ export SETUP_REPO_ROOT="$REPO_ROOT"
 # Меню выбора компонентов
 # =============================================================================
 
-ALL_COMPONENTS="UPDATE UTILS T7_MOUNT TG_NOTIFY SAMBA PI_BACKUP \
+ALL_COMPONENTS="UPDATE UTILS STORAGE_MOUNT TG_NOTIFY SAMBA PI_BACKUP \
 PHOTO_BACKUP NAS_BACKUP WATCHDOG SYS_MONITOR POWER_MODE TG_LISTENER DAILY_SUM \
 LOG2RAM ZRAM COMITUP CASAOS PHOTOVIEW YTARCHIVER DISPLAY DESKTOP TAILSCALE VERIFY THERMAL_GUARD PI_TWEAKS CONF_PERMS"
 
@@ -140,9 +140,9 @@ Usage:
 Components:
   UPDATE         apt update + upgrade
   UTILS          htop, ncdu, tmux, git, smartmontools, exiftool, etc + travel-nas-setup shortcut
-  T7_MOUNT       Mount внешнего диска в /mnt/t7 (wizard для форматирования)
+  STORAGE_MOUNT       Mount внешнего диска в /mnt/storage (wizard: ext4 → как есть, иначе формат)
   TG_NOTIFY      Telegram уведомления (helper)
-  SAMBA          SMB share /mnt/t7
+  SAMBA          SMB share /mnt/storage
   PI_BACKUP      Еженедельный бэкап конфигов (воскр 03:00)
   PHOTO_BACKUP   Автобэкап SD/USB карт при подключении
   NAS_BACKUP     Manual бэкап с домашнего NAS
@@ -158,9 +158,9 @@ Components:
   PHOTOVIEW      Photo gallery (Docker, после CASAOS)
   YTARCHIVER     YouTube archiver (Docker, после CASAOS, UI на :8081)
   DISPLAY        MHS35 + Python dashboard (X11 kiosk)
-  DESKTOP        Ярлыки на десктоп (Dashboard, Setup, T7 Files, ...)
+  DESKTOP        Ярлыки на десктоп (Dashboard, Setup, Storage Files, ...)
   TAILSCALE      Zero-config VPN — доступ к Pi из любой сети мира
-  VERIFY         Ежемесячный bit-rot/IO scrub T7 (sha256 manifest)
+  VERIFY         Ежемесячный bit-rot/IO scrub storage (sha256 manifest)
   THERMAL_GUARD  Sustained-temp защита — staged docker throttle/pause/stop
   PI_TWEAKS      HW watchdog + EEPROM auto-update + WiFi powersave OFF + sysctl
   CONF_PERMS     Авто-восстановление owner/mode у /etc/travel-nas/*.conf (path-unit)
@@ -171,9 +171,9 @@ else
         --checklist "Что устанавливать? (Space — выбор, Enter — OK)" 30 80 24 \
         "UPDATE"       "apt update + upgrade"                              ON \
         "UTILS"        "Утилиты + travel-nas-setup команда + LED helper"  ON \
-        "T7_MOUNT"     "Внешний диск → /mnt/t7 (wizard форматирования)"   ON \
+        "STORAGE_MOUNT"     "Внешний диск → /mnt/storage (ext4 — как есть, иначе формат)" ON \
         "TG_NOTIFY"    "Telegram уведомления"                             ON \
-        "SAMBA"        "Samba шара /mnt/t7"                               ON \
+        "SAMBA"        "Samba шара /mnt/storage"                               ON \
         "PI_BACKUP"    "Еженедельный бэкап конфигов"                      ON \
         "PHOTO_BACKUP" "Автобэкап SD/USB карт"                            ON \
         "NAS_BACKUP"   "Бэкап с домашнего NAS"                            ON \
@@ -191,7 +191,7 @@ else
         "DISPLAY"      "MHS35 + dashboard"                                ON \
         "DESKTOP"      "Ярлыки на десктоп"                                ON \
         "TAILSCALE"    "Tailscale VPN (доступ к Pi из любой сети)"        ON \
-        "VERIFY"       "Ежемесячный bit-rot/IO scrub T7"                  ON \
+        "VERIFY"       "Ежемесячный bit-rot/IO scrub storage"                  ON \
         "THERMAL_GUARD" "Защита от перегрева (MODE=warn по умолчанию)"    ON \
         "PI_TWEAKS"    "HW watchdog + EEPROM + WiFi-no-powersave + sysctl"  ON \
         "CONF_PERMS"   "Авто-fix прав /etc/travel-nas/ при правке через CasaOS" ON \

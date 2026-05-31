@@ -54,7 +54,7 @@ docs/                       Long-form документация.
 | Путь | Что |
 |---|---|
 | `/etc/travel-nas/*.conf` | Конфиги (НИКОГДА не трогаются update-скриптом) |
-| `/mnt/t7/` | T7 SSD, ext4, label `t7`, UUID в fstab. `usb-imports/`, `nas-backup/`, `_logs/`, `pi-config-backups/` |
+| `/mnt/storage/` | Внешний SSD (обычно Samsung T7), ext4, UUID в fstab. Опознаётся по файлу-маркеру `.travel-nas-storage` (любой label). `usb-imports/`, `nas-backup/`, `_logs/`, `pi-config-backups/` |
 | `/var/lib/travel-nas/` | Долгое state (sleep-timeout, power-mode-pref, *.status.json, verify manifest pointer) |
 | `/var/run/travel-nas/` | Tmpfs runtime (backup-progress.json, screenshot.png, screenshot-req) |
 | `/usr/local/bin/` | Все наши скрипты |
@@ -65,10 +65,11 @@ docs/                       Long-form документация.
 - **Pi 5 shutdown hang с USB-SSD** — `dtoverlay=usb_max_current_enable=1` (только Pi 5) + fast-shutdown.sh с pre-umount T7 + sysrq fallback hook. Без этого `systemctl poweroff` залипает на «Reached target system power off» навсегда.
 - **MHS35 SPI display** — резистивный, 320×480 portrait. Touch матрица отдельная (ADS7846). `dtoverlay=mhs35:rotate=N` меняет экран — НО touch калибровка **не подхватывается** автоматически. Используй `screen-rotate.sh {0|90|180|180|flip}` — он пишет правильную `Calibration` под выбранный rotation (значения из goodtft/LCD-show, по одной матрице на угол).
 - **MHS35 backlight всегда вкл** — BL прибит к 5V напрямую, программно не выключить. Поэтому auto-sleep заливает экран чёрным (set_backlight + screen.fill) — пиксели гаснут, но подсветка нет.
-- **Pi 4 vs Pi 5** — оба поддерживаются. Pi 4 ~2× дольше работа от powerbank, обычно без shutdown hang. Conditional флаги в модулях (`PI_MODEL`-check в 04-t7-mount, не везде).
+- **Pi 4 vs Pi 5** — оба поддерживаются. Pi 4 ~2× дольше работа от powerbank, обычно без shutdown hang. Conditional флаги в модулях (`PI_MODEL`-check в 04-storage-mount, не везде).
 
 ## Software gotchas / patterns
 
+- **Идентификация storage-диска (универсальная, без привязки к имени)** — `04-storage-mount.sh` опознаёт «свой» диск в порядке: (1) UUID из `storage-info.conf` (тот же OS-инстанс); (2) **скан ext4-партиций на файл-маркер `.travel-nas-storage`** в корне ФС — работает с ЛЮБЫМ label и переживает переустановку OS; (3) legacy: старый label `t7` / fstab-запись `/mnt/t7` → авто-миграция на `/mnt/storage`; (4) иначе whiptail-wizard. Wizard: если выбранный диск уже ext4 и здоров (`e2fsck -fn`) → «Использовать как есть» (данные целы), чужая/пустая ФС → формат с запросом label. Маркер пишется при каждом adopt/format. НЕ хардкодь label `t7` нигде — диск может называться как угодно.
 - **rsync modules vs paths** — на Synology/UGREEN бэкап идёт через rsync daemon модули (`oleg@host::module/`), **не** через ssh-fs paths. Subpaths внутри модуля можно (`module/Photos/`), `/volume1/...` — нет (rsync daemon отвергает абсолютные пути с `/`). См. docs/NAS-BACKUP.md таблицу.
 - **EXCLUDES** в `nas-backup.conf` — `@eaDir/ #recycle/ .DS_Store node_modules/ .cache/ ...`. Эти Synology-thumbnails и cache могут отъедать **5-15% размера на больших библиотеках** — поэтому простой `du`-сравнение T7 vs NAS даёт false-warning «not fully copied». **Авторитетный сигнал — rsync exit-code** (parsed из логов в `nas-backup-status.py`), не размерное сравнение.
 - **systemd-run для длинных операций** — `nas-backup.sh` сам себя re-exec'ит как transient unit `nas-backup-runtime` чтобы переживать рестарт dashboard'а / SSH-сессии. Output идёт в `journalctl -u nas-backup-runtime`, не в stdout — НЕ ищи output в /tmp/*.out если вызвал напрямую.

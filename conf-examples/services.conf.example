@@ -28,7 +28,7 @@ CasaOS=http://{host}
 
 Photoview=http://{host}:8000
     Login: admin / hammett
-    Внутри контейнера: /t7/usb-imports
+    Внутри контейнера: /storage/usb-imports
 
 YT-Archiver=http://{host}:8081
     Self-hosted YouTube archive

@@ -11,6 +11,7 @@ if (
         ifupdown net-tools wireless-tools \
         python3-pip python3-pygame python3-evdev \
         wmctrl \
+        chrony \
         avahi-daemon
 ); then
     # `travel-nas-setup` — перезапуск wizard'а без curl-paste
@@ -32,8 +33,8 @@ if (
   ║   Dashboard:  http://${HOST_LOCAL}
   ║   Re-config:  travel-nas-setup                           ║
   ║   Update:     travel-nas-update                          ║
-  ║   Logs:       tail -F /mnt/t7/_logs/*.log                ║
-  ║   Backups:    /mnt/t7/{usb-imports,nas-backup}           ║
+  ║   Logs:       tail -F /mnt/storage/_logs/*.log                ║
+  ║   Backups:    /mnt/storage/{usb-imports,nas-backup}           ║
   ╚══════════════════════════════════════════════════════════╝
 
 EOF

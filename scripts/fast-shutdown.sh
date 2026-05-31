@@ -1,11 +1,11 @@
 #!/bin/bash
 # =============================================================================
-# fast-shutdown.sh — canonical Pi 5 shutdown с pre-umount T7
+# fast-shutdown.sh — canonical Pi 5 shutdown с pre-umount диска
 # =============================================================================
-# Известная проблема: Pi 5 + USB-SSD (T7) hangs на "Reached target system
+# Известная проблема: Pi 5 + USB-SSD hangs на "Reached target system
 # power off" — USB-bridge долго отключается, kernel ждёт.
 #
-# Workaround: lazy umount T7 + kill процессов держащих его ДО systemctl
+# Workaround: lazy umount диска + kill процессов держащих его ДО systemctl
 # poweroff. systemd-shutdown тогда не упрётся в "невозможно отмонтировать".
 # =============================================================================
 
@@ -27,12 +27,12 @@ systemctl stop nas-backup-runtime 2>/dev/null
 # Дать docker пару секунд
 sleep 2
 
-# 3) Жёстко прибить процессы на T7 — иначе umount не сработает
-fuser -km /mnt/t7 2>/dev/null || true
+# 3) Жёстко прибить процессы на диска — иначе umount не сработает
+fuser -km /mnt/storage 2>/dev/null || true
 
-# 4) Lazy umount T7 — освобождает USB-bridge для firmware power-down
+# 4) Lazy umount диска — освобождает USB-bridge для firmware power-down
 sync
-umount -l /mnt/t7 2>/dev/null || true
+umount -l /mnt/storage 2>/dev/null || true
 
-# 5) systemctl poweroff — теперь без T7-hang'а
+# 5) systemctl poweroff — теперь без SSD-hang'а
 exec systemctl poweroff

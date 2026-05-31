@@ -7,7 +7,7 @@ NAS_USER="oleg"
 NAS_PASS=""
 
 # Куда сохранять
-DEST="/mnt/t7/nas-backup"
+DEST="/mnt/storage/nas-backup"
 
 # Модули для бэкапа (формат: "rsync_module|local_folder")
 #

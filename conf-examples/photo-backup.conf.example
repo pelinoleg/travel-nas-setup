@@ -2,14 +2,14 @@
 # Скопировать в: /etc/travel-nas/photo-backup.conf
 
 # Целевая папка
-DEST="/mnt/t7/usb-imports"
+DEST="/mnt/storage/usb-imports"
 
 # Авторазмонтирование SD после бэкапа
 AUTO_UMOUNT=true
 
-# UUID нашего T7 (чтобы НЕ бэкапить сам себя)
+# UUID нашего диска (чтобы НЕ бэкапить сам себя)
 # Получить: sudo blkid /dev/sdX1
-T7_UUID=""
+STORAGE_UUID=""
 
 # Минимальный размер файла для копирования (байт)
 MIN_SIZE=1

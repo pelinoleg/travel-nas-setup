@@ -100,7 +100,7 @@ t=N+4 temp=66°C → cool_counter=5 ≥ COOLDOWN_MIN
 ## Логи
 
 ```
-/mnt/t7/_logs/thermal-guard.log   — каждый tick + эскалации
+/mnt/storage/_logs/thermal-guard.log   — каждый tick + эскалации
 sudo journalctl -u thermal-guard.service   — systemd-уровень
 cat /var/lib/travel-nas/thermal-guard.state.json   — state (actions, counters)
 ```

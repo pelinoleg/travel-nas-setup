@@ -1,10 +1,10 @@
 # Photoview ignore rules — синтаксис как у .gitignore.
-# Положен в /mnt/t7/usb-imports/.photoviewignore
+# Положен в /mnt/storage/usb-imports/.photoviewignore
 # Применяется ко всем подпапкам.
 #
 # Цель: исключить RAW-форматы. CPU Pi 5 на ARM не справляется с
 # darktable thumbnail-генерацией за разумное время. RAW остаются на
-# T7 для архива, Photoview их просто не видит.
+# диск для архива, Photoview их просто не видит.
 
 # === Camera RAW (большинство производителей) ===
 *.RAF

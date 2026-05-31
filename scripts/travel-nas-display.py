@@ -44,7 +44,7 @@ SCREENSHOT_REQ  = STATE_DIR / "screenshot-req"  # touch = запросить с�
 SCREENSHOT_OUT  = STATE_DIR / "dashboard.png"   # дашборд сюда сохраняет
 ERROR_LOG = Path("/tmp/travel-nas-display.error.log")
 
-T7_MOUNT = "/mnt/t7"
+STORAGE_MOUNT = "/mnt/storage"
 
 SERVICES_CONF      = Path("/etc/travel-nas/services.conf")
 YT_ARCHIVER_CONF   = Path("/etc/travel-nas/yt-archiver.conf")
@@ -61,11 +61,11 @@ SERVICES_DEFAULTS = [
 ]
 
 LOG_OPTIONS = [
-    ("Photo backup",   "/mnt/t7/_logs/photo-backup.log"),
+    ("Photo backup",   "/mnt/storage/_logs/photo-backup.log"),
     ("NAS backup",     "__nas_latest__"),
-    ("Watchdog",       "/mnt/t7/_logs/disk-watchdog.log"),
-    ("System monitor", "/mnt/t7/_logs/system-monitor.log"),
-    ("Thermal guard",  "/mnt/t7/_logs/thermal-guard.log"),
+    ("Watchdog",       "/mnt/storage/_logs/disk-watchdog.log"),
+    ("System monitor", "/mnt/storage/_logs/system-monitor.log"),
+    ("Thermal guard",  "/mnt/storage/_logs/thermal-guard.log"),
     ("Display errors", str(ERROR_LOG)),
 ]
 
@@ -288,9 +288,9 @@ def _watts():
     return round(total)
 
 
-def _t7_temp():
+def _disk_temp():
     device = subprocess.check_output(
-        ["findmnt", "-n", "-o", "SOURCE", T7_MOUNT], timeout=2
+        ["findmnt", "-n", "-o", "SOURCE", STORAGE_MOUNT], timeout=2
     ).decode().strip()
     if not device:
         return None
@@ -308,19 +308,19 @@ def _t7_temp():
 
 
 def _disk_info():
-    # Без проверки mountpoint df вернёт цифры корневого раздела (когда /mnt/t7
+    # Без проверки mountpoint df вернёт цифры корневого раздела (когда /mnt/storage
     # существует как пустой каталог без mount) — выглядело бы как «всё ОК».
-    if not Path(T7_MOUNT).is_mount():
+    if not Path(STORAGE_MOUNT).is_mount():
         return None
     # Hot-pull: mount остаётся прописан, df возвращает кэш metaданных, но
     # любая I/O операция фейлит. Делаем cheap listdir-probe чтобы поймать.
     try:
-        os.listdir(T7_MOUNT)
+        os.listdir(STORAGE_MOUNT)
     except OSError:
         return "io_error"
     try:
         out = subprocess.check_output(
-            ["df", "-h", "--output=used,avail,size,pcent", T7_MOUNT], timeout=2
+            ["df", "-h", "--output=used,avail,size,pcent", STORAGE_MOUNT], timeout=2
         ).decode().splitlines()
     except Exception:
         return "io_error"
@@ -408,7 +408,7 @@ def _comitup_state():
 
 
 def _last_photo_backup():
-    base = Path(T7_MOUNT) / "usb-imports"
+    base = Path(STORAGE_MOUNT) / "usb-imports"
     if not base.exists():
         return None
     dates = sorted([d for d in base.iterdir() if d.is_dir()], reverse=True)
@@ -451,7 +451,7 @@ c_zram     = Cached(_zram_ratio,      5)
 c_load     = Cached(_load,            2)
 c_throttle = Cached(_throttled,       5)
 c_watts    = Cached(_watts,           5)
-c_t7_temp  = Cached(_t7_temp,        30)
+c_disk_temp  = Cached(_disk_temp,        30)
 c_disk     = Cached(_disk_info,       5)
 c_ip       = Cached(_ip,              5)
 c_gateway  = Cached(_gateway,        10)
@@ -745,7 +745,7 @@ def health_status():
     else:
         if disk["pct"] >= 90:   bad = True
         elif disk["pct"] >= 80: warn = True
-    t7t = c_t7_temp.get()
+    t7t = c_disk_temp.get()
     if t7t and t7t >= 60: bad = True
     elif t7t and t7t >= 55: warn = True
     ct = c_cpu_temp.get()
@@ -1146,13 +1146,13 @@ def _card_ap(rect):
 
 
 def _card_storage(rect):
-    inner = _card(rect, "STORAGE  T7")
+    inner = _card(rect, "STORAGE")
     disk = c_disk.get()
-    t7t = c_t7_temp.get()
+    t7t = c_disk_temp.get()
     if disk is None:
         msg = F_MED.render("NOT MOUNTED", True, ERROR)
         screen.blit(msg, msg.get_rect(center=(inner.centerx, inner.centery)))
-        hint = F_TINY.render("plug T7 / check /mnt/t7", True, MUTED)
+        hint = F_TINY.render("plug disk / check /mnt/storage", True, MUTED)
         screen.blit(hint, hint.get_rect(midtop=(inner.centerx, inner.centery + 12)))
         return
     if disk == "io_error":
@@ -1635,7 +1635,7 @@ def page_log_view():
     idx = state.get("log_idx", 0)
     name, path = LOG_OPTIONS[idx]
     if path == "__nas_latest__":
-        log_dir = Path("/mnt/t7/nas-backup/_logs")
+        log_dir = Path("/mnt/storage/nas-backup/_logs")
         path = None
         if log_dir.exists():
             files = sorted(log_dir.glob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
@@ -1860,14 +1860,14 @@ def page_daily_summary():
         ct = data.get("cpu_temp")
         kv("CPU temp", f"{ct}°C" if ct else "?",
            ACCENT if (ct or 0) < 65 else (WARN if (ct or 0) < 75 else ERROR))
-        t7 = data.get("t7") or {}
+        st = data.get("storage") or {}
         ip = data.get("ip")
         ssid = data.get("ssid")
         kv("Network",  f"{ip or '?'}" + (f" ({ssid})" if ssid else ""))
-        if t7.get("mounted"):
-            kv("T7 disk", f"{t7.get('used','?')} / {t7.get('total','?')} ({t7.get('pct','?')}%)")
+        if st.get("mounted"):
+            kv("Disk", f"{st.get('used','?')} / {st.get('total','?')} ({st.get('pct','?')}%)")
         else:
-            kv("T7 disk", "NOT MOUNTED", ERROR)
+            kv("Disk", "NOT MOUNTED", ERROR)
 
         y += 4
         pygame.draw.line(screen, BTN_BG, (10, y), (SCREEN_W - 10, y), 1)
@@ -2163,7 +2163,7 @@ def page_ytarchiver():
 
 
 def _disk_diag():
-    """Диагностика T7: mount/fs/temp/SMART/dmesg-errors. Не fail-fast — каждая
+    """Диагностика диска: mount/fs/temp/SMART/dmesg-errors. Не fail-fast — каждая
     подсекция отдельно try/except. Тяжёлый (~1-2 сек) — вызываем только когда
     юзер открыл storage detail page."""
     info = {
@@ -2176,21 +2176,21 @@ def _disk_diag():
     }
     # 1) Mount state
     try:
-        if not Path(T7_MOUNT).is_mount():
+        if not Path(STORAGE_MOUNT).is_mount():
             return info
         info["mount_ok"] = True
     except Exception:
         return info
     # 2) I/O probe
     try:
-        os.listdir(T7_MOUNT)
+        os.listdir(STORAGE_MOUNT)
     except OSError:
         info["io_error"] = True
 
     # 3) mount info: source/fs/opts
     try:
         out = subprocess.check_output(
-            ["findmnt", "-no", "SOURCE,FSTYPE,OPTIONS", T7_MOUNT], timeout=2
+            ["findmnt", "-no", "SOURCE,FSTYPE,OPTIONS", STORAGE_MOUNT], timeout=2
         ).decode().strip().split()
         if len(out) >= 3:
             info["source"], info["fs_type"], info["mount_opts"] = out[0], out[1], out[2][:60]
@@ -2201,7 +2201,7 @@ def _disk_diag():
     if not info["io_error"]:
         try:
             out = subprocess.check_output(
-                ["df", "-h", "--output=used,avail,size,pcent", T7_MOUNT], timeout=2
+                ["df", "-h", "--output=used,avail,size,pcent", STORAGE_MOUNT], timeout=2
             ).decode().splitlines()
             if len(out) >= 2:
                 p = out[1].split()
@@ -2211,7 +2211,7 @@ def _disk_diag():
             pass
 
     # 5) temp
-    t = c_t7_temp.get()
+    t = c_disk_temp.get()
     if t: info["temp_c"] = t
 
     # 6) SMART через smartctl (sudo NOPASSWD есть)
@@ -2289,7 +2289,7 @@ c_disk_diag = Cached(_disk_diag, 30)
 
 
 def page_storage_detail():
-    """Подробности T7: mount, FS, SMART, температура, USB-ошибки в dmesg."""
+    """Подробности диска: mount, FS, SMART, температура, USB-ошибки в dmesg."""
     screen.fill(BG)
     y = draw_top_strip("Storage")
     y += 8
@@ -2399,7 +2399,7 @@ def page_storage_detail():
 def _photo_backups_list(limit=10):
     """Список бэкапов photos: idx по DD-MM-YYYY/HH-MM-SS_label_uuid.
     Возвращает [(date, time_label, files, size_bytes, incomplete), ...] — последние."""
-    base = Path(T7_MOUNT) / "usb-imports"
+    base = Path(STORAGE_MOUNT) / "usb-imports"
     out = []
     if not base.is_dir():
         return out
@@ -2449,7 +2449,7 @@ def _photo_backups_list(limit=10):
 
 def _photo_backups_totals():
     """Aggregate всех бэкапов: total backups / files / size."""
-    base = Path(T7_MOUNT) / "usb-imports"
+    base = Path(STORAGE_MOUNT) / "usb-imports"
     if not base.is_dir():
         return None
     total_backups = 0
@@ -2501,9 +2501,9 @@ def page_photo_backups():
     items  = c_photo_list.get() or []
 
     if totals is None:
-        screen.blit(F_NORMAL.render("/mnt/t7/usb-imports недоступен", True, ERROR), (10, y))
+        screen.blit(F_NORMAL.render("/mnt/storage/usb-imports недоступен", True, ERROR), (10, y))
         y += 24
-        screen.blit(F_SMALL.render("T7 не примонтирован?", True, MUTED), (10, y))
+        screen.blit(F_SMALL.render("Диск не примонтирован?", True, MUTED), (10, y))
     elif totals.get("backups", 0) == 0:
         screen.blit(F_LARGE.render("none yet", True, MUTED), (10, y))
         y += 28
@@ -2511,7 +2511,7 @@ def page_photo_backups():
         y += 16
         screen.blit(F_SMALL.render("SD-карту или USB-флешку через udev.", True, MUTED), (10, y))
         y += 22
-        screen.blit(F_TINY.render("Source: /mnt/t7/usb-imports", True, MUTED), (10, y))
+        screen.blit(F_TINY.render("Source: /mnt/storage/usb-imports", True, MUTED), (10, y))
     else:
         # Aggregate
         n_b = totals["backups"]
@@ -3042,7 +3042,7 @@ def page_configs():
         ("/etc/travel-nas/power-mode.conf",     "Home WiFi SSIDs"),
         ("/etc/travel-nas/photo-backup.conf",   "USB backup settings"),
         ("/etc/travel-nas/thermal-guard.conf",  "Перегрев: mode/пороги/excludes"),
-        ("/etc/travel-nas/t7-info.conf",        "T7 UUID (auto)"),
+        ("/etc/travel-nas/storage-info.conf",        "Disk UUID (auto)"),
     ]
 
     screen.blit(F_TINY.render("/etc/travel-nas/  (●=exists)", True, MUTED), (10, y))
@@ -3068,15 +3068,15 @@ def page_configs():
     # Backup команда
     screen.blit(F_TINY.render("Pi-config-backup runs Sun 03:00.", True, INFO), (10, y))
     y += 14
-    screen.blit(F_TINY.render("Saved to /mnt/t7/pi-config-backups/", True, MUTED), (10, y))
+    screen.blit(F_TINY.render("Saved to /mnt/storage/pi-config-backups/", True, MUTED), (10, y))
     y += 16
 
-    screen.blit(F_TINY.render("T7 SURVIVES microSD wipe:", True, ACCENT), (10, y))
+    screen.blit(F_TINY.render("DISK SURVIVES microSD wipe:", True, ACCENT), (10, y))
     y += 14
     for line in [
-        "  /mnt/t7/usb-imports  (USB backups)",
-        "  /mnt/t7/nas-backup   (NAS sync)",
-        "  /mnt/t7/_logs        (script logs)",
+        "  /mnt/storage/usb-imports  (USB backups)",
+        "  /mnt/storage/nas-backup   (NAS sync)",
+        "  /mnt/storage/_logs        (script logs)",
     ]:
         screen.blit(F_TINY.render(line, True, MUTED), (10, y))
         y += 13
@@ -3283,7 +3283,7 @@ def draw_touch_flash():
 # Action dispatch
 # =============================================================================
 def _spawn_nas(action_arg, msg, color):
-    log_path = Path("/mnt/t7/nas-backup/_logs/dashboard.log")
+    log_path = Path("/mnt/storage/nas-backup/_logs/dashboard.log")
     try:
         log_path.parent.mkdir(parents=True, exist_ok=True)
     except Exception:

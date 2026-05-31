@@ -56,7 +56,7 @@ NAS (UGREEN/Synology) предоставляет **два разных инте�
 
 **Поэтому** в конфиге `nas-backup.conf` модули записаны как `home|Personal`, не `Personal|Personal`:
 - `home` — это **rsync module** на NAS (как настроено в `rsyncd.conf` на NAS)
-- `Personal` — это **target папка** на T7 (`/mnt/t7/nas-backup/Personal/`)
+- `Personal` — это **target папка** на T7 (`/mnt/storage/nas-backup/Personal/`)
 
 Если на NAS rsync-модуль называется иначе — нужно менять левую часть `MODULES=` в конфиге.
 
@@ -139,15 +139,15 @@ NAS_HOST="192.168.1.95"          # IP или hostname домашнего NAS
 NAS_USER="oleg"                  # user для rsync daemon
 NAS_PASS="..."                   # password из rsyncd.secrets на NAS
 
-DEST="/mnt/t7/nas-backup"        # куда копировать на T7
+DEST="/mnt/storage/nas-backup"        # куда копировать на T7
 
 # MODULES — какие шары забирать.
 # Формат: "rsync_module|local_folder"
 #   rsync_module = имя в `rsync user@nas::` (см. Test connectivity)
-#   local_folder = название папки на T7 под /mnt/t7/nas-backup/
+#   local_folder = название папки на T7 под /mnt/storage/nas-backup/
 MODULES=(
-    "home|Personal"              # NAS::home → /mnt/t7/nas-backup/Personal/
-    "docker|Docker"              # NAS::docker → /mnt/t7/nas-backup/Docker/
+    "home|Personal"              # NAS::home → /mnt/storage/nas-backup/Personal/
+    "docker|Docker"              # NAS::docker → /mnt/storage/nas-backup/Docker/
     "Backup|Backup"
     "PMedia|PMedia"
     "Music|Music"
@@ -169,7 +169,7 @@ EXCLUDES=(
 ## Где что лежит после backup'а
 
 ```
-/mnt/t7/nas-backup/
+/mnt/storage/nas-backup/
 ├── Personal/                    # mirror NAS::home
 ├── Docker/                      # mirror NAS::docker
 ├── Backup/                      # mirror NAS::Backup
@@ -187,7 +187,7 @@ EXCLUDES=(
 
 `_deleted/` растёт если файлы на NAS удаляют. Время от времени можно почистить старые даты:
 ```bash
-sudo rm -rf /mnt/t7/nas-backup/_deleted/01-04-2026
+sudo rm -rf /mnt/storage/nas-backup/_deleted/01-04-2026
 ```
 
 ---
@@ -225,7 +225,7 @@ sudo systemctl stop nas-backup-runtime
   "source": "nas",
   "device": "192.168.1.95",
   "label": "Personal",
-  "target": "/mnt/t7/nas-backup/Personal",
+  "target": "/mnt/storage/nas-backup/Personal",
   "percent": 47,
   "files_done": 12345,
   "size_done": "234.5G",
@@ -245,8 +245,8 @@ Bash-trap удаляет JSON при любом exit'е (SIGTERM от Stop, но
 
 Каждый модуль = отдельный лог:
 ```
-/mnt/t7/nas-backup/_logs/28-05-2026_15-30_Personal.log
-/mnt/t7/nas-backup/_logs/28-05-2026_15-45_Docker.log
+/mnt/storage/nas-backup/_logs/28-05-2026_15-30_Personal.log
+/mnt/storage/nas-backup/_logs/28-05-2026_15-45_Docker.log
 ...
 ```
 
@@ -270,7 +270,7 @@ Total transferred file size: 1.46G bytes
 
 - **Старт**: `🟢 NAS-backup started · Source: 192.168.1.95 · Modules: 5`
 - **Успех**: `✅ NAS-backup complete · Modules: 5/5 · Total size: 2.1T · Duration: 1h 23m 45s`
-- **Ошибки**: `⚠️ NAS-backup with errors · OK: 4 · Failed: 1 · Check: /mnt/t7/nas-backup/_logs/`
+- **Ошибки**: `⚠️ NAS-backup with errors · OK: 4 · Failed: 1 · Check: /mnt/storage/nas-backup/_logs/`
 - **Cannot reach NAS**: `❌ NAS-backup failed · Cannot reach NAS at 192.168.1.95`
 
 ---

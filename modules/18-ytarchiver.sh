@@ -10,10 +10,10 @@ if ! command -v docker &>/dev/null; then
     mark_fail "YTARCHIVER" "Docker не установлен (сначала CASAOS)"
 elif (
     set -e
-    # Папки данных на T7 — bind mount внутрь контейнера. Владелец $(whoami)
+    # Папки данных на диске — bind mount внутрь контейнера. Владелец $(whoami)
     # чтобы yt-dlp процессы могли писать.
-    sudo install -d -o "$(whoami)" -g "$(whoami)" /mnt/t7/media/YT-Archiver/data
-    sudo install -d -o "$(whoami)" -g "$(whoami)" /mnt/t7/media/YT-Archiver/video
+    sudo install -d -o "$(whoami)" -g "$(whoami)" /mnt/storage/media/YT-Archiver/data
+    sudo install -d -o "$(whoami)" -g "$(whoami)" /mnt/storage/media/YT-Archiver/video
 
     APP_DIR=/var/lib/casaos/apps/ytarchiver
     sudo mkdir -p "$APP_DIR"
@@ -66,10 +66,10 @@ services:
       icon: https://upload.wikimedia.org/wikipedia/commons/0/09/YouTube_full-color_icon_%282017%29.svg
     volumes:
       - type: bind
-        source: /mnt/t7/media/YT-Archiver/data
+        source: /mnt/storage/media/YT-Archiver/data
         target: /data
       - type: bind
-        source: /mnt/t7/media/YT-Archiver/video
+        source: /mnt/storage/media/YT-Archiver/video
         target: /downloads
   frontend:
     image: ghcr.io/pelinoleg/ytarchiver-frontend:latest

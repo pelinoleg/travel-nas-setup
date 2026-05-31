@@ -3,7 +3,7 @@
 # pi-config-backup.sh - Еженедельный бэкап конфигов Pi
 # =============================================================================
 # Запускается через root crontab воскресенье 03:00.
-# Сохраняет 4 последних копии в /mnt/t7/pi-config-backups/<DD-MM-YYYY_HH-MM>/.
+# Сохраняет 4 последних копии в /mnt/storage/pi-config-backups/<DD-MM-YYYY_HH-MM>/.
 # Структура backup'а ЗЕРКАЛИРУЕТ исходные пути:
 #   $BACKUP_DIR/etc/fstab           ← /etc/fstab
 #   $BACKUP_DIR/usr/local/bin/foo   ← /usr/local/bin/foo
@@ -13,10 +13,10 @@
 
 set -u
 
-BACKUP_ROOT="/mnt/t7/pi-config-backups"
+BACKUP_ROOT="/mnt/storage/pi-config-backups"
 TG_NOTIFY="/usr/local/bin/tg-notify.sh"
 
-if ! mountpoint -q /mnt/t7; then
+if ! mountpoint -q /mnt/storage; then
     BACKUP_ROOT="/home/$(logname 2>/dev/null || echo pi)/pi-config-backups"
 fi
 
@@ -145,8 +145,8 @@ Hostname:       $(hostname)
 Kernel:         $(uname -r)
 OS:             $(lsb_release -d 2>/dev/null | cut -f2 || echo "unknown")
 Uptime:         $(uptime -p)
-T7 mount:       $(mount | grep '/mnt/t7' || echo "not mounted")
-T7 disk free:   $(df -h /mnt/t7 2>/dev/null | tail -1)
+Disk mount:       $(mount | grep '/mnt/storage' || echo "not mounted")
+Disk free:   $(df -h /mnt/storage 2>/dev/null | tail -1)
 EOF
 
 # =============================================================================

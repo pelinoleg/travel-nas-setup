@@ -1,6 +1,6 @@
 [[ -n "${DO_PHOTOVIEW:-}" ]] || return 0
 
-# В UI Photoview добавляй пути /t7/usb-imports или /t7/media — это пути ВНУТРИ
+# В UI Photoview добавляй пути /storage/usb-imports или /storage/media — это пути ВНУТРИ
 # контейнера. Mount только read-only — гарантия что галерея ничего не сотрёт.
 info "=== Photoview ==="
 if ! command -v docker &>/dev/null; then
@@ -9,18 +9,18 @@ elif (
     set -e
     sudo mkdir -p /opt/photoview
 
-    # cache+db живут на T7 (а не /opt/) — переустановка системы не теряет
+    # cache+db живут на диске (а не /opt/) — переустановка системы не теряет
     # БД (1700+ scanned media, faces, favorites). Тяжёлые thumbnail-writes
     # тоже на SSD, а не убивают microSD.
     # UID 999 = mysql внутри mariadb / photoview user внутри photoview.
-    APPDATA="$T7_MOUNT/_appdata/photoview"
+    APPDATA="$STORAGE_MOUNT/_appdata/photoview"
     sudo install -d -o 999 -g 999 -m 0755 "$APPDATA/cache"
     sudo install -d -o 999 -g 999 -m 0755 "$APPDATA/db"
 
     sudo tee /opt/photoview/docker-compose.yml > /dev/null << EOF
 # Photoview app + MariaDB
-# В UI Photoview добавляй путь /t7/usb-imports или /t7/media — это пути
-# ВНУТРИ контейнера (мы монтируем /mnt/t7 как /t7:ro). Указать /mnt/t7/...
+# В UI Photoview добавляй путь /storage/usb-imports или /storage/media — это пути
+# ВНУТРИ контейнера (мы монтируем /mnt/storage как /storage:ro). Указать /mnt/storage/...
 # не получится — внутри контейнера такого пути не существует.
 services:
   db:
@@ -58,22 +58,22 @@ services:
       - PHOTOVIEW_MEDIA_CACHE=/app/cache
     volumes:
       - $APPDATA/cache:/app/cache
-      # Весь T7 как read-only — в UI указывай /t7/usb-imports, /t7/media и т.п.
-      - $T7_MOUNT:/t7:ro
+      # Весь диск как read-only — в UI указывай /storage/usb-imports, /storage/media и т.п.
+      - $STORAGE_MOUNT:/storage:ro
 EOF
     # .photoviewignore — Photoview-нативный механизм типа .gitignore. Кладём в
     # корень media-папки чтобы сканер игнорил RAW-форматы (на ARM darktable
     # thumbnail RAW = минуты CPU на файл, юзеру обычно нужно только JPG).
-    sudo mkdir -p "$T7_MOUNT/usb-imports"
-    if [[ ! -f "$T7_MOUNT/usb-imports/.photoviewignore" ]]; then
-        fetch_conf_example "photoviewignore.example" "$T7_MOUNT/usb-imports/.photoviewignore"
+    sudo mkdir -p "$STORAGE_MOUNT/usb-imports"
+    if [[ ! -f "$STORAGE_MOUNT/usb-imports/.photoviewignore" ]]; then
+        fetch_conf_example "photoviewignore.example" "$STORAGE_MOUNT/usb-imports/.photoviewignore"
     fi
-    sudo chmod 0644 "$T7_MOUNT/usb-imports/.photoviewignore" 2>/dev/null || true
+    sudo chmod 0644 "$STORAGE_MOUNT/usb-imports/.photoviewignore" 2>/dev/null || true
 
     cd /opt/photoview
     sudo docker compose up -d
 ); then
-    mark_ok "PHOTOVIEW" "http://$(hostname).local:8000 (UI path: /t7/usb-imports)"
+    mark_ok "PHOTOVIEW" "http://$(hostname).local:8000 (UI path: /storage/usb-imports)"
 else
     mark_fail "PHOTOVIEW" "docker compose failed"
 fi

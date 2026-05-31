@@ -42,7 +42,7 @@ sudo curl -fsSL "https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/ma
 |---|---|
 | 📦 **UPDATE** | `apt update && upgrade` (на свежем PiOS долго — ~5-10 мин) |
 | 🛠 **UTILS** | htop, ncdu, smartmontools, exiftool, wmctrl и т.д. |
-| 💾 **T7_MOUNT** | Интерактивный wizard: выбор внешнего диска + форматирование в ext4 + fstab |
+| 💾 **STORAGE_MOUNT** | Wizard: показывает подключённые диски (размер/ФС/метка), даёт выбрать. Уже ext4 и здоров → использует как есть (данные целы); чужой/пустой → формат в ext4 с запросом имени. Свой диск опознаётся по файлу-маркеру (любой label, переживает переустановку OS) |
 | 📱 **TG_NOTIFY** | Telegram-уведомления (helper script) |
 | 📁 **SAMBA** | SMB-шара `smb://<host>.local/travel-nas` (open guest) |
 | 📷 **PHOTO_BACKUP** | udev + rsync — автокопирование USB/SD при подключении |
@@ -56,10 +56,10 @@ sudo curl -fsSL "https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/ma
 | 🗜 **ZRAM** | Сжатый swap (zstd) |
 | 📡 **COMITUP** | Полевой WiFi AP-режим |
 | 🏠 **CASAOS** | Веб-UI для Docker-приложений |
-| 🖼 **PHOTOVIEW** | Photo-галерея (Docker, после CASAOS, путь `/t7/*` в UI) |
+| 🖼 **PHOTOVIEW** | Photo-галерея (Docker, после CASAOS, путь `/storage/*` в UI) |
 | 📺 **YTARCHIVER** | YouTube archiver (Docker, после CASAOS, UI на `:8081`) |
 | 🖥 **DISPLAY** | MHS35 3.5" сенсорный + Python dashboard в X-kiosk |
-| 💻 **DESKTOP** | Ярлыки на рабочий стол: Dashboard, Setup, T7 Files, Services, Logs |
+| 💻 **DESKTOP** | Ярлыки на рабочий стол: Dashboard, Update, Calibrate Touch |
 | 🔐 **TAILSCALE** | Zero-config VPN — доступ к Pi из любой сети мира + SSH без ключей. См. [docs/TAILSCALE.md](docs/TAILSCALE.md) |
 | 🔍 **VERIFY** | Ежемесячный sha256 scrub T7 — ловит bit-rot, bad-sector'а, I/O ошибки. См. [docs/VERIFY.md](docs/VERIFY.md) |
 | 🌡 **THERMAL_GUARD** | Защита от перегрева — staged docker throttle/pause/stop при sustained высокой темпе. MODE=warn по умолчанию. См. [docs/THERMAL-GUARD.md](docs/THERMAL-GUARD.md) |
@@ -81,7 +81,7 @@ sudo curl -fsSL "https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/ma
 ## Структура файлов на T7
 
 ```
-/mnt/t7/                  (owned by install user — можно создавать папки без sudo)
+/mnt/storage/                  (owned by install user — можно создавать папки без sudo)
 ├── nas-backup/           Бэкапы с домашнего NAS
 │   ├── Personal/  Docker/  Photos-Other/  ...
 │   ├── _deleted/<DD-MM-YYYY>/
@@ -107,7 +107,7 @@ sudo curl -fsSL "https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/ma
 | `tg-notify.conf` | Telegram bot token + chat_id | 600 root |
 | `nas-backup.conf` | NAS host/user/pass + список модулей | 600 root |
 | `photo-backup.conf` | Настройки автобэкапа SD | 644 root |
-| `t7-info.conf` | UUID диска T7 (сгенерён при mount) | 644 root |
+| `storage-info.conf` | UUID диска T7 (сгенерён при mount) | 644 root |
 | `services.conf` | URL-ы для Services page в dashboard | 644 oleg |
 | `power-mode.conf` | HOME_SSIDS + HEAVY_DOCKER_APPS | 644 oleg |
 | `yt-archiver.conf` | URL для yt-archiver dashboard страницы | 644 oleg |
@@ -199,12 +199,12 @@ Auto-логика (при `pref=auto`):
 
 - **Samba**: `smb://<host>.local/travel-nas` (Cmd+K в Finder)
 - **CasaOS**: `http://<host>.local`
-- **Photoview**: `http://<host>.local:8000` (в UI указывай путь `/t7/usb-imports` или `/t7/media`)
+- **Photoview**: `http://<host>.local:8000` (в UI указывай путь `/storage/usb-imports` или `/storage/media`)
 - **YT-Archiver**: `http://<host>.local:8081`
 - **SSH**: `ssh oleg@<host>.local`
 - **AP mode** (полевой): подключиться к WiFi `comitup-NNN` (без пароля) → `http://10.41.0.1:8080` для настройки нового WiFi
 
-> ⚠️ **Photoview** UI принимает только пути ВНУТРИ контейнера. Мы монтируем `/mnt/t7` как `/t7:ro`. То есть в Photoview указывай `/t7/usb-imports`, а **не** `/mnt/t7/usb-imports`. Иначе получишь "Server error: internal system error at initialSetupWizard".
+> ⚠️ **Photoview** UI принимает только пути ВНУТРИ контейнера. Мы монтируем `/mnt/storage` как `/storage:ro`. То есть в Photoview указывай `/storage/usb-imports`, а **не** `/mnt/storage/usb-imports`. Иначе получишь "Server error: internal system error at initialSetupWizard".
 
 ## Обновление скриптов после установки
 
@@ -245,7 +245,7 @@ sudo systemctl restart tg-listener
 
 После изменения compose-файлов:
 ```bash
-cd /opt/photoview && sudo docker compose up -d  # БД на T7: /mnt/t7/_appdata/photoview/
+cd /opt/photoview && sudo docker compose up -d  # БД на T7: /mnt/storage/_appdata/photoview/
 cd /var/lib/casaos/apps/ytarchiver && sudo docker compose up -d
 ```
 
@@ -268,8 +268,8 @@ bash setup.sh        # подхватит локальные lib/ и modules/
 | `/etc/sudoers.d/travel-nas-dashboard` | NOPASSWD для dashboard buttons |
 | `/var/lib/travel-nas/` | Runtime state (JSON-ы, offset, queue) |
 | `/var/run/travel-nas/` | tmpfs runtime (backup-progress) |
-| `/mnt/t7/_logs/` | Логи скриптов |
-| `/mnt/t7/pi-config-backups/` | Еженедельные бэкапы конфигов |
+| `/mnt/storage/_logs/` | Логи скриптов |
+| `/mnt/storage/pi-config-backups/` | Еженедельные бэкапы конфигов |
 
 ## Восстановление при замене microSD
 
@@ -310,7 +310,7 @@ power-mode.sh status
 sudo power-mode.sh saver           # принудительно зажать CPU
 
 # Логи
-tail -F /mnt/t7/_logs/*.log
+tail -F /mnt/storage/_logs/*.log
 
 # Telegram тест
 /usr/local/bin/tg-notify.sh "Test" "Hello from Travel-NAS"

@@ -80,7 +80,7 @@ EOF
 NAS_HOST="$NAS_HOST"
 NAS_USER="$NAS_USER"
 NAS_PASS="$NAS_PASS"
-DEST="$T7_MOUNT/nas-backup"
+DEST="$STORAGE_MOUNT/nas-backup"
 
 # Модули для бэкапа (формат: "rsync_module|local_folder")
 #

@@ -20,8 +20,8 @@ Group=$(whoami)
 ExecStart=/usr/bin/python3 /usr/local/bin/tg-listener.py
 Restart=always
 RestartSec=10
-StandardOutput=append:/mnt/t7/_logs/tg-listener.log
-StandardError=append:/mnt/t7/_logs/tg-listener.log
+StandardOutput=append:/mnt/storage/_logs/tg-listener.log
+StandardError=append:/mnt/storage/_logs/tg-listener.log
 
 [Install]
 WantedBy=multi-user.target

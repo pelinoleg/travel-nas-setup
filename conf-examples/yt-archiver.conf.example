@@ -11,9 +11,9 @@
 #   "3.0"  — быстрые превью, но под нагрузкой Pi подтормаживает.
 #   "4.0"  — фактически без лимита (ест все ядра, старое поведение).
 #
-# Применить ПОСЛЕ правки (без полного setup) — на лету, без рестарта:
-#   sudo docker update --cpus=2.0 ytarchiver-backend
-# Либо перезапусти модуль: travel-nas-setup → YTARCHIVER (перегенерит compose).
+# Применяется АВТОМАТИЧЕСКИ: сохранил этот файл → path-unit yt-cpu-apply сразу
+# применит (docker update, без рестарта). И при каждом ребуте. Команды не нужны.
+# (Вручную на лету, если хочется: sudo docker update --cpus=2.0 ytarchiver-backend)
 YT_CPU_LIMIT="2.0"
 
 # --- Dashboard integration ---

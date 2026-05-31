@@ -137,6 +137,36 @@ EOF
     cd "$APP_DIR"
     sudo docker compose pull
     sudo docker compose up -d   # применяет cpus-лимит к backend-контейнеру
+
+    # Авто-применение YT_CPU_LIMIT при правке конфига (path-unit) и при boot'е —
+    # чтобы менять лимит просто правкой конфига, без команд. docker update
+    # меняет лимит на лету, без рестарта контейнера. Сервис бежит от root.
+    write_systemd_unit yt-cpu-apply.service << 'EOF'
+[Unit]
+Description=Apply YT-Archiver CPU limit from yt-archiver.conf
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'source /etc/travel-nas/yt-archiver.conf 2>/dev/null; [[ "${YT_CPU_LIMIT:-}" =~ ^[0-9]+([.][0-9]+)?$ ]] && docker update --cpus="$YT_CPU_LIMIT" ytarchiver-backend || true'
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    write_systemd_unit yt-cpu-apply.path << 'EOF'
+[Unit]
+Description=Watch yt-archiver.conf for CPU-limit changes
+
+[Path]
+PathChanged=/etc/travel-nas/yt-archiver.conf
+Unit=yt-cpu-apply.service
+
+[Install]
+WantedBy=paths.target
+EOF
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now yt-cpu-apply.service yt-cpu-apply.path
 ); then
     mark_ok "YTARCHIVER" "http://$(hostname).local:8081 (CPU≤${YT_CPU_LIMIT})"
 else

@@ -961,8 +961,10 @@ def _top_processes(n=5, sort="cpu"):
     return rows
 
 
-c_top_cpu = Cached(lambda: _top_processes(5, "cpu"), 3)
-c_top_mem = Cached(lambda: _top_processes(5, "mem"), 3)
+# TTL 6с (не 3) — ps -eo сканит весь /proc и сам мелькает в top на ~100% ядра,
+# особенно когда параллельно жмёт ffmpeg. Список процессов glanceable, реже = ок.
+c_top_cpu = Cached(lambda: _top_processes(5, "cpu"), 6)
+c_top_mem = Cached(lambda: _top_processes(5, "mem"), 6)
 
 
 def _ensure_desktop_icons():

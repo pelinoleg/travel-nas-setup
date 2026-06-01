@@ -3608,6 +3608,7 @@ def main():
     last_refresh = 0.0
     btns = []
     running = True
+    prev_progress = False   # для детекта старта бэкапа (None → активен)
 
     while running:
         now = time.time()
@@ -3638,6 +3639,21 @@ def main():
                         do_action(b.action)
                         last_refresh = 0  # принудительный rerender
                         break
+
+        # Старт бэкапа (вставили USB-карту / запустили nas-backup) → будим экран
+        # и показываем прогресс. Прогресс просто блокирует sleep, но спящий экран
+        # сам не включит — поэтому ловим переход None → активен.
+        prog_active = get_progress() is not None
+        if prog_active and not prev_progress:
+            if not display_on:
+                display_on = True
+                set_backlight(True)
+            last_activity = now
+            go(PAGE_PROGRESS)
+        elif not prog_active and prev_progress:
+            # Бэкап завершился → продлить активность, чтобы итог был виден до sleep.
+            last_activity = now
+        prev_progress = prog_active
 
         # Auto-sleep (не во время бэкапа). Таймаут берётся из файла на лету —
         # юзер меняет через /sleep в TG, дашборд подхватывает без рестарта.
@@ -3688,8 +3704,22 @@ def main():
 
         # Screenshot-on-demand для /screenshot из tg-listener. Дёшево: один
         # Path.exists() за тик. Когда tg-listener тапает SCREENSHOT_REQ —
-        # сохраняем текущий экран и удаляем флаг.
+        # будим экран (иначе во сне буфер чёрный) + рисуем свежий кадр, потом
+        # сохраняем. Заодно физически включаем дисплей (видно на месте).
         if SCREENSHOT_REQ.exists():
+            if not display_on:
+                display_on = True
+                set_backlight(True)
+            last_activity = now
+            try:
+                draw_fn = PAGES.get(state["page"], page_status)
+                btns = draw_fn() or []
+                draw_toast()
+                draw_touch_flash()
+                pygame.display.flip()
+                last_refresh = now
+            except Exception:
+                pass
             try:
                 pygame.image.save(screen, str(SCREENSHOT_OUT))
             except Exception:

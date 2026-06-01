@@ -20,7 +20,10 @@ stack_pre() {
     # генерим случайный, пишем обратно в conf. Безопасный дефолт, виден в дашборде
     # (Services), без копания в логах. Свой пароль (если вписал) не трогаем.
     if [[ -z "$FB_PASS" || "$FB_PASS" == "changeme" ]]; then
-        FB_PASS="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 16)"
+        # LC_ALL=C — иначе на UTF-8 locale tr давится бинарём (illegal byte seq).
+        FB_PASS="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 16)"
+        [[ ${#FB_PASS} -eq 16 ]] || FB_PASS="$(openssl rand -hex 8 2>/dev/null)"
+        [[ -n "$FB_PASS" ]] || FB_PASS="admin1234"
         if grep -q '^FB_PASS=' "$CONFIG_DIR/filebrowser.conf" 2>/dev/null; then
             sudo sed -i "s|^FB_PASS=.*|FB_PASS=\"$FB_PASS\"|" "$CONFIG_DIR/filebrowser.conf"
         else

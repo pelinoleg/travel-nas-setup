@@ -330,6 +330,9 @@ if [[ -n "$STORAGE_DEV" ]]; then
         if ! grep -q "$STORAGE_UUID" /etc/fstab; then
             echo "UUID=$STORAGE_UUID $STORAGE_MOUNT ext4 defaults,nofail,noatime 0 2" | sudo tee -a /etc/fstab > /dev/null
         fi
+        # fstab меняли (выше — legacy-чистка, тут — UUID). systemd кеширует fstab
+        # как mount-юниты → mount ворчит "fstab modified, daemon-reload". Перечитаем.
+        sudo systemctl daemon-reload 2>/dev/null || true
         if ! mountpoint -q "$STORAGE_MOUNT"; then
             sudo mount "$STORAGE_MOUNT"
         fi

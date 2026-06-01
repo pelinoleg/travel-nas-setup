@@ -260,6 +260,13 @@ if [[ -z "$STORAGE_DEV" ]]; then
                         else
                             PART="${SEL_DEV}1"
                         fi
+                        # devmon/udisks (ставит CasaOS) авто-монтирует свежую
+                        # партицию между partprobe и mkfs → mkfs падает "is
+                        # mounted; will not make a filesystem". Снимаем маунт
+                        # отовсюду прямо перед форматом.
+                        udevadm settle 2>/dev/null || true
+                        _storage_umount_elsewhere "$PART"
+                        sudo umount "$PART" 2>/dev/null || true
                         info "Форматирую $PART в ext4 (label='$CHOSEN_LABEL', reserved=0%)..."
                         sudo mkfs.ext4 -F -L "$CHOSEN_LABEL" -m 0 "$PART"
                     ); then

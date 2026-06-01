@@ -20,6 +20,11 @@ Significant changes to travel-nas-setup. Newest first.
   его из логов → `filebrowser.conf` (`FB_GENERATED_PASS`); дашборд (Services)
   показывает `admin / <пароль>`.
 
+### Прочее
+- **Дефолт экрана MHS35: 270** (было 90) — портрет 320×480 «вверх ногами» под
+  физический монтаж. Сменить — дашборд rotate/flip или `screen-rotate.sh`.
+- **setup: длительность установки** в финальном отчёте + Telegram («Время: Xм Yс»).
+
 ### Filebrowser
 - Пароль стал детерминированным: образ s6 генерил случайный в залоченной bbolt
   (`users add` извне → 403). Решение — **pre-seed БД** одноразовыми `docker run`

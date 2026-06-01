@@ -171,13 +171,17 @@ fi
 # Драйвер MHS35 — ставим только если ещё не стоит. Надёжный признак установки —
 # строка dtoverlay=mhs35 в config.txt (персистентна, переживает ребут; в отличие
 # от /tmp/LCD-show, который чистится при ребуте → раньше спрашивал повторно).
+# Дефолтная ориентация: 270 — портрет 320×480 «вверх ногами» относительно 90
+# (обе SwapAxes=1, развёрнуты на 180°). Под физический монтаж экрана. Сменить —
+# дашборд (rotate/flip) или screen-rotate.sh; значение живёт в config.txt.
+MHS35_ROT=270
 MHS_CONFIG=/boot/firmware/config.txt
 [[ -f "$MHS_CONFIG" ]] || MHS_CONFIG=/boot/config.txt
 if grep -qE '^[[:space:]]*dtoverlay=mhs35' "$MHS_CONFIG" 2>/dev/null; then
     info "Драйвер MHS35 уже установлен (dtoverlay=mhs35 в config.txt) — пропускаю"
 elif [[ ! -t 0 ]]; then
     # Неинтерактивный запуск (--all / pipe) — не висим на read, просто подсказываем.
-    info "Драйвер MHS35 не установлен. Запусти интерактивно: cd /tmp/LCD-show && sudo ./MHS35-show 90 (РЕБУТНЕТ Pi)"
+    info "Драйвер MHS35 не установлен. Запусти интерактивно: cd /tmp/LCD-show && sudo ./MHS35-show $MHS35_ROT (РЕБУТНЕТ Pi)"
 else
     warn "Драйвер MHS35 РЕБУТИТ Pi!"
     echo "Запустить установку драйвера MHS35 сейчас? (y/N)"
@@ -186,12 +190,12 @@ else
         cd /tmp
         if sudo git clone https://github.com/goodtft/LCD-show.git 2>/dev/null; then
             cd /tmp/LCD-show
-            sudo "./MHS35-show" "90"
+            sudo "./MHS35-show" "$MHS35_ROT"
             # сюда не дойдём — ребут
         else
             mark_fail "DISPLAY_DRIVER" "git clone failed"
         fi
     else
-        info "Драйвер MHS35 пропущен (запусти потом: cd /tmp/LCD-show && sudo ./MHS35-show 90)"
+        info "Драйвер MHS35 пропущен (запусти потом: cd /tmp/LCD-show && sudo ./MHS35-show $MHS35_ROT)"
     fi
 fi

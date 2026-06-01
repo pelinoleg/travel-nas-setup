@@ -1148,6 +1148,7 @@ def go(page):
     if page != state["page"]:
         state["prev_page"] = state["page"]
         state["page"] = page
+        state["svc_scroll"] = 0   # сброс скролла Services при входе
 
 
 def toast(text, color=FG):
@@ -2014,6 +2015,22 @@ def page_services():
     LINE_H_NOTE = 14
     GAP_BETWEEN_ENTRIES = 8
 
+    list_top = y
+    region_h = bottom_btn_y - list_top
+
+    # Полная высота списка → если не влезает, включаем скролл (кнопки ▲▼).
+    total_h = 0
+    for name, url, notes, inline in items:
+        total_h += LINE_H_NAME + (0 if inline else LINE_H_URL) + LINE_H_NOTE * len(notes) + GAP_BETWEEN_ENTRIES
+    max_scroll = max(0, total_h - region_h)
+    scroll = max(0, min(state.get("svc_scroll", 0), max_scroll))
+    state["svc_scroll"] = scroll
+    state["svc_max_scroll"] = max_scroll
+    state["svc_page_step"] = max(60, region_h - 40)
+
+    # Клип на область списка — частичные строки на краях аккуратно обрезаются.
+    screen.set_clip(pygame.Rect(0, list_top, SCREEN_W, region_h))
+    y = list_top - scroll
     for name, url, notes, inline in items:
         if inline:
             # NAME: URL на одной строке — имя синим, ": URL" белым следом
@@ -2021,9 +2038,8 @@ def page_services():
             screen.blit(name_surf, (10, y))
             u = url
             max_url_px = SCREEN_W - 10 - name_surf.get_width() - 16
-            # Урезать URL под доступную ширину
             while u and F_SMALL.size(u)[0] > max_url_px and len(u) > 4:
-                u = u[:-2] + "…" if not u.endswith("…") else u[:-2] + "…"
+                u = u[:-2] + "…"
             screen.blit(F_SMALL.render(u, True, FG),
                         (10 + name_surf.get_width() + 6, y + 3))
             y += LINE_H_NAME
@@ -2035,18 +2051,23 @@ def page_services():
             if len(u) > 38: u = u[:36] + "…"
             screen.blit(F_SMALL.render(u, True, FG), (18, y))
             y += LINE_H_URL
-        # Заметки (мелким серым) — общий путь для inline и двухрядного
         for note in notes:
             note_s = note if len(note) <= 42 else note[:40] + "…"
             screen.blit(F_TINY.render(note_s, True, MUTED), (18, y))
             y += LINE_H_NOTE
-            if y + LINE_H_NOTE >= bottom_btn_y:
-                break
         y += GAP_BETWEEN_ENTRIES
-        if y >= bottom_btn_y:
-            break
+    screen.set_clip(None)
 
-    # Bottom: Back | Refresh — Back всегда слева
+    # Bottom: Back всегда слева. Не влезает → Back | ▲ | ▼, иначе Back | Refresh.
+    if max_scroll > 0:
+        third = (SCREEN_W - 32) // 3
+        back = Btn("Back", "open_menu", pygame.Rect(8, SCREEN_H - 54, third, 46), MUTED)
+        up = Btn("▲", "svc_up",   pygame.Rect(8 + third + 8, SCREEN_H - 54, third, 46),
+                 INFO if scroll > 0 else BTN_BG)
+        dn = Btn("▼", "svc_down", pygame.Rect(8 + 2 * (third + 8), SCREEN_H - 54, third, 46),
+                 INFO if scroll < max_scroll else BTN_BG)
+        draw_button(back); draw_button(up); draw_button(dn)
+        return [back, up, dn]
     half_w = (SCREEN_W - 28) // 2
     back = Btn("Back", "open_menu",
                pygame.Rect(8, SCREEN_H - 54, half_w, 46), MUTED)
@@ -3377,6 +3398,13 @@ def do_action(action):
         prev = state["prev_page"]
         state["prev_page"] = state["page"]
         state["page"] = prev
+    elif action == "svc_up":
+        step = state.get("svc_page_step", 150)
+        state["svc_scroll"] = max(0, state.get("svc_scroll", 0) - step)
+    elif action == "svc_down":
+        step = state.get("svc_page_step", 150)
+        mx = state.get("svc_max_scroll", 0)
+        state["svc_scroll"] = min(mx, state.get("svc_scroll", 0) + step)
     elif action == "open_logs":
         state["log_paused"] = False
         go(PAGE_LOGS)

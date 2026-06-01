@@ -20,6 +20,16 @@ Significant changes to travel-nas-setup. Newest first.
   его из логов → `filebrowser.conf` (`FB_GENERATED_PASS`); дашборд (Services)
   показывает `admin / <пароль>`.
 
+### NAS-backup
+- **Фикс: auto-backup в дашборде всегда показывал "off"** — `nas-backup.conf`
+  создавался `root:root 600`, а `nas-schedule.sh status` бежит от юзера дашборда
+  (не root) → `Permission denied` → всегда "off". Модуль теперь chown'ит conf на
+  uid-1000. (На существующем устройстве: `sudo chown <user> nas-backup.conf`.)
+- **Понятные алерты вместо "Failed 5/5"** — `check_connectivity` классифицирует
+  причину: нет пинга / rsync-демон не отвечает / **auth failed (неверный пароль)**
+  — и шлёт точный Telegram-алерт. Листинг `::` не требует пароля, поэтому
+  авторизацию проверяем отдельно на первом модуле. Новый флаг `nas-backup.sh --test`.
+
 ### Прочее
 - **Дефолт экрана MHS35: 270** (было 90) — портрет 320×480 «вверх ногами» под
   физический монтаж. Сменить — дашборд rotate/flip или `screen-rotate.sh`.

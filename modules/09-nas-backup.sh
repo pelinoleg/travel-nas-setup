@@ -149,6 +149,11 @@ EXCLUDES=(
 EOF
         sudo chmod 600 "$CONFIG_DIR/nas-backup.conf"
     fi
+    # Владелец = юзер дашборда (uid 1000). Иначе conf остаётся root:root 600 и
+    # дашборд (бежит от юзера) не может прочитать AUTO_BACKUP → auto-backup всегда
+    # показывает "off". CONF_PERMS path-unit ещё не активен на этом шаге.
+    _NB_USER="$(getent passwd 1000 2>/dev/null | cut -d: -f1)"; _NB_USER="${_NB_USER:-$(whoami)}"
+    sudo chown "$_NB_USER:$_NB_USER" "$CONFIG_DIR/nas-backup.conf" 2>/dev/null || true
 
     # --- Авто-расписание (опционально) ---
     # Логика в nas-schedule.sh (его дёргают дашборд и path-unit). Источник правды —

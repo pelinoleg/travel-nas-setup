@@ -130,15 +130,29 @@ tg_notify() {
     fi
 }
 
-# Проверка сети и NAS
+# Проверка сети и NAS. Классифицирует причину в CONN_ERROR/CONN_LEVEL, чтобы
+# алерт был ПОНЯТНЫМ (нет сети / rsync выключен / неверный пароль), а не общий
+# "Failed 5/5". Листинг :: НЕ требует пароля — поэтому авторизацию проверяем
+# отдельно на первом модуле (иначе неверный пароль не ловится).
+CONN_ERROR=""
+CONN_LEVEL="warning"
 check_connectivity() {
+    CONN_ERROR=""; CONN_LEVEL="warning"
     if ! ping -c 1 -W 3 "$NAS_HOST" &>/dev/null; then
-        err "NAS unreachable: $NAS_HOST"
-        return 1
+        CONN_ERROR="NAS $NAS_HOST не пингуется — выключен, нет сети или другая подсеть."
+        CONN_LEVEL="warning"; err "$CONN_ERROR"; return 1
     fi
-    if ! sshpass -p "$NAS_PASS" rsync "$NAS_USER@$NAS_HOST::" &>/dev/null; then
-        err "Cannot connect to NAS rsync daemon (wrong password?)"
-        return 1
+    if ! sshpass -p "$NAS_PASS" rsync --contimeout=8 "$NAS_USER@$NAS_HOST::" &>/dev/null; then
+        CONN_ERROR="rsync-демон NAS не отвечает (служба rsync выключена на NAS / порт 873 закрыт)."
+        CONN_LEVEL="warning"; err "$CONN_ERROR"; return 1
+    fi
+    local first_mod="${MODULES[0]%%|*}" out
+    if [[ -n "$first_mod" ]]; then
+        out="$(sshpass -p "$NAS_PASS" rsync --contimeout=8 --list-only "$NAS_USER@$NAS_HOST::$first_mod/" 2>&1)"
+        if grep -qi "auth failed" <<<"$out"; then
+            CONN_ERROR="Авторизация NAS отклонена (auth failed). Проверь NAS_USER=\"$NAS_USER\" и пароль NAS_PASS в /etc/travel-nas/nas-backup.conf. (Synology: rsync-демон часто требует ОТДЕЛЬНЫЙ rsync-аккаунт/пароль, а не DSM-логин.)"
+            CONN_LEVEL="error"; err "$CONN_ERROR"; return 1
+        fi
     fi
     return 0
 }
@@ -228,7 +242,7 @@ run_module() {
 do_backup() {
     info "Checking connectivity..."
     if ! check_connectivity; then
-        tg_notify error "NAS-backup failed" "Cannot reach NAS at $NAS_HOST"
+        tg_notify "$CONN_LEVEL" "NAS-backup пропущен" "$CONN_ERROR"
         exit 1
     fi
 
@@ -299,7 +313,7 @@ Check: \`$DEST/_logs/\`"
 do_diff() {
     info "Calculating differences..."
     if ! check_connectivity; then
-        err "Cannot reach NAS"
+        err "$CONN_ERROR"
         exit 1
     fi
 
@@ -386,6 +400,8 @@ test_connectivity() {
         echo ""
         info "Available rsync modules on NAS:"
         sshpass -p "$NAS_PASS" rsync "$NAS_USER@$NAS_HOST::" 2>/dev/null || echo "  (cannot list)"
+    else
+        err "$CONN_ERROR"
     fi
 }
 
@@ -428,6 +444,10 @@ while [[ $# -gt 0 ]]; do
             ACTION="config"
             shift
             ;;
+        --test|-t)
+            ACTION="test"
+            shift
+            ;;
         --help|-h)
             cat << EOF
 Usage: $0 [OPTIONS]
@@ -435,6 +455,7 @@ Usage: $0 [OPTIONS]
   --run         Run backup immediately
   --dry-run     Simulate backup (no files copied)
   --diff        Show differences NAS vs Disk
+  --test        Проверить связь/авторизацию с NAS (без бэкапа)
   --config      Edit config file
   (no args)     Interactive menu
 
@@ -467,6 +488,9 @@ case "$ACTION" in
         ;;
     diff)
         do_diff
+        ;;
+    test)
+        test_connectivity
         ;;
     config)
         edit_config

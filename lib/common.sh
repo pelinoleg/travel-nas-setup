@@ -73,7 +73,7 @@ try() {
 # =============================================================================
 # Свежая PiOS на первой загрузке гоняет apt-daily.service + unattended-upgrades
 # в фоне, и наш `apt-get update` падает с "Could not get lock". Это убивало
-# UPDATE/UTILS/SAMBA/LOG2RAM/COMITUP/CASAOS пачкой в предыдущих ранах.
+# UPDATE/UTILS/SAMBA/LOG2RAM/COMITUP/DOCKER пачкой в предыдущих ранах.
 # Вызывать ПЕРЕД каждым apt-get.
 # =============================================================================
 wait_for_apt() {

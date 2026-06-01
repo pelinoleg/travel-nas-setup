@@ -1,0 +1,8 @@
+# Docker-стеки (compose-приложения). Каждая строка = имя папки в stacks/.
+# Wizard авто-предлагает каждый; 17-stacks деплоит выбранные в /opt/stacks/.
+# Добавить приложение: создай stacks/<name>/{compose.yaml, meta.conf, setup.sh}
+# и допиши имя сюда. Порядок = порядок установки.
+photoview
+ytarchiver
+syncthing
+filebrowser

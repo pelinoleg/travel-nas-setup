@@ -16,9 +16,26 @@
 - Файл строго `compose.yaml` (Dockge сканит именно его), НЕ `docker-compose.yml`.
 - В каждом compose обязателен `name: <project>` — стабильное имя compose-проекта,
   чтобы `docker-mgr.sh` и Dockge находили стек независимо от каталога.
-- **Кто поднимает**: модуль делает первый `docker compose up -d` (стек сразу живой);
-  Dockge показывает его в UI (тот же проект — конфликта нет). Дальше управляешь
+- **Кто поднимает**: `17-stacks.sh` делает первый `docker compose up -d` (стек сразу
+  живой); Dockge показывает его в UI (тот же проект — конфликта нет). Дальше управляешь
   через Dockge ИЛИ `cd /opt/stacks/<name> && docker compose up -d`.
+
+## Как добавить приложение
+Стеки лежат в репо в `stacks/<name>/` и авто-обнаруживаются — **новый модуль не нужен**:
+```
+stacks/<name>/
+  compose.yaml     # сам compose, обязателен `name: <name>` (= имя каталога)
+  meta.conf        # LABEL="Имя — описание"  PORT=NNNN  (для wizard + dashboard)
+  setup.sh         # ОПЦ. хуки stack_pre()/stack_post() — папки/права/.env/units
+```
+1. Создай каталог + три файла (setup.sh опционален).
+2. Допиши имя каталога строкой в `stacks/index.txt`.
+3. `git push` → на устройстве `travel-nas-setup` → wizard покажет `STACK_<NAME>` галкой.
+
+`17-stacks.sh` для каждого выбранного `DO_STACK_<NAME>`: `stack_pre` → копирует
+`compose.yaml` в `/opt/stacks/<name>/` → `docker compose up -d` → `stack_post`.
+`.env` рядом с compose подхватывается автоматически (используется для `${YT_CPU_LIMIT}`,
+`${TZ}` и т.п.) — пиши его в `stack_pre`.
 
 ## Порты
 | Сервис | Порт | |
@@ -32,7 +49,7 @@
 
 ## Стеки
 - **photoview** — `/opt/stacks/photoview`, БД на `/mnt/storage/_appdata/photoview` (mariadb uid 999), диск как `/storage:ro`.
-- **ytarchiver** — `/opt/stacks/ytarchiver`, данные `/mnt/storage/media/YT-Archiver`. CPU-лимит через `YT_CPU_LIMIT` в `yt-archiver.conf` (см. модуль 18).
+- **ytarchiver** — `/opt/stacks/ytarchiver`, данные `/mnt/storage/media/YT-Archiver`. CPU/RAM-лимит через `${YT_CPU_LIMIT}`/`${MEM_LIMIT}` в `.env` (пишется `stack_pre`, адаптивно по модели Pi).
 - **syncthing** — PUID/PGID=1000, данные `/mnt/storage/sync`, конфиг `/mnt/storage/_appdata/syncthing`.
 - **filebrowser** — PUID/PGID=1000, монтирует `/mnt/storage` (`/srv/storage`) и `/etc/travel-nas` (`/srv/config`).
 

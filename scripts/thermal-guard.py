@@ -49,7 +49,7 @@ DEFAULTS = {
     "COOLDOWN_TEMP":         "70",
     "COOLDOWN_MIN":          "5",
     # Database-контейнеры по умолчанию защищены — stop/pause может потерять данные.
-    # CasaOS отвечает за управление другими контейнерами — её не трогаем.
+    # Dockge управляет остальными стеками — его контейнер не трогаем.
     "EXCLUDE_REGEX":         r"-db(-\d+)?$|^dockge",
     "EXCLUDE_DURING_BACKUP": "true",
     "CPUS_THROTTLE":         "0.5",

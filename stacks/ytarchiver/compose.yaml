@@ -1,0 +1,81 @@
+# YT-Archiver (yt-dlp + FastAPI + React). ${YT_CPU_LIMIT}/${MEM_LIMIT} берутся
+# из .env рядом (его пишет setup.sh из yt-archiver.conf + модели Pi). docker
+# compose подставляет ${VAR} из .env нативно. Backend без published-порта
+# (frontend ходит к нему по сети ytarchiver_net), наружу только frontend :8081.
+name: ytarchiver
+services:
+  backend:
+    image: ghcr.io/pelinoleg/ytarchiver-backend:latest
+    container_name: ytarchiver-backend
+    hostname: ytarchiver-backend
+    restart: unless-stopped
+    cpu_shares: 90
+    deploy:
+      resources:
+        limits:
+          cpus: "${YT_CPU_LIMIT}"
+          memory: "${MEM_LIMIT}"
+    environment:
+      BETWEEN_DOWNLOADS_MAX_SECONDS: "15"
+      BETWEEN_DOWNLOADS_MIN_SECONDS: "5"
+      CORS_ORIGINS: "[*]"
+      DATA_DIR: /data
+      DB_PATH: /data/ytarchiver.db
+      DEFAULT_PLAYBACK_RATE: "1.0"
+      DEFAULT_QUALITY: "1080"
+      DEFAULT_RETENTION_DAYS: "0"
+      DELETE_AFTER_WATCHED_PERCENT: "0"
+      DOWNLOAD_DIR: /downloads
+      INITIAL_BACKFILL_HARD_CAP: "500"
+      LOG_LEVEL: INFO
+      MAX_VIDEOS_PER_CHANNEL_SCAN: "50"
+      MINI_PLAYER_ENABLED: "true"
+      MUSIC_PLAYBACK_RATE: "1.0"
+      MUSIC_QUEUE_PANEL_SIZE: "100"
+      PREVIEW_CRF: "27"
+      PREVIEW_SEGMENTS: "12"
+      PREVIEW_WIDTH: "480"
+      SPONSORBLOCK_API: https://sponsor.ajay.app
+      SPONSORBLOCK_REFRESH_DAYS: "7"
+      SYNC_INTERVAL_MINUTES: "240"
+      SYNC_JITTER_MINUTES: "60"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - ytarchiver_net
+    volumes:
+      - type: bind
+        source: /mnt/storage/media/YT-Archiver/data
+        target: /data
+      - type: bind
+        source: /mnt/storage/media/YT-Archiver/video
+        target: /downloads
+  frontend:
+    image: ghcr.io/pelinoleg/ytarchiver-frontend:latest
+    container_name: ytarchiver-frontend
+    hostname: ytarchiver-frontend
+    restart: unless-stopped
+    cpu_shares: 90
+    deploy:
+      resources:
+        limits:
+          memory: "${MEM_LIMIT}"
+    depends_on:
+      backend:
+        condition: service_started
+        required: true
+    networks:
+      - ytarchiver_net
+    ports:
+      - target: 80
+        published: "8081"
+        protocol: tcp
+
+networks:
+  ytarchiver_net:
+    name: ytarchiver_ytarchiver_net
+    driver: bridge

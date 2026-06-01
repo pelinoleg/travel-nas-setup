@@ -25,6 +25,7 @@ Travel-NAS на Raspberry Pi 5 (или Pi 4) + Samsung T7 Shield 4TB SSD. Дел
 setup.sh                    Orchestrator. Whiptail-меню, парсит args, source-ит модули по DO_* флагам.
 lib/common.sh               Shared helpers (log/warn/err/info, mark_ok/mark_fail, fetch_*, write_systemd_unit).
 modules/NN-name.sh          Каждый компонент — отдельный модуль. Активируется через DO_NAME=1 (whiptail или --all).
+stacks/<name>/              Docker-стек: compose.yaml + meta.conf + (опц) setup.sh. Авто из index.txt → 17-stacks.sh. Добавить app = папка + строка, НЕ новый модуль.
 scripts/*.{sh,py}           Раннтайм-код, деплоится в /usr/local/bin/. Список в travel-nas-update.sh:SCRIPTS.
 conf-examples/*.example     Шаблоны конфигов. Деплоятся в /etc/travel-nas/ при первом запуске модуля.
 desktop/                    .desktop ярлыки для LXDE.

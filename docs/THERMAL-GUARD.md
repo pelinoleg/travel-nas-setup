@@ -28,7 +28,7 @@ PAUSE_TEMP=82
 STOP_TEMP=85
 COOLDOWN_TEMP=70
 COOLDOWN_MIN=5
-EXCLUDE_REGEX=-db(-\d+)?$|^casaos  # *-db и casaos не трогать
+EXCLUDE_REGEX=-db(-\d+)?$|^dockge  # *-db и dockge не трогать
 EXCLUDE_DURING_BACKUP=true # nas-backup идёт — не вмешиваемся
 CPUS_THROTTLE=0.5          # сколько ядер оставлять при throttle
 ```
@@ -92,7 +92,7 @@ t=N+4 temp=66°C → cool_counter=5 ≥ COOLDOWN_MIN
 ## Защита от глупостей
 
 - **Backup interlock** — пока `nas-backup-runtime` бежит, **никаких** действий. Бэкап генерит температуру, но прервать = битый архив.
-- **Exclude regex** — по умолчанию защищены `*-db` (БД) и `casaos`. Можно расширить.
+- **Exclude regex** — по умолчанию защищены `*-db` (БД) и `dockge`. Можно расширить.
 - **MODE=warn по умолчанию** — первое впечатление без риска.
 - **Restore идемпотентен** — если ты вручную стартанул остановленный контейнер, `restore_all` не сломается; просто `docker start` второй раз = no-op.
 - **`/thermal restore`** в TG — экстренная кнопка вернуть всё прямо сейчас.

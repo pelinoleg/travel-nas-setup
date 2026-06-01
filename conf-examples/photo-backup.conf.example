@@ -13,6 +13,3 @@ STORAGE_UUID=""
 
 # Минимальный размер файла для копирования (байт)
 MIN_SIZE=1
-
-# Сколько ждать пока desktop (udisks/pcmanfm) смонтирует карту (секунды)
-WAIT_FOR_DEVMON=3

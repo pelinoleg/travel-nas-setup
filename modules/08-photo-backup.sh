@@ -17,7 +17,6 @@ DEST="$STORAGE_MOUNT/usb-imports"
 AUTO_UMOUNT=true
 STORAGE_UUID="${STORAGE_UUID:-}"
 MIN_SIZE=1
-WAIT_FOR_DEVMON=3
 EOF
         sudo chmod 644 "$CONFIG_DIR/photo-backup.conf"
     fi

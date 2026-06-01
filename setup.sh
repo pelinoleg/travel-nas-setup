@@ -74,10 +74,7 @@ MODULES=(
     15-comitup
     16-docker
     16b-dockge
-    17-photoview
-    18-ytarchiver
-    18b-syncthing
-    18c-filebrowser
+    17-stacks
     19-display
     20-desktop
     21-tailscale
@@ -112,6 +109,20 @@ else
             exit 1
         fi
     done
+    # stacks/ — docker-compose стеки (манифест index.txt + по каждому 3 файла).
+    # Их подхватывает 17-stacks + wizard авто-предлагает. Добавить приложение =
+    # папка в stacks/ + строка в index.txt (никакого нового модуля).
+    mkdir -p "$TMP_BOOT/stacks"
+    if curl -fsSL "$REPO_RAW/stacks/index.txt" -o "$TMP_BOOT/stacks/index.txt" 2>/dev/null; then
+        while read -r sname; do
+            sname="${sname%%#*}"; sname="$(echo "$sname" | xargs)"
+            [[ -n "$sname" ]] || continue
+            mkdir -p "$TMP_BOOT/stacks/$sname"
+            for sf in compose.yaml meta.conf setup.sh; do
+                curl -fsSL "$REPO_RAW/stacks/$sname/$sf" -o "$TMP_BOOT/stacks/$sname/$sf" 2>/dev/null || true
+            done
+        done < "$TMP_BOOT/stacks/index.txt"
+    fi
     REPO_ROOT="$TMP_BOOT"
 fi
 
@@ -126,9 +137,29 @@ export SETUP_REPO_ROOT="$REPO_ROOT"
 # Меню выбора компонентов
 # =============================================================================
 
+# Авто-обнаружение docker-стеков из stacks/index.txt (compose-приложения).
+# Добавить приложение = папка stacks/<name>/ + строка в index.txt → wizard сам
+# предложит, новый модуль НЕ нужен. Тег компонента: STACK_<NAME>.
+STACK_TAGS=""        # "STACK_PHOTOVIEW STACK_YTARCHIVER ..." для --all
+STACK_MENU=()        # whiptail-аргументы: tag desc ON
+STACK_HELP=""        # строки для --help
+if [[ -f "$REPO_ROOT/stacks/index.txt" ]]; then
+    while read -r sname; do
+        sname="${sname%%#*}"; sname="$(echo "$sname" | xargs)"
+        [[ -n "$sname" ]] || continue
+        LABEL="$sname"; PORT=""
+        # shellcheck source=/dev/null
+        source "$REPO_ROOT/stacks/$sname/meta.conf" 2>/dev/null || true
+        stag="STACK_$(echo "$sname" | tr '[:lower:]-' '[:upper:]_')"
+        STACK_TAGS="$STACK_TAGS $stag"
+        STACK_MENU+=( "$stag" "${LABEL}${PORT:+ (:$PORT)}" "ON" )
+        STACK_HELP+="  $(printf '%-20s' "$stag")${LABEL}${PORT:+ (:$PORT)}"$'\n'
+    done < "$REPO_ROOT/stacks/index.txt"
+fi
+
 ALL_COMPONENTS="UPDATE UTILS STORAGE_MOUNT TG_NOTIFY SAMBA PI_BACKUP \
 PHOTO_BACKUP NAS_BACKUP WATCHDOG SYS_MONITOR POWER_MODE TG_LISTENER DAILY_SUM \
-LOG2RAM ZRAM COMITUP DOCKER DOCKGE PHOTOVIEW YTARCHIVER SYNCTHING FILEBROWSER DISPLAY DESKTOP TAILSCALE VERIFY THERMAL_GUARD PI_TWEAKS CONF_PERMS"
+LOG2RAM ZRAM COMITUP DOCKER DOCKGE${STACK_TAGS} DISPLAY DESKTOP TAILSCALE VERIFY THERMAL_GUARD PI_TWEAKS CONF_PERMS"
 
 if [[ "${1:-}" == "--all" ]]; then
     SELECTED="$ALL_COMPONENTS"
@@ -143,7 +174,7 @@ Usage:
 Components:
   UPDATE         apt update + upgrade
   UTILS          htop, ncdu, tmux, git, smartmontools, exiftool, etc + travel-nas-setup shortcut
-  STORAGE_MOUNT       Mount внешнего диска в /mnt/storage (wizard: ext4 → как есть, иначе формат)
+  STORAGE_MOUNT  Mount внешнего диска в /mnt/storage (wizard: ext4 → как есть, иначе формат)
   TG_NOTIFY      Telegram уведомления (helper)
   SAMBA          SMB share /mnt/storage
   PI_BACKUP      Еженедельный бэкап конфигов (воскр 03:00)
@@ -159,11 +190,8 @@ Components:
   COMITUP        Field WiFi AP-режим (captive portal на :80)
   DOCKER         Docker engine (apt-репо) — основа для стеков
   DOCKGE         Dockge — web-менеджер docker-compose стеков (:5001)
-  PHOTOVIEW      Photo gallery (Docker, после DOCKER, :8000)
-  YTARCHIVER     YouTube archiver (Docker, после DOCKER, :8081)
-  SYNCTHING      P2P-синхронизация папок (:8384, /mnt/storage/sync)
-  FILEBROWSER    Web файл-менеджер + редактор конфигов (:8082)
-  DISPLAY        MHS35 + Python dashboard (X11 kiosk)
+  --- Docker-стеки (авто из stacks/, после DOCKER) ---
+${STACK_HELP}  DISPLAY        MHS35 + Python dashboard (X11 kiosk)
   DESKTOP        Ярлыки на десктоп (Dashboard, Setup, Storage Files, ...)
   TAILSCALE      Zero-config VPN — доступ к Pi из любой сети мира
   VERIFY         Ежемесячный bit-rot/IO scrub storage (sha256 manifest)
@@ -173,37 +201,39 @@ Components:
 EOF
     exit 0
 else
+    MENU=(
+        "UPDATE"       "apt update + upgrade"                              ON
+        "UTILS"        "Утилиты + travel-nas-setup команда + LED helper"  ON
+        "STORAGE_MOUNT" "Внешний диск → /mnt/storage (ext4 — как есть, иначе формат)" ON
+        "TG_NOTIFY"    "Telegram уведомления"                             ON
+        "SAMBA"        "Samba шара /mnt/storage"                          ON
+        "PI_BACKUP"    "Еженедельный бэкап конфигов"                      ON
+        "PHOTO_BACKUP" "Автобэкап SD/USB карт"                            ON
+        "NAS_BACKUP"   "Бэкап с домашнего NAS"                            ON
+        "WATCHDOG"     "Disk watchdog (5 мин)"                            ON
+        "SYS_MONITOR"  "CPU/temp/throttle/SD-wear (5 мин)"                ON
+        "POWER_MODE"   "Авто power-профиль"                               ON
+        "TG_LISTENER"  "Telegram бот: /status /backup /logs /reboot"      ON
+        "DAILY_SUM"    "Daily summary (21:00) + JSON refresh"             ON
+        "LOG2RAM"      "Логи в RAM"                                       ON
+        "ZRAM"         "Сжатый swap"                                      ON
+        "COMITUP"      "Полевой WiFi AP (captive portal :80)"             ON
+        "DOCKER"       "Docker engine (основа для стеков)"                ON
+        "DOCKGE"       "Dockge — web-UI для compose-стеков (:5001)"       ON
+    )
+    MENU+=( "${STACK_MENU[@]}" )      # авто-стеки после DOCKGE
+    MENU+=(
+        "DISPLAY"      "MHS35 + dashboard"                                ON
+        "DESKTOP"      "Ярлыки на десктоп"                                ON
+        "TAILSCALE"    "Tailscale VPN (доступ к Pi из любой сети)"        ON
+        "VERIFY"       "Ежемесячный bit-rot/IO scrub storage"            ON
+        "THERMAL_GUARD" "Защита от перегрева (MODE=warn по умолчанию)"    ON
+        "PI_TWEAKS"    "HW watchdog + EEPROM + WiFi-no-powersave + sysctl" ON
+        "CONF_PERMS"   "Авто-fix прав /etc/travel-nas/ при правке через веб" ON
+    )
     SELECTED=$(whiptail --title "Travel-NAS Setup" \
         --checklist "Что устанавливать? (Space — выбор, Enter — OK)" 30 80 24 \
-        "UPDATE"       "apt update + upgrade"                              ON \
-        "UTILS"        "Утилиты + travel-nas-setup команда + LED helper"  ON \
-        "STORAGE_MOUNT"     "Внешний диск → /mnt/storage (ext4 — как есть, иначе формат)" ON \
-        "TG_NOTIFY"    "Telegram уведомления"                             ON \
-        "SAMBA"        "Samba шара /mnt/storage"                               ON \
-        "PI_BACKUP"    "Еженедельный бэкап конфигов"                      ON \
-        "PHOTO_BACKUP" "Автобэкап SD/USB карт"                            ON \
-        "NAS_BACKUP"   "Бэкап с домашнего NAS"                            ON \
-        "WATCHDOG"     "Disk watchdog (5 мин)"                            ON \
-        "SYS_MONITOR"  "CPU/temp/throttle/SD-wear (5 мин)"                ON \
-        "POWER_MODE"   "Авто power-профиль"                               ON \
-        "TG_LISTENER"  "Telegram бот: /status /backup /logs /reboot"      ON \
-        "DAILY_SUM"    "Daily summary (21:00) + JSON refresh"             ON \
-        "LOG2RAM"      "Логи в RAM"                                       ON \
-        "ZRAM"         "Сжатый swap"                                       ON \
-        "COMITUP"      "Полевой WiFi AP (captive portal :80)"             ON \
-        "DOCKER"       "Docker engine (основа для стеков)"                ON \
-        "DOCKGE"       "Dockge — web-UI для compose-стеков (:5001)"       ON \
-        "PHOTOVIEW"    "Photoview (нужен DOCKER, :8000)"                  ON \
-        "YTARCHIVER"   "YT-Archiver (нужен DOCKER, :8081)"                ON \
-        "SYNCTHING"    "Syncthing (синхронизация, :8384)"                 ON \
-        "FILEBROWSER"  "Filebrowser (файлы + конфиги, :8082)"             ON \
-        "DISPLAY"      "MHS35 + dashboard"                                ON \
-        "DESKTOP"      "Ярлыки на десктоп"                                ON \
-        "TAILSCALE"    "Tailscale VPN (доступ к Pi из любой сети)"        ON \
-        "VERIFY"       "Ежемесячный bit-rot/IO scrub storage"                  ON \
-        "THERMAL_GUARD" "Защита от перегрева (MODE=warn по умолчанию)"    ON \
-        "PI_TWEAKS"    "HW watchdog + EEPROM + WiFi-no-powersave + sysctl"  ON \
-        "CONF_PERMS"   "Авто-fix прав /etc/travel-nas/ при правке через веб" ON \
+        "${MENU[@]}" \
         3>&1 1>&2 2>&3) || exit 0
 fi
 

@@ -41,7 +41,6 @@ DEST="${DEST:-/mnt/storage/usb-imports}"
 AUTO_UMOUNT="${AUTO_UMOUNT:-true}"
 STORAGE_UUID="${STORAGE_UUID:-}"
 MIN_SIZE="${MIN_SIZE:-1}"
-WAIT_FOR_DEVMON="${WAIT_FOR_DEVMON:-3}"
 
 # Владелец импортов = человек из Pi Imager (uid 1000). Скрипт бежит от root,
 # поэтому whoami=root не подходит — берём uid 1000. Не хардкодим имя.

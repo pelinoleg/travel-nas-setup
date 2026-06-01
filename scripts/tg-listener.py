@@ -409,7 +409,7 @@ def cmd_update(token, chat_id, args):
 Это апдейт ВСЕГО — может занять *5-15 мин*:
 • скрипты из GitHub
 • `apt upgrade` (включая kernel)
-• `docker compose pull` + `up -d` по всем CasaOS-приложениям
+• `docker compose pull` + `up -d` по всем стекам в `/opt/stacks`
 
 Бот сам перезапустится и пришлёт итог + флаг `REBOOT_NEEDED` если нужен ребут.
 

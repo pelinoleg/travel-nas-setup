@@ -1,0 +1,20 @@
+# Syncthing — P2P-синхронизация. PUID/PGID=1000 (файлы принадлежат человеку).
+# ${TZ} из .env (setup.sh пишет из /etc/timezone).
+name: syncthing
+services:
+  syncthing:
+    image: lscr.io/linuxserver/syncthing:latest
+    container_name: syncthing
+    restart: unless-stopped
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=${TZ}
+    ports:
+      - "8384:8384"        # Web UI
+      - "22000:22000/tcp"  # sync protocol
+      - "22000:22000/udp"
+      - "21027:21027/udp"  # local discovery
+    volumes:
+      - /mnt/storage/_appdata/syncthing:/config
+      - /mnt/storage/sync:/data

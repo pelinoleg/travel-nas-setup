@@ -12,12 +12,17 @@ request»), ставил devmon (асинхронный авто-маунт ло
 - **Удалён CasaOS.** Docker ставится напрямую (apt-репо) — модуль `16-casaos.sh` →
   `16-docker.sh`. cgroup-memory фикс и NM no-docker.conf сохранены.
 - **Dockge** (новый `16b-dockge.sh`, :5001) — web-менеджер compose-стеков в `/opt/stacks`.
-- **Стеки переехали** в `/opt/stacks/<name>/compose.yaml` (с `name:`): photoview
-  (`/opt/photoview`→), ytarchiver (`/var/lib/casaos/apps`→, убран x-casaos). Существующие
+- **Стеки — папка `stacks/` в репо** (вместо per-app модулей). Каждый стек —
+  `stacks/<name>/{compose.yaml, meta.conf, setup.sh}`, перечислен в `stacks/index.txt`.
+  Generic-модуль `17-stacks.sh` авто-деплоит выбранные в `/opt/stacks/<name>/`, wizard
+  сам предлагает их (тег `STACK_<NAME>` из `meta.conf`). **Добавить приложение = папка
+  в `stacks/` + строка в index.txt, новый модуль НЕ нужен.** Удалены per-app модули
+  `17-photoview` / `18-ytarchiver` / `18b-syncthing` / `18c-filebrowser`.
+- **Стеки** (все с `name:`): photoview (`/opt/photoview`→, :8000), ytarchiver
+  (`/var/lib/casaos/apps`→, убран x-casaos, :8081), Syncthing (:8384,
+  `/mnt/storage/sync`), Filebrowser (:8082, файл-менеджер + редактор `/etc/travel-nas`).
+  Креды Filebrowser в `/etc/travel-nas/filebrowser.conf` (НЕ в git). Существующие
   контейнеры адаптируются по имени проекта.
-- **Новые стеки**: Syncthing (`18b`, :8384, `/mnt/storage/sync`) и Filebrowser
-  (`18c`, :8082, файл-менеджер + редактор `/etc/travel-nas`). Креды Filebrowser в
-  `/etc/travel-nas/filebrowser.conf` (НЕ в git).
 - **comitup web_port 8090 → 80** — captive-portal детект бьёт в :80 (порт теперь свободен).
 - devmon-ripples: формат диска глушит `udisks2` (а не devmon); pi-config-backup/
   restore — `/opt/stacks` вместо `/var/lib/casaos`; thermal-guard EXCLUDE `^casaos`→`^dockge`.

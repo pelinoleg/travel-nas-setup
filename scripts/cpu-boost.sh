@@ -25,13 +25,16 @@ need_root() { [[ ${EUID:-$(id -u)} -eq 0 ]] || exec sudo "$0" "$@"; }
 
 cmd_on() {
     need_root "$@"
+    # --cpus=0 на некоторых docker НЕ снимает лимит (0 = "не задано"). Ставим
+    # все ядра машины — практически без лимита, но надёжно применяется.
+    local full; full=$(nproc 2>/dev/null); [[ "$full" =~ ^[0-9]+$ ]] || full=4
     local saved="" name cpus
     while read -r name; do
         [[ -n "$name" ]] || continue
         cpus=$(docker inspect "$name" --format '{{.HostConfig.NanoCpus}}' 2>/dev/null)
         [[ "$cpus" =~ ^[0-9]+$ ]] && (( cpus > 0 )) || continue   # только лимитированные
         saved+="$name:$cpus "
-        docker update --cpus=0 "$name" >/dev/null 2>&1
+        docker update --cpus="$full" "$name" >/dev/null 2>&1
     done < <(docker ps --format '{{.Names}}')
 
     mkdir -p "$(dirname "$STATE")"

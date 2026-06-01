@@ -1,18 +1,17 @@
-# Filebrowser — web файл-менеджер + редактор конфигов. PUID/PGID=1000 чтобы
-# читать/писать 600-секреты в /etc/travel-nas (owner uid 1000). Креды — в
-# /etc/travel-nas/filebrowser.conf, выставляются в setup.sh (stack_post).
+# Filebrowser Quantum (форк gtsteffaniak) — приятный UI, индексный поиск,
+# мультиисточник. В отличие от оригинала пароль детерминирован: config.yaml
+# (auth.adminPassword), генерится setup.sh из filebrowser.conf. Бежит user 1000
+# чтобы читать 600-секреты в /etc/travel-nas. config.yaml + БД — в data-каталоге.
 name: filebrowser
 services:
   filebrowser:
-    image: filebrowser/filebrowser:s6
+    image: gtstef/filebrowser:latest
     container_name: filebrowser
     restart: unless-stopped
-    environment:
-      - PUID=1000
-      - PGID=1000
+    user: "1000:1000"
     ports:
-      - "8082:80"
+      - "8082:8080"
     volumes:
-      - /mnt/storage:/srv/storage          # файлы диска
+      - /mnt/storage/_appdata/filebrowser-quantum:/home/filebrowser/data   # config.yaml + sqlite
+      - /mnt/storage:/srv/storage          # файлы диска (источник по умолчанию)
       - /etc/travel-nas:/srv/config        # конфиги (правка через веб)
-      - /mnt/storage/_appdata/filebrowser:/database

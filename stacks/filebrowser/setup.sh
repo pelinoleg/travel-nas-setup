@@ -1,33 +1,45 @@
-# Filebrowser (LSIO/s6): пароль admin'а генерится СЛУЧАЙНО в БД при первой
-# инициализации. БД (bbolt) залочена работающим сервером — извне (docker exec)
-# поменять нельзя. Поэтому не навязываем свой пароль, а ловим сгенерированный
-# из логов → пишем в conf → дашборд показывает (page_services). Сменить можно
-# в самой веб-морде (Settings → User Management).
+# Filebrowser Quantum pre: data-каталог + config.yaml с детерминированными
+# кредами (auth.adminPassword) и источниками (/srv/storage + /srv/config).
+# Пароль сидится из filebrowser.conf при ПЕРВОМ старте (пустая БД). Меняешь
+# пароль — в самой веб-морде, либо снеси БД в _appdata/filebrowser-quantum и
+# перезапусти setup. config.yaml пишется python'ом (безопасное YAML-квотирование).
 stack_pre() {
-    sudo install -d -o 1000 -g 1000 /mnt/storage/_appdata/filebrowser
-}
+    local data="/mnt/storage/_appdata/filebrowser-quantum"
+    sudo install -d -o 1000 -g 1000 "$data"
 
-stack_post() {
-    # Строка "User 'admin' initialized with randomly generated password: XXXX"
-    # появляется ТОЛЬКО при первой инициализации (пустая БД). При adopt'е БД уже
-    # есть → строки нет → держим ранее сохранённый conf.
-    local pass="" i
-    for i in $(seq 1 10); do
-        pass="$(sudo docker logs filebrowser 2>&1 \
-                | grep -oE 'randomly generated password: [A-Za-z0-9_./+-]+' \
-                | tail -1 | awk '{print $NF}')"
-        [[ -n "$pass" ]] && break
-        sleep 1
-    done
-    if [[ -n "$pass" ]]; then
-        sudo mkdir -p "$CONFIG_DIR"
-        printf 'FB_USER="admin"\nFB_GENERATED_PASS="%s"\n' "$pass" \
-            | sudo tee "$CONFIG_DIR/filebrowser.conf" >/dev/null
-        local U; U="$(getent passwd 1000 2>/dev/null | cut -d: -f1)"; U="${U:-root}"
-        sudo chown "$U:$U" "$CONFIG_DIR/filebrowser.conf"
-        sudo chmod 0600 "$CONFIG_DIR/filebrowser.conf"
-        info "Filebrowser admin / $pass  (сохранён в filebrowser.conf, виден в дашборде)"
-    else
-        warn "Filebrowser: пароль не найден в логах (БД уже инициализирована?) — 'docker logs filebrowser'"
-    fi
+    sudo mkdir -p "$CONFIG_DIR"
+    [[ -f "$CONFIG_DIR/filebrowser.conf" ]] || \
+        fetch_conf_example "filebrowser.conf.example" "$CONFIG_DIR/filebrowser.conf"
+    local FB_USER="admin" FB_PASS="changeme"
+    # shellcheck source=/dev/null
+    source "$CONFIG_DIR/filebrowser.conf" 2>/dev/null || true
+    [[ -n "$FB_USER" ]] || FB_USER="admin"
+    [[ -n "$FB_PASS" ]] || FB_PASS="changeme"
+    local U; U="$(getent passwd 1000 2>/dev/null | cut -d: -f1)"; U="${U:-root}"
+    sudo chown "$U:$U" "$CONFIG_DIR/filebrowser.conf"; sudo chmod 0600 "$CONFIG_DIR/filebrowser.conf"
+    [[ "$FB_PASS" == "changeme" ]] && warn "Filebrowser: пароль 'changeme' — поставь свой в $CONFIG_DIR/filebrowser.conf и перезапусти setup"
+
+    local tmp; tmp="$(mktemp)"
+    python3 - "$tmp" "$FB_USER" "$FB_PASS" <<'PY'
+import sys
+path, user, pw = sys.argv[1], sys.argv[2], sys.argv[3]
+def q(s): return "'" + s.replace("'", "''") + "'"   # безопасное YAML single-quote
+open(path, "w").write(f"""server:
+  port: 8080
+  sources:
+    - path: "/srv/storage"
+      config:
+        defaultEnabled: true
+    - path: "/srv/config"
+auth:
+  adminUsername: {q(user)}
+  adminPassword: {q(pw)}
+  methods:
+    password:
+      enabled: true
+""")
+PY
+    sudo install -o 1000 -g 1000 -m 600 "$tmp" "$data/config.yaml"
+    rm -f "$tmp"
+    info "Filebrowser (Quantum): логин $FB_USER (пароль из filebrowser.conf)"
 }

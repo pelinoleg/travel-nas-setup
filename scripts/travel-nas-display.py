@@ -735,8 +735,8 @@ def _parse_services_conf(text):
 
 
 def _filebrowser_cred():
-    """'Логин: admin / <pass>' из filebrowser.conf (пароль Filebrowser генерит
-    сам при первой инициализации, setup.sh ловит из логов). None если нет."""
+    """'Логин: admin / <pass>' из filebrowser.conf (FB_PASS — детерминированный
+    пароль Quantum; FB_GENERATED_PASS — фолбэк для старого filebrowser). None если нет."""
     try:
         if not FILEBROWSER_CONF.exists():
             return None
@@ -745,7 +745,9 @@ def _filebrowser_cred():
             line = line.strip()
             if line.startswith("FB_USER="):
                 user = line.split("=", 1)[1].strip().strip('"').strip("'") or user
-            elif line.startswith("FB_GENERATED_PASS="):
+            elif line.startswith("FB_PASS="):
+                pw = line.split("=", 1)[1].strip().strip('"').strip("'")
+            elif line.startswith("FB_GENERATED_PASS=") and not pw:
                 pw = line.split("=", 1)[1].strip().strip('"').strip("'")
         return f"Логин: {user} / {pw}" if pw else None
     except Exception:

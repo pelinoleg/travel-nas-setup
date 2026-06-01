@@ -60,7 +60,7 @@ sudo curl -fsSL "https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/ma
 | 🖼 **PHOTOVIEW** | Photo-галерея (Docker, после DOCKER, путь `/storage/*` в UI, `:8000`) |
 | 📺 **YTARCHIVER** | YouTube archiver (Docker, после DOCKER, UI на `:8081`) |
 | 🔄 **SYNCTHING** | P2P-синхронизация папок (`:8384`, данные `/mnt/storage/sync`) |
-| 📂 **FILEBROWSER** | Web файл-менеджер + редактор конфигов (`:8082`, монтирует диск + `/etc/travel-nas`) |
+| 📂 **FILEBROWSER** | Filebrowser Quantum — файл-менеджер + редактор конфигов (`:8082`, диск + `/etc/travel-nas`, пароль из `filebrowser.conf`) |
 | 📋 **DOZZLE** | Live-логи всех Docker-контейнеров в вебе (`:8083`, stateless) |
 | 🩺 **SCRUTINY** | SMART-здоровье диска T7 — температура, износ, bad sectors (`:8084`) |
 | 🎵 **NAVIDROME** | Стриминг музыки (Subsonic API), библиотека `/mnt/storage/media/Music` (`:4533`) |

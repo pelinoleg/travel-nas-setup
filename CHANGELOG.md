@@ -21,8 +21,12 @@ Significant changes to travel-nas-setup. Newest first.
   показывает `admin / <пароль>`.
 
 ### Новое
+- **Filebrowser → Quantum** (`gtstef/filebrowser`): приятнее UI, индексный поиск,
+  и главное — **пароль детерминирован** (`config.yaml` `auth.adminPassword` из
+  `filebrowser.conf` `FB_USER`/`FB_PASS`), без скрейпа логов. user 1000, источники
+  `/srv/storage` + `/srv/config`. (Заменил оригинал, тот же :8082 и name.)
 - **Syncthing Vellum**: тема (light+dark) ставится в `<config>/gui/` из репо
-  pelinoleg/syncthing-vellum; дефолт `vellum-dark` (правка `config.xml`).
+  pelinoleg/syncthing-vellum; дефолт `vellum-light` (правка `config.xml`).
 
 ## 2026-06-01 — Стеки Dozzle, Scrutiny, Navidrome
 

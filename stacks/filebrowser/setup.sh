@@ -16,9 +16,20 @@ stack_pre() {
     source "$CONFIG_DIR/filebrowser.conf" 2>/dev/null || true
     [[ -n "$FB_USER" ]] || FB_USER="admin"
     [[ -n "$FB_PASS" ]] || FB_PASS="changeme"
+    # Свежая установка / не задан пароль (placeholder "changeme" или пусто) →
+    # генерим случайный, пишем обратно в conf. Безопасный дефолт, виден в дашборде
+    # (Services), без копания в логах. Свой пароль (если вписал) не трогаем.
+    if [[ -z "$FB_PASS" || "$FB_PASS" == "changeme" ]]; then
+        FB_PASS="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 16)"
+        if grep -q '^FB_PASS=' "$CONFIG_DIR/filebrowser.conf" 2>/dev/null; then
+            sudo sed -i "s|^FB_PASS=.*|FB_PASS=\"$FB_PASS\"|" "$CONFIG_DIR/filebrowser.conf"
+        else
+            echo "FB_PASS=\"$FB_PASS\"" | sudo tee -a "$CONFIG_DIR/filebrowser.conf" >/dev/null
+        fi
+        info "Filebrowser: сгенерил случайный пароль (виден в дашборде → Services)"
+    fi
     local U; U="$(getent passwd 1000 2>/dev/null | cut -d: -f1)"; U="${U:-root}"
     sudo chown "$U:$U" "$CONFIG_DIR/filebrowser.conf"; sudo chmod 0600 "$CONFIG_DIR/filebrowser.conf"
-    [[ "$FB_PASS" == "changeme" ]] && warn "Filebrowser: пароль 'changeme' — поставь свой в $CONFIG_DIR/filebrowser.conf и перезапусти setup"
 
     sudo docker stop filebrowser >/dev/null 2>&1 || true     # release bbolt lock
     [[ -f "$data/filebrowser.db" ]] || \

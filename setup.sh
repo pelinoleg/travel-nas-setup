@@ -231,8 +231,15 @@ else
         "PI_TWEAKS"    "HW watchdog + EEPROM + WiFi-no-powersave + sysctl" ON
         "CONF_PERMS"   "Авто-fix прав /etc/travel-nas/ при правке через веб" ON
     )
+    # Размеры под терминал. Ширина 80 была мала — длинные теги STACK_* + описания
+    # делали внутренний список шире рамки → он вылезал за диалог (визуальный баг).
+    # Считаем по факту, клампим, чтобы не упереться ни в узкий, ни в огромный терм.
+    T_COLS=$(tput cols 2>/dev/null || echo 100); T_LINES=$(tput lines 2>/dev/null || echo 40)
+    MENU_W=$(( T_COLS - 6 ));  (( MENU_W > 100 )) && MENU_W=100; (( MENU_W < 78 )) && MENU_W=78
+    MENU_H=$(( T_LINES - 4 )); (( MENU_H > 34 )) && MENU_H=34; (( MENU_H < 18 )) && MENU_H=18
+    MENU_L=$(( MENU_H - 8 ));  (( MENU_L < 6 ))  && MENU_L=6
     SELECTED=$(whiptail --title "Travel-NAS Setup" \
-        --checklist "Что устанавливать? (Space — выбор, Enter — OK)" 30 80 24 \
+        --checklist "Что устанавливать? (Space — выбор, Enter — OK)" "$MENU_H" "$MENU_W" "$MENU_L" \
         "${MENU[@]}" \
         3>&1 1>&2 2>&3) || exit 0
 fi

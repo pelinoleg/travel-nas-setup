@@ -85,6 +85,15 @@ if $APPEND_MODE; then
     exit 0
 fi
 
+# Важный алерт (warning/error/critical) → будим экран дашборда (file-IPC).
+# /var/run/travel-nas — owner uid 1000, 0775: пишется и от root, и от юзера.
+case "$LEVEL" in
+    warning|error|critical)
+        mkdir -p /var/run/travel-nas 2>/dev/null || true
+        printf '%s' "$TITLE" > /var/run/travel-nas/wake-req 2>/dev/null || true
+        ;;
+esac
+
 # Формируем сообщение
 if [[ -n "$TITLE" && -n "$MESSAGE" ]]; then
     FULL_MSG="${ICON} *${TITLE}*

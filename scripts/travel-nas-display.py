@@ -42,6 +42,8 @@ STATE_DIR = Path("/var/run/travel-nas")
 PROGRESS_FILE   = STATE_DIR / "backup-progress.json"
 SCREENSHOT_REQ  = STATE_DIR / "screenshot-req"  # touch = запросить снимок
 SCREENSHOT_OUT  = STATE_DIR / "dashboard.png"   # дашборд сюда сохраняет
+WAKE_REQ        = STATE_DIR / "wake-req"        # запрос разбудить экран (важный TG-алерт)
+WAKE_TEMP       = 80                            # °C — перегрев: будим экран при переходе выше
 ERROR_LOG = Path("/tmp/travel-nas-display.error.log")
 
 STORAGE_MOUNT = "/mnt/storage"
@@ -3106,7 +3108,6 @@ def page_configs():
         ("/etc/travel-nas/tg-notify.conf",      "Telegram bot token"),
         ("/etc/travel-nas/nas-backup.conf",     "NAS host + password"),
         ("/etc/travel-nas/services.conf",       "Dashboard URL list"),
-        ("/etc/travel-nas/power-mode.conf",     "Home WiFi SSIDs"),
         ("/etc/travel-nas/photo-backup.conf",   "USB backup settings"),
         ("/etc/travel-nas/thermal-guard.conf",  "Перегрев: mode/пороги/excludes"),
         ("/etc/travel-nas/storage-info.conf",        "Disk UUID (auto)"),
@@ -3609,6 +3610,7 @@ def main():
     btns = []
     running = True
     prev_progress = False   # для детекта старта бэкапа (None → активен)
+    prev_temp = None        # для детекта перехода в перегрев
 
     while running:
         now = time.time()
@@ -3654,6 +3656,31 @@ def main():
             # Бэкап завершился → продлить активность, чтобы итог был виден до sleep.
             last_activity = now
         prev_progress = prog_active
+
+        # Внешний запрос «разбудить экран» — tg-notify пишет wake-req на важный
+        # алерт (warning/error/critical). Контент файла = причина (для toast).
+        if WAKE_REQ.exists():
+            try: reason = WAKE_REQ.read_text().strip()
+            except Exception: reason = ""
+            if not display_on:
+                display_on = True
+                set_backlight(True)
+            last_activity = now
+            if reason:
+                toast(reason[:40], WARN)
+            try: WAKE_REQ.unlink()
+            except Exception: pass
+
+        # Перегрев → будим экран на переходе temp ниже→выше порога (не каждый кадр).
+        ct = c_cpu_temp.get()
+        if ct is not None:
+            if ct >= WAKE_TEMP and (prev_temp is None or prev_temp < WAKE_TEMP):
+                if not display_on:
+                    display_on = True
+                    set_backlight(True)
+                last_activity = now
+                toast(f"Перегрев {ct:.0f}°C", ERROR)
+            prev_temp = ct
 
         # Auto-sleep (не во время бэкапа). Таймаут берётся из файла на лету —
         # юзер меняет через /sleep в TG, дашборд подхватывает без рестарта.

@@ -462,7 +462,6 @@ def cmd_configs(token, chat_id, args):
         ("/etc/travel-nas/tg-notify.conf",     "Telegram bot token + chat_id"),
         ("/etc/travel-nas/nas-backup.conf",    "NAS host/user/password"),
         ("/etc/travel-nas/services.conf",      "Dashboard URLs"),
-        ("/etc/travel-nas/power-mode.conf",    "Home WiFi SSIDs"),
         ("/etc/travel-nas/photo-backup.conf",  "USB backup settings"),
         ("/etc/travel-nas/storage-info.conf",       "Disk UUID (auto-generated)"),
     ]

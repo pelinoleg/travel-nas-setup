@@ -24,6 +24,11 @@ Significant changes to travel-nas-setup. Newest first.
 - **Дефолт экрана MHS35: 270** (было 90) — портрет 320×480 «вверх ногами» под
   физический монтаж. Сменить — дашборд rotate/flip или `screen-rotate.sh`.
 - **setup: длительность установки** в финальном отчёте + Telegram («Время: Xм Yс»).
+- **Дашборд будит экран** на старт бэкапа (USB), `/screenshot`, перегрев (≥80°C)
+  и важный TG-алерт (tg-notify warning/error/critical пишет `wake-req`).
+- **power-mode.conf удалён** — `power-mode.sh` его не читал (режим авто-детектится
+  по `vcgencmd get_throttled`). Чистка ссылок в config-редакторах/perms/README.
+- **filebrowser.conf → fix-conf-perms 600** (секрет, раньше не было в списке).
 
 ### Filebrowser
 - Пароль стал детерминированным: образ s6 генерил случайный в залоченной bbolt

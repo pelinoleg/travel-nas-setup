@@ -117,7 +117,7 @@ sudo curl -fsSL "https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/ma
 | `photo-backup.conf` | Настройки автобэкапа SD | 644 |
 | `storage-info.conf` | UUID storage-диска (сгенерён при mount) | 644 |
 | `services.conf` | URL-ы для Services page в dashboard | 644 |
-| `power-mode.conf` | HOME_SSIDS + HEAVY_DOCKER_APPS | 644 |
+| `filebrowser.conf` | Логин/пароль Filebrowser (`FB_USER`/`FB_PASS`) | 600 |
 | `yt-archiver.conf` | URL дашборда + `YT_CPU_LIMIT` (лимит CPU контейнера) | 644 |
 
 В git коммитятся только `*.example` в `conf-examples/` (без секретов).

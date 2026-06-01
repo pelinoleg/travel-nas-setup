@@ -27,10 +27,10 @@ TARGET_USER="$(getent passwd 1000 2>/dev/null | cut -d: -f1)"
 declare -A SPECS=(
     [tg-notify.conf]="$TARGET_USER:$TARGET_USER 600"
     [nas-backup.conf]="$TARGET_USER:$TARGET_USER 600"
+    [filebrowser.conf]="$TARGET_USER:$TARGET_USER 600"
     [services.conf]="$TARGET_USER:$TARGET_USER 644"
     [thermal-guard.conf]="$TARGET_USER:$TARGET_USER 644"
     [photo-backup.conf]="$TARGET_USER:$TARGET_USER 644"
-    [power-mode.conf]="$TARGET_USER:$TARGET_USER 644"
     [yt-archiver.conf]="$TARGET_USER:$TARGET_USER 644"
     [storage-info.conf]="$TARGET_USER:$TARGET_USER 644"
 )

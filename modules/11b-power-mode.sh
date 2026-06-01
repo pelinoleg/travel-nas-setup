@@ -5,11 +5,9 @@ if (
     set -e
     fetch_script "power-mode.sh" "$SCRIPT_DIR/power-mode.sh"
     sudo mkdir -p "$CONFIG_DIR"
-    if [[ ! -f "$CONFIG_DIR/power-mode.conf" ]]; then
-        fetch_conf_example "power-mode.conf.example" "$CONFIG_DIR/power-mode.conf"
-    fi
-    sudo chown "$(whoami):$(whoami)" "$CONFIG_DIR/power-mode.conf"
-    sudo chmod 0644 "$CONFIG_DIR/power-mode.conf"
+    # power-mode.conf не нужен — power-mode.sh его не читает (режим авто-детектится
+    # по vcgencmd get_throttled). Старый пустой файл подчищаем, если остался.
+    sudo rm -f "$CONFIG_DIR/power-mode.conf"
 
     # NetworkManager dispatcher — при connect/disconnect пересчитывает режим
     DISP_DIR="/etc/NetworkManager/dispatcher.d"

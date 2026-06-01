@@ -17,6 +17,7 @@ Travel-NAS на Raspberry Pi 5 (или Pi 4) + Samsung T7 Shield 4TB SSD. Дел
 | [docs/V2-WEB-UI-LAYOUT.md](docs/V2-WEB-UI-LAYOUT.md) | Визуальный язык V2 — layout patterns, page mockups, design tokens, ambient mode |
 | [docs/THERMAL-GUARD.md](docs/THERMAL-GUARD.md) | Staged docker throttle/pause/stop при sustained temp |
 | [docs/PI-TWEAKS.md](docs/PI-TWEAKS.md) | HW watchdog, EEPROM, WiFi/sysctl tunes |
+| [docs/DOCKER.md](docs/DOCKER.md) | Docker + Dockge стеки (`/opt/stacks`), comitup:80, миграция с CasaOS, Filebrowser-security |
 
 ## Структура
 
@@ -38,7 +39,7 @@ docs/                       Long-form документация.
 |---|---|
 | `travel-nas-setup` | Перезапустить whiptail-wizard (добавить/переустановить компонент, реинсталл sudoers, …). Качает свежий `setup.sh` из репо. |
 | `travel-nas-update` | **Быстро (~30 сек)** — только наши `.sh`/`.py` из GitHub в `/usr/local/bin/`. Рестартит tg-listener/dashboard. Sync sudoers. НЕ трогает apt/Docker/конфиги. |
-| `travel-nas-update --full` | **Полное (~5-15 мин)** — то же + `apt upgrade` + `docker compose pull && up -d` всех CasaOS-апсов. |
+| `travel-nas-update --full` | **Полное (~5-15 мин)** — то же + `apt upgrade` + `docker compose pull && up -d` всех `/opt/stacks` стеков. |
 
 Любые правки в репо → `git push` → на Pi `travel-nas-update`. Всё подтянется.
 
@@ -72,6 +73,7 @@ docs/                       Long-form документация.
 - **Идентификация storage-диска (универсальная, без привязки к имени)** — `04-storage-mount.sh` опознаёт «свой» диск в порядке: (1) UUID из `storage-info.conf` (тот же OS-инстанс); (2) **скан ext4-партиций на файл-маркер `.travel-nas-storage`** в корне ФС — работает с ЛЮБЫМ label и переживает переустановку OS; (3) legacy: старый label `t7` / fstab-запись `/mnt/t7` → авто-миграция на `/mnt/storage`; (4) иначе whiptail-wizard. Wizard: если выбранный диск уже ext4 и здоров (`e2fsck -fn`) → «Использовать как есть» (данные целы), чужая/пустая ФС → формат с запросом label. Маркер пишется при каждом adopt/format. НЕ хардкодь label `t7` нигде — диск может называться как угодно.
 - **Конфиги применяются на ребуте (и почти все — сразу)** — все настройки в `/etc/travel-nas/*.conf`. Per-run скрипты (nas/photo-backup, power-mode, thermal-guard) читают свежим; `services.conf`/URL — live дашбордом; сервисы (tg-listener) — на рестарте/ребуте. Для **stateful**-конфигов, что бьются в systemd/docker (NAS-расписание `AUTO_BACKUP*` → timer, `YT_CPU_LIMIT` → docker cpus), паттерн: helper-скрипт с `apply` + **path-unit** (мгновенно при правке `*.conf`) + boot-service (на ребуте). См. `nas-schedule.sh`/`nas-schedule-apply.{path,service}` и `yt-cpu-apply.{path,service}`. Хочешь сделать новую настройку «правишь конфиг → применяется» — повторяй этот паттерн, НЕ пиши значение только в systemd-юнит.
 - **Хардкод — нельзя** — репо **публичный**: никаких паролей/токенов/IP-секретов в коммитах (реальные значения только в `/etc/travel-nas/` на устройстве, в репо — `*.example` с placeholder). Юзер — **не** хардкодь `oleg`: резолв из uid 1000 (`getent passwd 1000` / `pwd.getpwuid(1000)`). Хостнейм/label диска/путь — тоже не хардкодь (диск по маркеру, `/mnt/storage` — константа в lib/common.sh).
+- **Docker-стеки в `/opt/stacks/<name>/compose.yaml`** (CasaOS удалён). Конвенция Dockge: каждый стек — каталог + `compose.yaml` с обязательным `name:` (стабильное имя compose-проекта для docker-mgr/Dockge). Модуль кладёт compose туда + сам делает первый `docker compose up -d`; Dockge (`/opt/dockge`, :5001) подхватывает в UI. Стеки: photoview, ytarchiver, syncthing, filebrowser. Docker ставится напрямую (apt-репо) модулем `16-docker.sh` ПЕРЕД всеми стеками. comitup-web на **:80** (CasaOS больше не держит порт). НЕ используй `/var/lib/casaos` или `docker-compose.yml` — только `/opt/stacks/*/compose.yaml`. `travel-nas-update --full` сканит `/opt/stacks`.
 - **rsync modules vs paths** — на Synology/UGREEN бэкап идёт через rsync daemon модули (`oleg@host::module/`), **не** через ssh-fs paths. Subpaths внутри модуля можно (`module/Photos/`), `/volume1/...` — нет (rsync daemon отвергает абсолютные пути с `/`). См. docs/NAS-BACKUP.md таблицу.
 - **EXCLUDES** в `nas-backup.conf` — `@eaDir/ #recycle/ .DS_Store node_modules/ .cache/ ...`. Эти Synology-thumbnails и cache могут отъедать **5-15% размера на больших библиотеках** — поэтому простой `du`-сравнение T7 vs NAS даёт false-warning «not fully copied». **Авторитетный сигнал — rsync exit-code** (parsed из логов в `nas-backup-status.py`), не размерное сравнение.
 - **systemd-run для длинных операций** — `nas-backup.sh` сам себя re-exec'ит как transient unit `nas-backup-runtime` чтобы переживать рестарт dashboard'а / SSH-сессии. Output идёт в `journalctl -u nas-backup-runtime`, не в stdout — НЕ ищи output в /tmp/*.out если вызвал напрямую.

@@ -24,8 +24,8 @@
 # После правок: нажми ⟳ Refresh на странице Services — подтянет без рестарта.
 # =============================================================================
 
-CasaOS=http://{host}
-    Web-UI для Docker-приложений
+Dockge=http://{host}:5001
+    Web-UI для docker-compose стеков (/opt/stacks)
 
 Photoview=http://{host}:8000
     Login: admin / <твой-пароль>
@@ -33,6 +33,13 @@ Photoview=http://{host}:8000
 
 YT-Archiver=http://{host}:8081
     Self-hosted YouTube archive
+
+Syncthing=http://{host}:8384
+    P2P-синхронизация → /mnt/storage/sync
+
+Filebrowser=http://{host}:8082
+    Файл-менеджер + редактор конфигов
+    Логин: {user} / <твой FB_PASS>  (смени!)
 
 # Компактный inline для коротких записей:
 >Samba=smb://{host}/travel-nas

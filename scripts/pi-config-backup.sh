@@ -47,8 +47,6 @@ SYSTEM_ETC=(
     /etc/sudoers.d/travel-nas-dashboard                      # dashboard buttons
     /etc/tmpfiles.d/travel-nas.conf                          # /var/run/travel-nas
     /etc/NetworkManager/dispatcher.d/99-travel-nas-power     # power-mode hook
-    /etc/conf.d/devmon                                       # CasaOS devmon
-    /etc/casaos
     /etc/udev/rules.d/99-photo-backup.rules
     /boot/firmware/cmdline.txt
     /boot/firmware/config.txt
@@ -92,12 +90,10 @@ TN_UNITS=(
 for u in "${TN_UNITS[@]}"; do backup_path "/etc/systemd/system/$u"; done
 
 # =============================================================================
-# Docker apps — compose-файлы (БД оставляем — большие, восстановит rescan)
+# Docker стеки — только compose-файлы (данные/БД на /mnt/storage, не сюда).
 # =============================================================================
-backup_path /opt/photoview/docker-compose.yml
-# CasaOS apps (включая ytarchiver) — папка с compose и метаданными
-backup_path /var/lib/casaos/apps
-backup_path /var/lib/casaos/db
+backup_path /opt/stacks       # все стеки (photoview, ytarchiver, syncthing, ...)
+backup_path /opt/dockge       # сам Dockge (compose + data)
 
 # =============================================================================
 # User-space — autostart, lxsession, pcmanfm, Desktop

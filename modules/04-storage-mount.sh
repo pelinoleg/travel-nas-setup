@@ -243,11 +243,11 @@ if [[ -z "$STORAGE_DEV" ]]; then
 ВСЕ ДАННЫЕ на диске будут УДАЛЕНЫ. Точно продолжить?" 16 70; then
                     if (
                         set -e
-                        # devmon (CasaOS) и desktop-udisks АСИНХРОННО авто-монтят
-                        # свежую партицию → mkfs падает "is mounted". Глушим
-                        # devmon на время формата; trap вернёт его при любом выходе.
-                        sudo systemctl stop devmon@devmon.service 2>/dev/null || true
-                        trap 'sudo systemctl start devmon@devmon.service 2>/dev/null || true' EXIT
+                        # Desktop udisks2/pcmanfm АСИНХРОННО авто-монтит свежую
+                        # партицию → mkfs падает "is mounted". Глушим udisks2 на
+                        # время формата; trap вернёт его при любом выходе.
+                        sudo systemctl stop udisks2.service 2>/dev/null || true
+                        trap 'sudo systemctl start udisks2.service 2>/dev/null || true' EXIT
                         info "Размонтирую партиции на $SEL_DEV..."
                         for part in "${SEL_DEV}"?*; do
                             sudo umount "$part" 2>/dev/null || true

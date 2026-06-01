@@ -61,9 +61,11 @@ except Exception:
     SSH_USER = "user"
 
 SERVICES_DEFAULTS = [
-    ("CasaOS",      "http://{host}"),
+    ("Dockge",      "http://{host}:5001"),
     ("Photoview",   "http://{host}:8000"),
     ("yt-archiver", "http://{host}:8081"),
+    ("Syncthing",   "http://{host}:8384"),
+    ("Filebrowser", "http://{host}:8082"),
     ("Samba",       "smb://{host}/travel-nas"),
     ("SSH",         "ssh {user}@{host}"),
 ]
@@ -469,7 +471,7 @@ c_comitup  = Cached(_comitup_state,   8)
 
 
 def _comitup_port():
-    """Читает web_port из /etc/comitup.conf. Default 8090 если файла нет.
+    """Читает web_port из /etc/comitup.conf. Default 80 если файла нет.
     Кэшируем длинным TTL — port меняется только при reinstall."""
     try:
         for ln in Path("/etc/comitup.conf").read_text().splitlines():
@@ -478,7 +480,7 @@ def _comitup_port():
                 return int(m.group(1))
     except Exception:
         pass
-    return 8090
+    return 80
 
 
 c_comitup_port = Cached(_comitup_port, 60)
@@ -2047,7 +2049,7 @@ def page_docker():
     if projects is None:
         screen.blit(F_NORMAL.render("docker не доступен", True, ERROR), (10, y))
         y += 24
-        screen.blit(F_SMALL.render("(нет sudoers или CASAOS не установлен)", True, MUTED), (10, y))
+        screen.blit(F_SMALL.render("(нет sudoers или Docker не установлен)", True, MUTED), (10, y))
     elif not projects:
         screen.blit(F_NORMAL.render("Нет compose-проектов", True, MUTED), (10, y))
     else:
@@ -3498,8 +3500,8 @@ def do_action(action):
         # Документированный (см. comitup-cli.8) способ переключения в HOTSPOT:
         # `comitup-cli d` — удаляет текущий NM-connection профиль; comitup
         # daemon ловит это через D-Bus и тут же стартует AP. comitup-web
-        # слушает на :8090 (web_port в /etc/comitup.conf), чтобы не
-        # конфликтить с CasaOS-gateway на :80.
+        # слушает на :80 (web_port в /etc/comitup.conf) — captive-portal детект
+        # бьёт именно в :80. Порт читается дашбордом динамически.
         if not Path("/usr/sbin/comitup-cli").exists():
             toast("comitup not installed", ERROR)
         else:

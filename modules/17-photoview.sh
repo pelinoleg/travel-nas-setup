@@ -4,10 +4,10 @@
 # контейнера. Mount только read-only — гарантия что галерея ничего не сотрёт.
 info "=== Photoview ==="
 if ! command -v docker &>/dev/null; then
-    mark_fail "PHOTOVIEW" "Docker не установлен (сначала CASAOS)"
+    mark_fail "PHOTOVIEW" "Docker не установлен (сначала DOCKER)"
 elif (
     set -e
-    sudo mkdir -p /opt/photoview
+    sudo mkdir -p /opt/stacks/photoview
 
     # cache+db живут на диске (а не /opt/) — переустановка системы не теряет
     # БД (1700+ scanned media, faces, favorites). Тяжёлые thumbnail-writes
@@ -17,11 +17,13 @@ elif (
     sudo install -d -o 999 -g 999 -m 0755 "$APPDATA/cache"
     sudo install -d -o 999 -g 999 -m 0755 "$APPDATA/db"
 
-    sudo tee /opt/photoview/docker-compose.yml > /dev/null << EOF
-# Photoview app + MariaDB
+    sudo tee /opt/stacks/photoview/compose.yaml > /dev/null << EOF
+# Photoview app + MariaDB (Dockge-стек). name: обязателен — стабильное имя
+# compose-проекта, чтобы docker-mgr/Dockge находили его независимо от каталога.
 # В UI Photoview добавляй путь /storage/usb-imports или /storage/media — это пути
 # ВНУТРИ контейнера (мы монтируем /mnt/storage как /storage:ro). Указать /mnt/storage/...
 # не получится — внутри контейнера такого пути не существует.
+name: photoview
 services:
   db:
     image: mariadb:10.11
@@ -70,8 +72,11 @@ EOF
     fi
     sudo chmod 0644 "$STORAGE_MOUNT/usb-imports/.photoviewignore" 2>/dev/null || true
 
-    cd /opt/photoview
+    cd /opt/stacks/photoview
     sudo docker compose up -d
+    # Старый каталог CasaOS-эпохи. compose уже принят по name: photoview
+    # (тот же проект + те же bind-mount данные) → можно убрать.
+    sudo rm -rf /opt/photoview 2>/dev/null || true
 ); then
     mark_ok "PHOTOVIEW" "http://$(hostname).local:8000 (UI path: /storage/usb-imports)"
 else

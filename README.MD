@@ -16,7 +16,7 @@ curl -fsSL https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/main/set
 |---|---|
 | `travel-nas-setup` | Перезапустить wizard (добавить компонент, переустановить, поменять конфиг). Скачивает свежий `setup.sh`, бежит whiptail, спрашивает что делать. |
 | **`travel-nas-update`** | **Быстро (~30 сек) — только скрипты из репо.** Тянет `.sh`/`.py` из GitHub в `/usr/local/bin/`, перезапускает `tg-listener` и dashboard. Конфиги, systemd-units, sudoers (создание) — НЕ трогает. |
-| **`travel-nas-update --full`** | **Полное (~5-15 мин)** — то же + `apt upgrade` (включая kernel/tailscale) + `docker compose pull && up -d` по всем CasaOS-приложениям. Печатает варнинг если нужен reboot. См. [docs/UPDATE.md](docs/UPDATE.md). |
+| **`travel-nas-update --full`** | **Полное (~5-15 мин)** — то же + `apt upgrade` (включая kernel/tailscale) + `docker compose pull && up -d` по всем `/opt/stacks` стекам. Печатает варнинг если нужен reboot. См. [docs/UPDATE.md](docs/UPDATE.md). |
 
 ### Обновление после правок (когда поменял что-то в репо и хочешь применить на Pi)
 
@@ -55,16 +55,19 @@ sudo curl -fsSL "https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/ma
 | 💾 **LOG2RAM** | Логи в RAM — микро-SD живёт дольше |
 | 🗜 **ZRAM** | Сжатый swap (zstd) |
 | 📡 **COMITUP** | Полевой WiFi AP-режим |
-| 🏠 **CASAOS** | Веб-UI для Docker-приложений |
-| 🖼 **PHOTOVIEW** | Photo-галерея (Docker, после CASAOS, путь `/storage/*` в UI) |
-| 📺 **YTARCHIVER** | YouTube archiver (Docker, после CASAOS, UI на `:8081`) |
+| 🐳 **DOCKER** | Docker engine (apt-репо) — основа для всех стеков |
+| 📦 **DOCKGE** | Dockge — web-UI для docker-compose стеков (`:5001`, стеки в `/opt/stacks`) |
+| 🖼 **PHOTOVIEW** | Photo-галерея (Docker, после DOCKER, путь `/storage/*` в UI, `:8000`) |
+| 📺 **YTARCHIVER** | YouTube archiver (Docker, после DOCKER, UI на `:8081`) |
+| 🔄 **SYNCTHING** | P2P-синхронизация папок (`:8384`, данные `/mnt/storage/sync`) |
+| 📂 **FILEBROWSER** | Web файл-менеджер + редактор конфигов (`:8082`, монтирует диск + `/etc/travel-nas`) |
 | 🖥 **DISPLAY** | MHS35 3.5" сенсорный + Python dashboard в X-kiosk |
 | 💻 **DESKTOP** | Ярлыки на рабочий стол: Dashboard, Update, Calibrate Touch |
 | 🔐 **TAILSCALE** | Zero-config VPN — доступ к Pi из любой сети мира + SSH без ключей. См. [docs/TAILSCALE.md](docs/TAILSCALE.md) |
 | 🔍 **VERIFY** | Ежемесячный sha256 scrub T7 — ловит bit-rot, bad-sector'а, I/O ошибки. См. [docs/VERIFY.md](docs/VERIFY.md) |
 | 🌡 **THERMAL_GUARD** | Защита от перегрева — staged docker throttle/pause/stop при sustained высокой темпе. MODE=warn по умолчанию. См. [docs/THERMAL-GUARD.md](docs/THERMAL-GUARD.md) |
 | 🔧 **PI_TWEAKS** | HW watchdog (BCM2712), EEPROM auto-update, WiFi powersave OFF, sysctl tunes. См. [docs/PI-TWEAKS.md](docs/PI-TWEAKS.md) |
-| 🛡 **CONF_PERMS** | systemd path-unit смотрит за `/etc/travel-nas/` и восстанавливает owner/mode после правок через CasaOS Files |
+| 🛡 **CONF_PERMS** | systemd path-unit смотрит за `/etc/travel-nas/` и восстанавливает owner/mode после правок через Filebrowser/веб |
 
 ## Hardware
 
@@ -136,7 +139,7 @@ Pygame-кiosk в X11. Никаких внешних терминалов — ф�
 - **Logs** — встроенный viewer (photo-backup, nas-backup, watchdog, system-monitor, display errors).
 - **Docker** — все compose-проекты с inline кнопками Stop/Start/Restart.
 - **YT Archive** — статистика yt-archiver: каналы / видео / диск + очередь (downloading/pending/errors) + текущие загрузки с прогресс-барами. URL настраивается в `/etc/travel-nas/yt-archiver.conf`.
-- **AP info / Force AP** — SSID `comitup-NNN` + URL `http://10.41.0.1:8090` (comitup-web висит на нестандартном порту чтобы не конфликтить с CasaOS nginx :80). Force AP сбрасывает текущий WiFi и стартует hotspot.
+- **AP info / Force AP** — SSID `comitup-NNN` + URL `http://10.41.0.1` (comitup-web на :80 — captive-portal детект бьёт туда). Force AP сбрасывает текущий WiFi и стартует hotspot.
 - **Reboot / Shutdown** — с подтверждением.
 
 Auto-sleep через 5 минут неактивности (xset dpms + sysfs backlight для дисплеев которые умеют). На MHS35 lampbacklight прибита к 5V, экран чернеет но лампа горит — hardware-limit, не наш баг.
@@ -205,11 +208,11 @@ Auto-логика (при `pref=auto`):
 (`<host>` ниже = hostname который ты задал в Pi Imager, например `pi` или `pi-tn1`.)
 
 - **Samba**: `smb://<host>.local/travel-nas` (Cmd+K в Finder)
-- **CasaOS**: `http://<host>.local`
+- **Dockge**: `http://<host>.local:5001` · **Filebrowser**: `:8082` · **Syncthing**: `:8384`
 - **Photoview**: `http://<host>.local:8000` (в UI указывай путь `/storage/usb-imports` или `/storage/media`)
 - **YT-Archiver**: `http://<host>.local:8081`
 - **SSH**: `ssh oleg@<host>.local`
-- **AP mode** (полевой): подключиться к WiFi `comitup-NNN` (без пароля) → `http://10.41.0.1:8090` для настройки нового WiFi
+- **AP mode** (полевой): подключиться к WiFi `comitup-NNN` (без пароля) → `http://10.41.0.1` для настройки нового WiFi
 
 > ⚠️ **Photoview** UI принимает только пути ВНУТРИ контейнера. Мы монтируем `/mnt/storage` как `/storage:ro`. То есть в Photoview указывай `/storage/usb-imports`, а **не** `/mnt/storage/usb-imports`. Иначе получишь "Server error: internal system error at initialSetupWizard".
 
@@ -250,10 +253,10 @@ DISPLAY=:0 XAUTHORITY=/home/oleg/.Xauthority nohup /usr/bin/python3 /usr/local/b
 sudo systemctl restart tg-listener
 ```
 
-После изменения compose-файлов:
+После изменения compose-файлов (или через Dockge UI на `:5001`):
 ```bash
-cd /opt/photoview && sudo docker compose up -d  # БД на T7: /mnt/storage/_appdata/photoview/
-cd /var/lib/casaos/apps/ytarchiver && sudo docker compose up -d
+cd /opt/stacks/photoview && sudo docker compose up -d   # БД: /mnt/storage/_appdata/photoview/
+cd /opt/stacks/ytarchiver && sudo docker compose up -d
 ```
 
 ### C. Через git clone (если планируешь разрабатывать)

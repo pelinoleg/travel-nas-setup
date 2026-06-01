@@ -34,8 +34,8 @@ COOLDOWN_MIN=5
 
 # Какие контейнеры НЕ трогать (regex по имени). По умолчанию:
 #   *-db    — БД (mysql/postgres/mariadb) — pause/stop рискует данные
-#   casaos  — управляющий слой Docker-апп, его падение каскадит остальное
-EXCLUDE_REGEX=-db(-\d+)?$|^casaos
+#   dockge  — менеджер стеков, не трогаем (его падение мешает управлению)
+EXCLUDE_REGEX=-db(-\d+)?$|^dockge
 
 # Когда идёт nas-backup-runtime — не вмешиваемся
 EXCLUDE_DURING_BACKUP=true

@@ -18,8 +18,8 @@
    - Если есть `/var/run/reboot-required` — выставляет флаг `REBOOT_NEEDED`
    - Tailscale обновляется тут же (он установлен из своего apt-репо)
 
-2. **Docker compose pull + up -d** по всем CasaOS-приложениям
-   - Идёт по `/var/lib/casaos/apps/*/docker-compose.yml`
+2. **Docker compose pull + up -d** по всем стекам в /opt/stacks
+   - Идёт по `/opt/stacks/*/compose.yaml` (+ /opt/dockge)
    - `docker compose pull --quiet` (тянет свежие образы)
    - `docker compose up -d` (перезапускает только то, у чего образ изменился)
    - В конце `docker image prune -f` — чистит старые образы (могут весить десятки GB)
@@ -63,7 +63,7 @@ travel-nas-update --help   # справка
 
 `full` нужен раз в 1-2 недели чтобы:
 - Получить kernel-патчи безопасности
-- Обновить Photoview / yt-archiver / CasaOS до свежих docker-образов
+- Обновить Photoview / yt-archiver / Dockge / Syncthing до свежих образов
 - Закрыть CVE в системных пакетах (например, openssh)
 
 В **дороге запускай только `fast`**. `--full` может потребовать reboot после

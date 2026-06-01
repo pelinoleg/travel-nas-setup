@@ -8,7 +8,7 @@
 #  1. Получает /dev/sdX1 от systemd
 #  2. Проверяет что это НЕ наш storage disk (по UUID)
 #  3. Использует flock — параллельные запуски пропускаются
-#  4. Ждёт пока CasaOS devmon примонтирует, или монтирует сам read-only
+#  4. Ждёт пока desktop (udisks/pcmanfm) примонтирует, или монтирует сам read-only
 #  5. rsync со всеми файлами (что воткнули — то и копируем)
 #  6. Имя: /mnt/storage/usb-imports/DD-MM-YYYY/HH-MM_<label>_<uuid>/
 #  7. Auto-umount после завершения
@@ -111,7 +111,7 @@ if ! flock -n 200; then
     exit 0
 fi
 
-# Ждём пока devmon смонтирует — он может опаздывать на пару секунд,
+# Ждём пока desktop-udisks смонтирует — может опаздывать на пару секунд,
 # поэтому опрашиваем findmnt N раз вместо одного фиксированного sleep.
 MOUNT_SRC=""
 for _ in 1 2 3 4 5 6 7 8; do
@@ -122,7 +122,7 @@ done
 
 TEMP_MOUNT=""
 if [[ -z "$MOUNT_SRC" ]]; then
-    # devmon не смонтировал — монтируем сами read-only
+    # никто не смонтировал — монтируем сами read-only
     TEMP_MOUNT=$(mktemp -d /tmp/photo-backup-XXXXXX)
     if mount -o ro "$DEVICE" "$TEMP_MOUNT" 2>/dev/null; then
         MOUNT_SRC="$TEMP_MOUNT"

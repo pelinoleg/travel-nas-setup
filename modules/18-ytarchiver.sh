@@ -1,13 +1,12 @@
 [[ -n "${DO_YTARCHIVER:-}" ]] || return 0
 
-# Compose-файл кладётся в /var/lib/casaos/apps/ytarchiver/ — CasaOS подхватывает
-# его автоматически благодаря x-casaos метаданным.
+# Compose-стек в /opt/stacks/ytarchiver/ — подхватывается Dockge.
 # Backend в исходном compose публиковал порт 8000 (как Photoview). Это вызвало
 # бы конфликт → выкинули из ports. Frontend (8081) ходит к backend через
 # docker network ytarchiver_net.
 info "=== YT-Archiver ==="
 if ! command -v docker &>/dev/null; then
-    mark_fail "YTARCHIVER" "Docker не установлен (сначала CASAOS)"
+    mark_fail "YTARCHIVER" "Docker не установлен (сначала DOCKER)"
 elif (
     set -e
     # Папки данных на диске — bind mount внутрь контейнера. Владелец $(whoami)
@@ -48,10 +47,10 @@ elif (
     # Sanity: только число (2 / 2.0), иначе compose упадёт — откат на модель-дефолт.
     [[ "$YT_CPU_LIMIT" =~ ^[0-9]+(\.[0-9]+)?$ ]] || YT_CPU_LIMIT="$YT_CPU_DEFAULT"
 
-    APP_DIR=/var/lib/casaos/apps/ytarchiver
+    APP_DIR=/opt/stacks/ytarchiver
     sudo mkdir -p "$APP_DIR"
-    # Heredoc без кавычек — подставляем ${YT_CPU_LIMIT}. В теле нет других $.
-    sudo tee "$APP_DIR/docker-compose.yml" >/dev/null << EOF
+    # Heredoc без кавычек — подставляем ${YT_CPU_LIMIT}/${MEM_LIMIT}. Других $ нет.
+    sudo tee "$APP_DIR/compose.yaml" >/dev/null << EOF
 name: ytarchiver
 services:
   backend:
@@ -133,28 +132,12 @@ networks:
   ytarchiver_net:
     name: ytarchiver_ytarchiver_net
     driver: bridge
-
-x-casaos:
-  architectures: [amd64, arm64]
-  author: pelinoleg
-  category: Media
-  description:
-    en_us: Self-hosted YouTube video archiver (yt-dlp + FastAPI + React)
-  developer: pelinoleg
-  icon: https://raw.githubusercontent.com/pelinoleg/ytarchiver/main/icon.png
-  index: /
-  main: frontend
-  port_map: "8081"
-  scheme: http
-  store_app_id: ytarchiver
-  tagline:
-    en_us: YouTube Archiver
-  title:
-    en_us: YT Archiver
 EOF
     cd "$APP_DIR"
     sudo docker compose pull
     sudo docker compose up -d   # применяет cpus-лимит к backend-контейнеру
+    # Старый CasaOS-каталог (compose принят по name: ytarchiver) — убираем.
+    sudo rm -rf /var/lib/casaos/apps/ytarchiver 2>/dev/null || true
 
     # Авто-применение YT_CPU_LIMIT при правке конфига (path-unit) и при boot'е —
     # чтобы менять лимит просто правкой конфига, без команд. docker update

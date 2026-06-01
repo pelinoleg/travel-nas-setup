@@ -12,7 +12,7 @@
 #
 #   travel-nas-update --full       — ПОЛНОЕ (~5-15 мин). Всё что выше плюс:
 #     - apt-get update && upgrade (включая kernel и tailscale)
-#     - docker compose pull + up -d по всем CasaOS-приложениям
+#     - docker compose pull + up -d по всем /opt/stacks стекам
 #     - На случай надо ребутнуться сам не делает — печатает варнинг
 #
 #   travel-nas-update --help       — справка
@@ -42,7 +42,7 @@ travel-nas-update — обновление travel-NAS из GitHub
 
   travel-nas-update --full       Полное (~5-15 мин): то же +
                                    apt-get update && upgrade -y
-                                   docker compose pull && up -d (все CasaOS-апсы)
+                                   docker compose pull && up -d (все /opt/stacks стеки)
                                  Если kernel или systemd обновились — печатает
                                  предупреждение что нужен reboot.
 
@@ -345,12 +345,12 @@ if [[ "$MODE" == "full" ]]; then
     fi
 
     # --- docker compose pull/up ---
-    # CasaOS хранит приложения в /var/lib/casaos/apps/<name>/docker-compose.yml.
+    # Стеки лежат в /opt/stacks/<name>/compose.yaml (+ сам Dockge в /opt/dockge).
     # Идём по каждому и pull/up -d. Контейнеры с last-pulled-image не перезапустятся.
-    if command -v docker &>/dev/null && [[ -d /var/lib/casaos/apps ]]; then
+    if command -v docker &>/dev/null && [[ -d /opt/stacks ]]; then
         echo ""
-        echo "→ Docker (CasaOS apps): pull + up -d..."
-        for compose in /var/lib/casaos/apps/*/docker-compose.yml; do
+        echo "→ Docker (/opt/stacks): pull + up -d..."
+        for compose in /opt/stacks/*/compose.yaml /opt/dockge/compose.yaml; do
             [[ -f "$compose" ]] || continue
             app_name=$(basename "$(dirname "$compose")")
             echo "  • $app_name"
@@ -364,14 +364,14 @@ if [[ "$MODE" == "full" ]]; then
                 echo "    ✗ pull failed"
             fi
         done
-        # Очистка старых образов (могут весить десятки GB на CasaOS)
+        # Очистка старых образов (могут весить десятки GB)
         if docker image prune -f 2>&1 | tail -1 | sed 's/^/  /'; then
             :
         fi
-        echo "  ✓ $DOCKER_UPDATED apps updated"
+        echo "  ✓ $DOCKER_UPDATED стеков обновлено"
     else
         echo ""
-        echo "→ Docker не установлен / нет CasaOS apps — пропуск"
+        echo "→ Docker не установлен / нет /opt/stacks — пропуск"
     fi
 fi
 

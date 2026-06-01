@@ -2,6 +2,31 @@
 
 Significant changes to travel-nas-setup. Newest first.
 
+## 2026-06-01 — CasaOS → Docker + Dockge; comitup на :80; Syncthing + Filebrowser
+
+### Почему
+CasaOS держал порт 80 (comitup captive-portal не работал в поле — отдавал «invalid
+request»), ставил devmon (асинхронный авто-маунт ломал формат диска), тяжёлый.
+
+### Сделано
+- **Удалён CasaOS.** Docker ставится напрямую (apt-репо) — модуль `16-casaos.sh` →
+  `16-docker.sh`. cgroup-memory фикс и NM no-docker.conf сохранены.
+- **Dockge** (новый `16b-dockge.sh`, :5001) — web-менеджер compose-стеков в `/opt/stacks`.
+- **Стеки переехали** в `/opt/stacks/<name>/compose.yaml` (с `name:`): photoview
+  (`/opt/photoview`→), ytarchiver (`/var/lib/casaos/apps`→, убран x-casaos). Существующие
+  контейнеры адаптируются по имени проекта.
+- **Новые стеки**: Syncthing (`18b`, :8384, `/mnt/storage/sync`) и Filebrowser
+  (`18c`, :8082, файл-менеджер + редактор `/etc/travel-nas`). Креды Filebrowser в
+  `/etc/travel-nas/filebrowser.conf` (НЕ в git).
+- **comitup web_port 8090 → 80** — captive-portal детект бьёт в :80 (порт теперь свободен).
+- devmon-ripples: формат диска глушит `udisks2` (а не devmon); pi-config-backup/
+  restore — `/opt/stacks` вместо `/var/lib/casaos`; thermal-guard EXCLUDE `^casaos`→`^dockge`.
+- setup.sh: компоненты `CASAOS` → `DOCKER DOCKGE` + `SYNCTHING FILEBROWSER`.
+- Новый `docs/DOCKER.md`.
+
+> Миграция: на боксе с CasaOS — `casaos-uninstall` (оставить Docker) → перезапуск
+> setup. `16-docker.sh` детектит остатки CasaOS и предупреждает.
+
 ## 2026-05-31 — fix: Pi 5 usb_max_current РАНО (диск отваливался до монтирования)
 
 ### Storage / Pi 5

@@ -33,16 +33,17 @@ if (
         exit 1
     fi
 
-    # web_port: 8090 — выбран осознанно чтобы не конфликтнуть с типичными
-    # NAS-портами: 80 (CasaOS), 8000 (Photoview), 8081 (yt-archiver),
-    # 8096/8097 (Jellyfin). Дашборд читает этот порт из /etc/comitup.conf
-    # динамически и показывает корректный URL без хардкода.
+    # web_port: 80 — captive-portal детект (Android /generate_204, Apple
+    # /hotspot-detect) бьёт именно в :80, поэтому портал должен быть там, иначе
+    # авто-попап «войти в сеть» не сработает в поле. Порт 80 свободен (CasaOS
+    # удалён, его gateway больше не держит :80). Дашборд читает порт из
+    # /etc/comitup.conf динамически и опускает :80 в URL.
     CONF=/etc/comitup.conf
     if [[ -f "$CONF" ]]; then
         if grep -qE '^[[:space:]]*web_port[[:space:]]*:' "$CONF"; then
-            sudo sed -i -E 's|^[[:space:]]*web_port[[:space:]]*:.*|web_port: 8090|' "$CONF"
+            sudo sed -i -E 's|^[[:space:]]*web_port[[:space:]]*:.*|web_port: 80|' "$CONF"
         else
-            echo "web_port: 8090" | sudo tee -a "$CONF" >/dev/null
+            echo "web_port: 80" | sudo tee -a "$CONF" >/dev/null
         fi
         # Рестарт демона — подхватит новый порт. Сервис может не бежать
         # (если не активен AP) — игнорируем код возврата.

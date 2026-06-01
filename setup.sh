@@ -72,9 +72,12 @@ MODULES=(
     13-log2ram
     14-zram
     15-comitup
-    16-casaos
+    16-docker
+    16b-dockge
     17-photoview
     18-ytarchiver
+    18b-syncthing
+    18c-filebrowser
     19-display
     20-desktop
     21-tailscale
@@ -125,7 +128,7 @@ export SETUP_REPO_ROOT="$REPO_ROOT"
 
 ALL_COMPONENTS="UPDATE UTILS STORAGE_MOUNT TG_NOTIFY SAMBA PI_BACKUP \
 PHOTO_BACKUP NAS_BACKUP WATCHDOG SYS_MONITOR POWER_MODE TG_LISTENER DAILY_SUM \
-LOG2RAM ZRAM COMITUP CASAOS PHOTOVIEW YTARCHIVER DISPLAY DESKTOP TAILSCALE VERIFY THERMAL_GUARD PI_TWEAKS CONF_PERMS"
+LOG2RAM ZRAM COMITUP DOCKER DOCKGE PHOTOVIEW YTARCHIVER SYNCTHING FILEBROWSER DISPLAY DESKTOP TAILSCALE VERIFY THERMAL_GUARD PI_TWEAKS CONF_PERMS"
 
 if [[ "${1:-}" == "--all" ]]; then
     SELECTED="$ALL_COMPONENTS"
@@ -153,10 +156,13 @@ Components:
   DAILY_SUM      Daily summary в Telegram (21:00) + JSON refresh 10мин
   LOG2RAM        Логи в RAM (microSD friendly)
   ZRAM           Сжатый swap
-  COMITUP        Field WiFi AP-режим
-  CASAOS         CasaOS (для Docker-приложений)
-  PHOTOVIEW      Photo gallery (Docker, после CASAOS)
-  YTARCHIVER     YouTube archiver (Docker, после CASAOS, UI на :8081)
+  COMITUP        Field WiFi AP-режим (captive portal на :80)
+  DOCKER         Docker engine (apt-репо) — основа для стеков
+  DOCKGE         Dockge — web-менеджер docker-compose стеков (:5001)
+  PHOTOVIEW      Photo gallery (Docker, после DOCKER, :8000)
+  YTARCHIVER     YouTube archiver (Docker, после DOCKER, :8081)
+  SYNCTHING      P2P-синхронизация папок (:8384, /mnt/storage/sync)
+  FILEBROWSER    Web файл-менеджер + редактор конфигов (:8082)
   DISPLAY        MHS35 + Python dashboard (X11 kiosk)
   DESKTOP        Ярлыки на десктоп (Dashboard, Setup, Storage Files, ...)
   TAILSCALE      Zero-config VPN — доступ к Pi из любой сети мира
@@ -184,17 +190,20 @@ else
         "DAILY_SUM"    "Daily summary (21:00) + JSON refresh"             ON \
         "LOG2RAM"      "Логи в RAM"                                       ON \
         "ZRAM"         "Сжатый swap"                                       ON \
-        "COMITUP"      "Полевой WiFi AP"                                  ON \
-        "CASAOS"       "CasaOS"                                           ON \
-        "PHOTOVIEW"    "Photoview (нужен CASAOS)"                         ON \
-        "YTARCHIVER"   "YT-Archiver (нужен CASAOS, :8081)"                ON \
+        "COMITUP"      "Полевой WiFi AP (captive portal :80)"             ON \
+        "DOCKER"       "Docker engine (основа для стеков)"                ON \
+        "DOCKGE"       "Dockge — web-UI для compose-стеков (:5001)"       ON \
+        "PHOTOVIEW"    "Photoview (нужен DOCKER, :8000)"                  ON \
+        "YTARCHIVER"   "YT-Archiver (нужен DOCKER, :8081)"                ON \
+        "SYNCTHING"    "Syncthing (синхронизация, :8384)"                 ON \
+        "FILEBROWSER"  "Filebrowser (файлы + конфиги, :8082)"             ON \
         "DISPLAY"      "MHS35 + dashboard"                                ON \
         "DESKTOP"      "Ярлыки на десктоп"                                ON \
         "TAILSCALE"    "Tailscale VPN (доступ к Pi из любой сети)"        ON \
         "VERIFY"       "Ежемесячный bit-rot/IO scrub storage"                  ON \
         "THERMAL_GUARD" "Защита от перегрева (MODE=warn по умолчанию)"    ON \
         "PI_TWEAKS"    "HW watchdog + EEPROM + WiFi-no-powersave + sysctl"  ON \
-        "CONF_PERMS"   "Авто-fix прав /etc/travel-nas/ при правке через CasaOS" ON \
+        "CONF_PERMS"   "Авто-fix прав /etc/travel-nas/ при правке через веб" ON \
         3>&1 1>&2 2>&3) || exit 0
 fi
 
@@ -272,8 +281,9 @@ Hostname: $(hostname).local"
     fi
 fi
 
-# Рекомендация ребута если ставили display / kernel-modules / dtparam
-if [[ -n "${DO_DISPLAY:-}" || -n "${DO_PI_TWEAKS:-}" ]]; then
+# Рекомендация ребута если ставили display / kernel-modules / dtparam /
+# docker (cgroup_enable=memory в cmdline.txt применяется только на boot).
+if [[ -n "${DO_DISPLAY:-}" || -n "${DO_PI_TWEAKS:-}" || -n "${DO_DOCKER:-}" ]]; then
     echo ""
     warn "Рекомендуется ребут для применения hostname и других изменений:"
     warn "  sudo reboot"

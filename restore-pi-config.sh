@@ -112,10 +112,7 @@ MENU=()
 [[ -f "$BACKUP_ROOT/etc/hosts"           ]] && MENU+=("HOSTS"      "/etc/hosts" OFF)
 [[ -f "$BACKUP_ROOT/etc/hostname"        ]] && MENU+=("HOSTNAME"   "/etc/hostname" OFF)
 [[ -d "$BACKUP_ROOT/etc/network"         ]] && MENU+=("NETWORK"    "/etc/network/" OFF)
-[[ -d "$BACKUP_ROOT/etc/casaos"          ]] && MENU+=("CASAOSETC"  "/etc/casaos/" ON)
-[[ -d "$BACKUP_ROOT/etc/conf.d"          ]] && MENU+=("DEVMON"     "/etc/conf.d/devmon" ON)
-[[ -d "$BACKUP_ROOT/var/lib/casaos"      ]] && MENU+=("CASAOSAPPS" "/var/lib/casaos/apps + db" ON)
-[[ -f "$BACKUP_ROOT/opt/photoview/docker-compose.yml" ]] && MENU+=("PHOTOVIEW" "/opt/photoview/ (Photoview compose)" ON)
+[[ -d "$BACKUP_ROOT/opt/stacks"          ]] && MENU+=("STACKS"     "/opt/stacks + /opt/dockge (compose-стеки)" ON)
 [[ -d "$BACKUP_ROOT/home"                ]] && MENU+=("USERHOME"   "~/.config (autostart/lxsession/pcmanfm) + ~/Desktop" ON)
 [[ -d "$BACKUP_ROOT/var/lib/travel-nas"  ]] && MENU+=("STATE"      "/var/lib/travel-nas/summary-queue.txt" OFF)
 [[ -d "$BACKUP_ROOT/boot"                ]] && MENU+=("BOOT"       "/boot/firmware/cmdline.txt + config.txt" OFF)
@@ -206,20 +203,10 @@ restore_tree() {
 [[ -n "${DO_HOSTS:-}" ]]      && restore_to "$BACKUP_ROOT/etc/hosts"     "/etc/hosts"
 [[ -n "${DO_HOSTNAME:-}" ]]   && restore_to "$BACKUP_ROOT/etc/hostname"  "/etc/hostname"
 [[ -n "${DO_NETWORK:-}" ]]    && restore_tree "$BACKUP_ROOT/etc/network" "/etc/network"
-[[ -n "${DO_CASAOSETC:-}" ]]  && restore_tree "$BACKUP_ROOT/etc/casaos"  "/etc/casaos"
-[[ -n "${DO_DEVMON:-}" ]]     && restore_to "$BACKUP_ROOT/etc/conf.d/devmon" "/etc/conf.d/devmon"
-[[ -n "${DO_PHOTOVIEW:-}" ]]  && {
-    restore_to "$BACKUP_ROOT/opt/photoview/docker-compose.yml" "/opt/photoview/docker-compose.yml"
-    info "Запусти Photoview: cd /opt/photoview && sudo docker compose up -d"
-}
-[[ -n "${DO_CASAOSAPPS:-}" ]] && {
-    if command -v casaos-cli &>/dev/null; then
-        [[ -d "$BACKUP_ROOT/var/lib/casaos/apps" ]] && restore_tree "$BACKUP_ROOT/var/lib/casaos/apps" "/var/lib/casaos/apps"
-        [[ -d "$BACKUP_ROOT/var/lib/casaos/db" ]]   && restore_tree "$BACKUP_ROOT/var/lib/casaos/db" "/var/lib/casaos/db"
-        info "Перезапусти CasaOS: sudo systemctl restart casaos casaos-gateway"
-    else
-        warn "CasaOS не установлен — пропускаю apps"
-    fi
+[[ -n "${DO_STACKS:-}" ]]     && {
+    restore_tree "$BACKUP_ROOT/opt/stacks" "/opt/stacks"
+    restore_tree "$BACKUP_ROOT/opt/dockge" "/opt/dockge"
+    info "Подними стеки: for s in /opt/stacks/* /opt/dockge; do (cd \$s && sudo docker compose up -d); done"
 }
 [[ -n "${DO_USERHOME:-}" ]]   && {
     USER_HOME="$BACKUP_ROOT/home"
@@ -267,10 +254,9 @@ info "Резервные копии в файлах с суффиксом: $BACK
 echo ""
 
 NEEDS_REBOOT=""
-[[ -n "${DO_BOOT:-}" || -n "${DO_FSTAB:-}" || -n "${DO_DEVMON:-}" || -n "${DO_HOSTNAME:-}" ]] && NEEDS_REBOOT="1"
+[[ -n "${DO_BOOT:-}" || -n "${DO_FSTAB:-}" || -n "${DO_HOSTNAME:-}" ]] && NEEDS_REBOOT="1"
 [[ -n "$NEEDS_REBOOT" ]] && { warn "Нужен ребут: sudo reboot"; }
 
 [[ -n "${DO_SAMBA:-}" ]]      && info "sudo systemctl restart smbd nmbd"
-[[ -n "${DO_CASAOSAPPS:-}" ]] && info "sudo systemctl restart casaos casaos-gateway"
 [[ -n "${DO_SYSTEMD:-}" ]]    && info "Включить таймеры: sudo systemctl enable --now <unit>.timer"
 echo ""

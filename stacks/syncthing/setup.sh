@@ -15,7 +15,7 @@ stack_pre() {
             -o "$tmp/v.tgz" 2>/dev/null && tar -xzf "$tmp/v.tgz" -C "$tmp" 2>/dev/null; then
         src="$(find "$tmp" -maxdepth 1 -type d -name 'syncthing-vellum*' | head -1)"
         if [[ -n "$src" ]]; then
-            sudo cp -R "$src/vellum-light" "$src/vellum-dark" "$gui/" 2>/dev/null || true
+            sudo cp -R "$src/vellum-light" "$src/vellum-light" "$gui/" 2>/dev/null || true
             sudo chown -R 1000:1000 "$gui"
             info "Syncthing: тема Vellum (light+dark) установлена"
         fi
@@ -26,15 +26,15 @@ stack_pre() {
 }
 
 stack_post() {
-    # Выставить Vellum-dark темой по умолчанию. config.xml syncthing создаёт при
+    # Выставить Vellum-light темой по умолчанию. config.xml syncthing создаёт при
     # первом старте — ждём его, правим <theme> при остановленном контейнере
     # (чтобы syncthing не перезатёр), перезапускаем. Идемпотентно.
     local cfg="/mnt/storage/_appdata/syncthing/config.xml" i
     for i in $(seq 1 15); do [[ -f "$cfg" ]] && break; sleep 1; done
     if [[ -f "$cfg" ]] && ! grep -q '<theme>vellum' "$cfg"; then
         sudo docker stop syncthing >/dev/null 2>&1 || true
-        sudo sed -i 's#<theme>[^<]*</theme>#<theme>vellum-dark</theme>#' "$cfg" 2>/dev/null || true
+        sudo sed -i 's#<theme>[^<]*</theme>#<theme>vellum-light</theme>#' "$cfg" 2>/dev/null || true
         sudo docker start syncthing >/dev/null 2>&1 || true
-        info "Syncthing: тема по умолчанию → vellum-dark"
+        info "Syncthing: тема по умолчанию → vellum-light"
     fi
 }

@@ -3,7 +3,15 @@
 stack_pre() {
     sudo install -d -o 1000 -g 1000 /mnt/storage/sync
     sudo install -d -o 1000 -g 1000 /mnt/storage/_appdata/syncthing
-    printf 'TZ=%s\n' "$(cat /etc/timezone 2>/dev/null || echo Etc/UTC)" | sudo tee "$STACK_DIR/.env" >/dev/null
+    # TZ + CPU-лимит хеширования (адаптивно под модель Pi) в .env.
+    local model st_cpu; model=$(tr -d '\0' < /proc/device-tree/model 2>/dev/null || echo "")
+    case "$model" in
+        *"Pi 5"*) st_cpu="2.5" ;;
+        *"Pi 4"*) st_cpu="2.0" ;;
+        *)        st_cpu="1.5" ;;
+    esac
+    printf 'TZ=%s\nST_CPU_LIMIT=%s\n' "$(cat /etc/timezone 2>/dev/null || echo Etc/UTC)" "$st_cpu" \
+        | sudo tee "$STACK_DIR/.env" >/dev/null
 
     # Тема Vellum (light+dark) для веб-морды. Кладём в <config>/gui/ — syncthing
     # покажет в Settings → GUI → Theme. Дефолт выставит stack_post. Тарболом,

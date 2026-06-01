@@ -15,24 +15,35 @@ stack_pre() {
     # shellcheck source=/dev/null
     source "$CONFIG_DIR/filebrowser.conf" 2>/dev/null || true
     [[ -n "$FB_USER" ]] || FB_USER="admin"
-    [[ -n "$FB_PASS" ]] || FB_PASS="changeme"
-    # Свежая установка / не задан пароль (placeholder "changeme" или пусто) →
-    # генерим случайный, пишем обратно в conf. Безопасный дефолт, виден в дашборде
-    # (Services), без копания в логах. Свой пароль (если вписал) не трогаем.
-    if [[ -z "$FB_PASS" || "$FB_PASS" == "changeme" ]]; then
-        # LC_ALL=C — иначе на UTF-8 locale tr давится бинарём (illegal byte seq).
-        FB_PASS="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 16)"
-        [[ ${#FB_PASS} -eq 16 ]] || FB_PASS="$(openssl rand -hex 8 2>/dev/null)"
-        [[ -n "$FB_PASS" ]] || FB_PASS="admin1234"
-        if grep -q '^FB_PASS=' "$CONFIG_DIR/filebrowser.conf" 2>/dev/null; then
-            sudo sed -i "s|^FB_PASS=.*|FB_PASS=\"$FB_PASS\"|" "$CONFIG_DIR/filebrowser.conf"
-        else
-            echo "FB_PASS=\"$FB_PASS\"" | sudo tee -a "$CONFIG_DIR/filebrowser.conf" >/dev/null
+    [[ "$FB_PASS" == "changeme" ]] && FB_PASS=""   # placeholder = ещё не задан
+
+    # Креды не заданы (свежая установка) → спрашиваем в wizard, если есть терминал.
+    # Иначе (--all / pipe) или если пароль оставили пустым — генерим случайный.
+    if [[ -z "$FB_PASS" ]]; then
+        if [[ -t 0 ]] && command -v whiptail &>/dev/null; then
+            local nu np
+            nu="$(whiptail --title "Filebrowser (:8082)" --inputbox \
+                  "Логин для веб-морды Filebrowser:" 9 60 "$FB_USER" 3>&1 1>&2 2>&3)" || nu=""
+            [[ -n "$nu" ]] && FB_USER="$nu"
+            np="$(whiptail --title "Filebrowser (:8082)" --passwordbox \
+                  "Пароль (пусто = сгенерю случайный, покажу в дашборде):" 9 64 3>&1 1>&2 2>&3)" || np=""
+            FB_PASS="$np"
         fi
-        info "Filebrowser: сгенерил случайный пароль (виден в дашборде → Services)"
+        if [[ -z "$FB_PASS" ]]; then
+            # LC_ALL=C — иначе на UTF-8 locale tr давится бинарём (illegal byte seq).
+            FB_PASS="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 16)"
+            [[ ${#FB_PASS} -eq 16 ]] || FB_PASS="$(openssl rand -hex 8 2>/dev/null)"
+            [[ -n "$FB_PASS" ]] || FB_PASS="admin1234"
+            info "Filebrowser: пароль сгенерён (виден в дашборде → Services)"
+        fi
+        # Пишем креды в conf (дашборд читает FB_PASS). printf — без sed-экранирования.
+        local U; U="$(getent passwd 1000 2>/dev/null | cut -d: -f1)"; U="${U:-root}"
+        { printf '# Filebrowser креды (:8082). Записано setup.sh. Дашборд показывает.\n'
+          printf 'FB_USER="%s"\n' "$FB_USER"
+          printf 'FB_PASS="%s"\n' "$FB_PASS"; } | sudo tee "$CONFIG_DIR/filebrowser.conf" >/dev/null
+        sudo chown "$U:$U" "$CONFIG_DIR/filebrowser.conf"
     fi
-    local U; U="$(getent passwd 1000 2>/dev/null | cut -d: -f1)"; U="${U:-root}"
-    sudo chown "$U:$U" "$CONFIG_DIR/filebrowser.conf"; sudo chmod 0600 "$CONFIG_DIR/filebrowser.conf"
+    sudo chmod 0600 "$CONFIG_DIR/filebrowser.conf" 2>/dev/null || true   # секрет → 600
 
     sudo docker stop filebrowser >/dev/null 2>&1 || true     # release bbolt lock
     [[ -f "$data/filebrowser.db" ]] || \

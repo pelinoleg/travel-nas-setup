@@ -243,6 +243,11 @@ if [[ -z "$STORAGE_DEV" ]]; then
 ВСЕ ДАННЫЕ на диске будут УДАЛЕНЫ. Точно продолжить?" 16 70; then
                     if (
                         set -e
+                        # devmon (CasaOS) и desktop-udisks АСИНХРОННО авто-монтят
+                        # свежую партицию → mkfs падает "is mounted". Глушим
+                        # devmon на время формата; trap вернёт его при любом выходе.
+                        sudo systemctl stop devmon@devmon.service 2>/dev/null || true
+                        trap 'sudo systemctl start devmon@devmon.service 2>/dev/null || true' EXIT
                         info "Размонтирую партиции на $SEL_DEV..."
                         for part in "${SEL_DEV}"?*; do
                             sudo umount "$part" 2>/dev/null || true
@@ -267,6 +272,10 @@ if [[ -z "$STORAGE_DEV" ]]; then
                         udevadm settle 2>/dev/null || true
                         _storage_umount_elsewhere "$PART"
                         sudo umount "$PART" 2>/dev/null || true
+                        # Стереть ФС-подпись ВНУТРИ партиции (флэшки идут с FAT/
+                        # exFAT) — wipefs диска её не трогает, а авто-монтер по ней
+                        # монтит обратно. Без этого mkfs снова падает "is mounted".
+                        sudo wipefs -a "$PART" 2>/dev/null || true
                         info "Форматирую $PART в ext4 (label='$CHOSEN_LABEL', reserved=0%)..."
                         sudo mkfs.ext4 -F -L "$CHOSEN_LABEL" -m 0 "$PART"
                     ); then

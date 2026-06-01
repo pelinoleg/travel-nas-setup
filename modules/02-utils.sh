@@ -28,20 +28,19 @@ if (
     sudo systemctl disable --now systemd-timesyncd 2>/dev/null || true
     sudo systemctl enable --now chrony 2>/dev/null || sudo systemctl enable --now chronyd 2>/dev/null || true
 
-    # /etc/motd — что увидит юзер при ssh-логине. Hostname берётся живой
-    # чтобы при перепрошивке (новое имя через Imager) MOTD не отставал.
+    # /etc/motd — что увидит юзер при логине. Hostname берётся живой (перепрошивка
+    # с новым именем не отстаёт). Узкий, без рамки — влезает на вертикальный
+    # MHS35-консоль (320px ≈ 40 колонок); рамка-бокс ломалась по горизонтали.
     HOST_LOCAL="$(hostname).local"
     sudo tee /etc/motd >/dev/null << EOF
 
-  ╔══════════════════════════════════════════════════════════╗
-  ║                      Travel-NAS                          ║
-  ║                                                          ║
-  ║   Dashboard:  http://${HOST_LOCAL}
-  ║   Re-config:  travel-nas-setup                           ║
-  ║   Update:     travel-nas-update                          ║
-  ║   Logs:       tail -F /mnt/storage/_logs/*.log                ║
-  ║   Backups:    /mnt/storage/{usb-imports,nas-backup}           ║
-  ╚══════════════════════════════════════════════════════════╝
+ Travel-NAS · ${HOST_LOCAL}
+ ─────────────────────────
+ Dashboard  http://${HOST_LOCAL}
+ Re-config  travel-nas-setup
+ Update     travel-nas-update
+ Logs       /mnt/storage/_logs/
+ Backups    /mnt/storage/
 
 EOF
     mark_ok "UTILS"

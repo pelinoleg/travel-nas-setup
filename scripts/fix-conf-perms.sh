@@ -32,6 +32,7 @@ declare -A SPECS=(
     [thermal-guard.conf]="$TARGET_USER:$TARGET_USER 644"
     [photo-backup.conf]="$TARGET_USER:$TARGET_USER 644"
     [yt-archiver.conf]="$TARGET_USER:$TARGET_USER 644"
+    [cpu-boost.conf]="$TARGET_USER:$TARGET_USER 644"
     [storage-info.conf]="$TARGET_USER:$TARGET_USER 644"
 )
 

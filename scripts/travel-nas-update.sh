@@ -98,6 +98,7 @@ declare -A SCRIPTS=(
     [99-travel-nas-power]=/etc/NetworkManager/dispatcher.d/99-travel-nas-power
     [touch-calibrate.sh]=/usr/local/bin/touch-calibrate.sh
     [screen-rotate.sh]=/usr/local/bin/screen-rotate.sh
+    [cpu-boost.sh]=/usr/local/bin/cpu-boost.sh
     [fix-conf-perms.sh]=/usr/local/bin/fix-conf-perms.sh
     [fast-shutdown.sh]=/usr/local/bin/fast-shutdown.sh
     [fast-reboot.sh]=/usr/local/bin/fast-reboot.sh
@@ -208,6 +209,8 @@ REQUIRED_CMDS=(
     "/usr/bin/systemctl restart comitup"
     "/usr/bin/systemctl stop nas-backup-runtime"
     "/usr/local/bin/nas-schedule.sh toggle"
+    "/usr/local/bin/cpu-boost.sh on"
+    "/usr/local/bin/cpu-boost.sh off"
     "/usr/bin/systemctl start --no-block nas-verify.service"
     "/usr/local/bin/thermal-guard.py --restore"
     "/usr/local/bin/touch-calibrate.sh"

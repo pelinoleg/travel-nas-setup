@@ -17,6 +17,29 @@ if (
     fetch_script "screen-rotate.sh"          "$SCRIPT_DIR/screen-rotate.sh"
     fetch_script "fast-shutdown.sh"          "$SCRIPT_DIR/fast-shutdown.sh"
     fetch_script "fast-reboot.sh"            "$SCRIPT_DIR/fast-reboot.sh"
+    fetch_script "cpu-boost.sh"              "$SCRIPT_DIR/cpu-boost.sh"
+
+    # CPU-boost conf (минуты буста) + boot-restore: если ребутнулись во время
+    # буста — вернуть лимиты на старте (transient-таймер ребут не переживает).
+    if [[ ! -f "$CONFIG_DIR/cpu-boost.conf" ]]; then
+        fetch_conf_example "cpu-boost.conf.example" "$CONFIG_DIR/cpu-boost.conf"
+        sudo chmod 0644 "$CONFIG_DIR/cpu-boost.conf"
+    fi
+    write_systemd_unit cpu-boost-restore.service << 'U'
+[Unit]
+Description=Restore docker CPU limits after boot (clear stale cpu-boost)
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/cpu-boost.sh off
+
+[Install]
+WantedBy=multi-user.target
+U
+    sudo systemctl daemon-reload
+    sudo systemctl enable cpu-boost-restore.service 2>/dev/null || true
 
     # systemd-shutdown hook: вызывается в КОНЦЕ shutdown'а (после unit
     # stops, перед halt syscall). Делает lazy umount диска + SysRq emergency
@@ -71,6 +94,8 @@ $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/fast-reboot.sh
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/systemctl restart comitup
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/systemctl stop nas-backup-runtime
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/nas-schedule.sh toggle
+$DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/cpu-boost.sh on
+$DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/cpu-boost.sh off
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/bin/systemctl start --no-block nas-verify.service
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/thermal-guard.py --restore
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/touch-calibrate.sh

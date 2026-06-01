@@ -50,6 +50,7 @@ STORAGE_MOUNT = "/mnt/storage"
 
 SERVICES_CONF      = Path("/etc/travel-nas/services.conf")
 FILEBROWSER_CONF   = Path("/etc/travel-nas/filebrowser.conf")
+CPU_BOOST_STATE    = Path("/var/lib/travel-nas/cpu-boost.state")
 YT_ARCHIVER_CONF   = Path("/etc/travel-nas/yt-archiver.conf")
 NAS_STATUS_JSON    = Path("/var/lib/travel-nas/nas-backup-status.json")
 DAILY_SUMMARY_JSON = Path("/var/lib/travel-nas/daily-summary.json")
@@ -548,6 +549,21 @@ def _nas_schedule():
 
 
 c_nas_sched = Cached(_nas_schedule, 15)
+
+
+def _cpu_boost():
+    """(active, remaining_min) для CPU-boost. Читает state-файл (epoch конца)."""
+    try:
+        if not CPU_BOOST_STATE.exists():
+            return (False, 0)
+        end = int(CPU_BOOST_STATE.read_text().splitlines()[0].strip())
+        rem = end - int(time.time())
+        return (True, (rem + 59) // 60) if rem > 0 else (False, 0)
+    except Exception:
+        return (False, 0)
+
+
+c_boost = Cached(_cpu_boost, 3)
 
 
 def _parse_size(s):
@@ -2959,14 +2975,23 @@ def page_system_detail():
             screen.blit(v, (SCREEN_W - 10 - v.get_width(), y))
             y += 16
 
-    # === Bottom: Back | Refresh ===
-    half_w = (SCREEN_W - 28) // 2
+    # === Bottom: Back | Boost | Refresh ===
+    # Boost снимает docker CPU-лимиты на N мин (под нагрузку + вентилятор),
+    # авто-возврат. Активен — показываем остаток и красную «Stop».
+    boost_on, boost_rem = c_boost.get()
+    third = (SCREEN_W - 32) // 3
     back = Btn("Back", "back_to_status",
-               pygame.Rect(8, SCREEN_H - 54, half_w, 46), MUTED)
+               pygame.Rect(8, SCREEN_H - 54, third, 46), MUTED)
+    if boost_on:
+        boost = Btn(f"Stop {boost_rem}m", "cpu_boost_toggle",
+                    pygame.Rect(8 + third + 8, SCREEN_H - 54, third, 46), WARN)
+    else:
+        boost = Btn("⚡ Boost", "cpu_boost_toggle",
+                    pygame.Rect(8 + third + 8, SCREEN_H - 54, third, 46), ACCENT)
     refresh = Btn("Refresh", "system_refresh",
-                  pygame.Rect(SCREEN_W - 8 - half_w, SCREEN_H - 54, half_w, 46), INFO)
-    draw_button(back); draw_button(refresh)
-    btns.extend([back, refresh])
+                  pygame.Rect(8 + 2 * (third + 8), SCREEN_H - 54, third, 46), INFO)
+    draw_button(back); draw_button(boost); draw_button(refresh)
+    btns.extend([back, boost, refresh])
     return btns
 
 
@@ -3482,6 +3507,23 @@ def do_action(action):
         else:
             toast("yt-archiver: API request failed", ERROR)
     elif action == "open_system_detail":  go(PAGE_SYSTEM_DETAIL)
+    elif action == "cpu_boost_toggle":
+        on, _ = c_boost.get()
+        sub = "off" if on else "on"
+        try:
+            r = subprocess.run(["sudo", "-n", "/usr/local/bin/cpu-boost.sh", sub],
+                               capture_output=True, text=True, timeout=20)
+            ok = (r.returncode == 0)
+        except Exception:
+            ok = False
+        c_boost.invalidate()
+        if not ok:
+            toast("CPU boost: команда не прошла", ERROR)
+        elif on:
+            toast("CPU boost выключен — лимиты вернулись", INFO)
+        else:
+            _, rem = c_boost.get()
+            toast(f"⚡ CPU boost ON — лимиты сняты на {rem}м", ACCENT)
     elif action == "system_refresh":
         c_top_cpu.invalidate(); c_top_mem.invalidate()
         toast("Refreshing…", INFO)

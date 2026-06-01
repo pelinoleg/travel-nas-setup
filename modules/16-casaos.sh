@@ -35,6 +35,15 @@ if command -v docker &>/dev/null; then
     fetch_script "docker-mgr.sh" "$SCRIPT_DIR/docker-mgr.sh"
 fi
 
+# memory cgroup: на PiOS по умолчанию ВЫКЛЮЧЕН (только cpuset/cpu/io/pids) →
+# docker memory-лимиты молча отбрасываются ("kernel does not support memory
+# limit"). cmdline.txt — ОДНА строка, параметры через пробел: дописываем в конец.
+CMDLINE=/boot/firmware/cmdline.txt
+if [[ -f "$CMDLINE" ]] && ! grep -q 'cgroup_enable=memory' "$CMDLINE"; then
+    sudo sed -i 's/$/ cgroup_enable=memory cgroup_memory=1/' "$CMDLINE"
+    warn "Включил memory cgroup в cmdline.txt — применится после reboot (docker memory-лимиты заработают)."
+fi
+
 # NetworkManager: игнорим docker bridge/veth/br-* интерфейсы. Без этого
 # каждый docker start/stop генерит NM state-change → desktop notification
 # с именем вида "You are now connected to vetha45aeae" → выглядит как

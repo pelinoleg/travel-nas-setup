@@ -61,6 +61,7 @@ sudo curl -fsSL "https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/ma
 | 📺 **YTARCHIVER** | YouTube archiver (Docker, после DOCKER, UI на `:8081`) |
 | 🔄 **SYNCTHING** | P2P-синхронизация папок (`:8384`, данные `/mnt/storage/sync`) |
 | 📂 **FILEBROWSER** | Web файл-менеджер + редактор конфигов (`:8082`, монтирует диск + `/etc/travel-nas`) |
+| 🗂 **TINYFILEMANAGER** | Лёгкий PHP файл-менеджер, только диск (`:8085`, креды в `tinyfilemanager.conf`) |
 | 📋 **DOZZLE** | Live-логи всех Docker-контейнеров в вебе (`:8083`, stateless) |
 | 🩺 **SCRUTINY** | SMART-здоровье диска T7 — температура, износ, bad sectors (`:8084`) |
 | 🎵 **NAVIDROME** | Стриминг музыки (Subsonic API), библиотека `/mnt/storage/media/Music` (`:4533`) |
@@ -224,6 +225,7 @@ Auto-логика (при `pref=auto`):
 | Photoview | 8000 | фото-галерея (в UI пути `/storage/*`, см. ниже) |
 | YT-Archiver | 8081 | YouTube-архив |
 | Filebrowser | 8082 | файлы + редактор конфигов |
+| TinyFileManager | 8085 | лёгкий файл-менеджер (только диск) |
 | Dozzle | 8083 | live-логи контейнеров |
 | Scrutiny | 8084 | SMART-здоровье T7 |
 | Syncthing | 8384 | синхронизация папок |

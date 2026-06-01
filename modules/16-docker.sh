@@ -27,6 +27,18 @@ else
 fi
 
 sudo systemctl enable --now docker 2>/dev/null || true
+
+# Docker должен стартовать ПОСЛЕ монтирования /mnt/storage. Иначе на ребуте
+# daemon поднимается раньше fstab-mount'а → stateful-контейнеры (photoview-db,
+# ytarchiver) биндятся на пустой mountpoint (диск ещё не примонтирован) → видят
+# пустые данные / падают. RequiresMountsFor заставляет ждать mount-юнит диска.
+sudo mkdir -p /etc/systemd/system/docker.service.d
+sudo tee /etc/systemd/system/docker.service.d/wait-storage.conf >/dev/null << 'EOF'
+[Unit]
+RequiresMountsFor=/mnt/storage
+EOF
+sudo systemctl daemon-reload 2>/dev/null || true
+
 # Юзер (uid 1000) в группу docker — чтобы docker без sudo (применится после релогина).
 INSTALL_USER="$(getent passwd 1000 2>/dev/null | cut -d: -f1)"
 [[ -n "$INSTALL_USER" ]] && sudo usermod -aG docker "$INSTALL_USER" 2>/dev/null || true

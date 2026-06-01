@@ -1,0 +1,8 @@
+# TinyFileManager — креды веб-морды (:8085). НЕ в git (секрет).
+# setup.sh хеширует пароль (bcrypt) и пишет в config.php стека. Сменишь пароль —
+# перезапусти wizard `travel-nas-setup` с галкой TinyFileManager: он
+# перегенерит config.php из этого файла (update --full только pull'ит образы,
+# хук stack_pre не гоняет).
+
+TFM_USER="admin"
+TFM_PASS="changeme"

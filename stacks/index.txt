@@ -6,6 +6,7 @@ photoview
 ytarchiver
 syncthing
 filebrowser
+tinyfilemanager
 dozzle
 scrutiny
 navidrome

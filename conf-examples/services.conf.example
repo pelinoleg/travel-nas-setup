@@ -39,7 +39,10 @@ Syncthing=http://{host}:8384
 
 Filebrowser=http://{host}:8082
     Файл-менеджер + редактор конфигов
-    Логин: {user} / <твой FB_PASS>  (смени!)
+    (логин/пароль admin дашборд подставит из filebrowser.conf)
+
+TinyFileManager=http://{host}:8085
+    Лёгкий файл-менеджер (только диск). Логин {user} / из tinyfilemanager.conf
 
 Dozzle=http://{host}:8083
     Live-логи всех Docker-контейнеров

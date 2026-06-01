@@ -2,6 +2,26 @@
 
 Significant changes to travel-nas-setup. Newest first.
 
+## 2026-06-01 — Фиксы стеков + TinyFileManager + Vellum + автозапуск
+
+### Фиксы
+- **Автозапуск на ребуте**: docker.service drop-in `RequiresMountsFor=/mnt/storage`
+  (стартует после монтирования диска) + `travel-nas-stacks.service` (oneshot
+  `up -d` всех стеков). Лечит «все докеры в stop после reboot» (гонка docker vs mount).
+- **ytarchiver порт кликабельный в Dockge**: `ports` переведён с длинного синтаксиса
+  (`target/published`) на короткий `"8081:80"` — Dockge парсит только его.
+- **Filebrowser пароль**: образ LSIO/s6 генерит случайный пароль в БД (bbolt,
+  залочена сервером — `users add` извне не работал, 403). Теперь `stack_post` ловит
+  его из логов → `filebrowser.conf` (`FB_GENERATED_PASS`); дашборд (Services)
+  показывает `admin / <пароль>`.
+
+### Новое
+- **TinyFileManager** (:8085) — лёгкий PHP файл-менеджер, отдаёт только диск (без
+  `/etc`-секретов). Креды детерминированы: `config.php` с bcrypt-хешем из
+  `tinyfilemanager.conf` (хеш генерит php самого образа).
+- **Syncthing Vellum**: тема (light+dark) ставится в `<config>/gui/` из репо
+  pelinoleg/syncthing-vellum; дефолт `vellum-dark` (правка `config.xml`).
+
 ## 2026-06-01 — Стеки Dozzle, Scrutiny, Navidrome
 
 - **Dozzle** (:8083) — live-логи всех контейнеров, stateless.

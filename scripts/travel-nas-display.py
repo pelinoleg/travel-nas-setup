@@ -47,6 +47,7 @@ ERROR_LOG = Path("/tmp/travel-nas-display.error.log")
 STORAGE_MOUNT = "/mnt/storage"
 
 SERVICES_CONF      = Path("/etc/travel-nas/services.conf")
+FILEBROWSER_CONF   = Path("/etc/travel-nas/filebrowser.conf")
 YT_ARCHIVER_CONF   = Path("/etc/travel-nas/yt-archiver.conf")
 NAS_STATUS_JSON    = Path("/var/lib/travel-nas/nas-backup-status.json")
 DAILY_SUMMARY_JSON = Path("/var/lib/travel-nas/daily-summary.json")
@@ -66,6 +67,7 @@ SERVICES_DEFAULTS = [
     ("yt-archiver", "http://{host}:8081"),
     ("Syncthing",   "http://{host}:8384"),
     ("Filebrowser", "http://{host}:8082"),
+    ("TinyFileManager", "http://{host}:8085"),
     ("Dozzle",      "http://{host}:8083"),
     ("Scrutiny",    "http://{host}:8084"),
     ("Navidrome",   "http://{host}:4533"),
@@ -733,6 +735,24 @@ def _parse_services_conf(text):
     return out
 
 
+def _filebrowser_cred():
+    """'Логин: admin / <pass>' из filebrowser.conf (пароль Filebrowser генерит
+    сам при первой инициализации, setup.sh ловит из логов). None если нет."""
+    try:
+        if not FILEBROWSER_CONF.exists():
+            return None
+        user, pw = "admin", ""
+        for line in FILEBROWSER_CONF.read_text().splitlines():
+            line = line.strip()
+            if line.startswith("FB_USER="):
+                user = line.split("=", 1)[1].strip().strip('"').strip("'") or user
+            elif line.startswith("FB_GENERATED_PASS="):
+                pw = line.split("=", 1)[1].strip().strip('"').strip("'")
+        return f"Логин: {user} / {pw}" if pw else None
+    except Exception:
+        return None
+
+
 def load_services():
     """Возвращает [(name, url)] — из /etc/travel-nas/services.conf или дефолты.
     {host}/{ip} в URL подставляются текущими значениями."""
@@ -754,13 +774,17 @@ def load_services():
     ]
     ip = c_ip.get() or "?"
     host = f"{socket.gethostname()}.local"
-    return [
-        (n,
-         u.replace("{host}", host).replace("{ip}", ip).replace("{user}", SSH_USER),
-         [note.replace("{host}", host).replace("{ip}", ip).replace("{user}", SSH_USER) for note in notes],
-         inline)
-        for n, u, notes, inline in items
-    ]
+    fb_cred = _filebrowser_cred()
+    out = []
+    for n, u, notes, inline in items:
+        notes2 = [note.replace("{host}", host).replace("{ip}", ip).replace("{user}", SSH_USER) for note in notes]
+        # Filebrowser: дописываем актуальный логин/пароль из filebrowser.conf.
+        if n == "Filebrowser" and fb_cred:
+            notes2.append(fb_cred)
+        out.append((n,
+                    u.replace("{host}", host).replace("{ip}", ip).replace("{user}", SSH_USER),
+                    notes2, inline))
+    return out
 
 
 def health_status():

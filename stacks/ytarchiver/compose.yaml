@@ -71,9 +71,7 @@ services:
     networks:
       - ytarchiver_net
     ports:
-      - target: 80
-        published: "8081"
-        protocol: tcp
+      - "8081:80"   # короткий синтаксис → Dockge делает порт кликабельным
 
 networks:
   ytarchiver_net:

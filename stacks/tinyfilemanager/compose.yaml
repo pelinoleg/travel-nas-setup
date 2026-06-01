@@ -1,0 +1,16 @@
+# TinyFileManager — лёгкий PHP файл-менеджер (один скрипт). Креды — в config.php
+# ($auth_users с bcrypt-хешем), генерится в setup.sh из tinyfilemanager.conf.
+# Отдаёт ТОЛЬКО диск /mnt/storage (в отличие от filebrowser не монтит /etc-секреты).
+name: tinyfilemanager
+services:
+  tinyfilemanager:
+    image: tinyfilemanager/tinyfilemanager:master
+    container_name: tinyfilemanager
+    restart: unless-stopped
+    environment:
+      - TZ=${TZ:-Etc/UTC}
+    ports:
+      - "8085:80"
+    volumes:
+      - /mnt/storage:/var/www/html/data
+      - /mnt/storage/_appdata/tinyfilemanager/config.php:/var/www/html/config.php:ro

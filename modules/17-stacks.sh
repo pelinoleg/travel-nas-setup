@@ -10,6 +10,30 @@
 STACKS_SRC="${SETUP_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/stacks"
 [[ -f "$STACKS_SRC/index.txt" ]] || return 0
 
+# Boot-сервис: на ребуте поднимает ВСЕ стеки после docker + монтирования диска.
+# restart:unless-stopped иногда не вытягивает (гонка с mount, ручной stop) — этот
+# oneshot гарантирует что после power-cycle всё на месте. up -d идемпотентен.
+if command -v docker &>/dev/null; then
+    write_systemd_unit travel-nas-stacks.service << 'UNIT'
+[Unit]
+Description=Travel-NAS: поднять все docker-стеки после монтирования диска
+After=docker.service network-online.target
+Requires=docker.service
+RequiresMountsFor=/mnt/storage
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/bash -c 'for c in /opt/stacks/*/compose.yaml /opt/dockge/compose.yaml; do [ -f "$c" ] && docker compose -f "$c" up -d || true; done'
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+    sudo systemctl daemon-reload 2>/dev/null || true
+    sudo systemctl enable travel-nas-stacks.service 2>/dev/null || true
+fi
+
 while read -r name; do
     name="${name%%#*}"; name="$(echo "$name" | xargs)"
     [[ -n "$name" ]] || continue

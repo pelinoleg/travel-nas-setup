@@ -2,13 +2,7 @@
 
 info "=== Docker ==="
 
-# Detect leftover CasaOS (старые установки). CasaOS держит :80 — мешает comitup'у.
-if command -v casaos-cli &>/dev/null || systemctl list-unit-files 2>/dev/null | grep -q '^casaos'; then
-    warn "Обнаружен CasaOS. Он занимает порт 80 (мешает comitup в поле) и больше"
-    warn "не нужен. Удали: 'casaos-uninstall' (Docker оставит), потом перезапусти setup."
-fi
-
-# Docker уже стоит (в т.ч. от CasaOS) → не переустанавливаем.
+# Docker уже стоит → не переустанавливаем (идемпотентно при повторном setup).
 if command -v docker &>/dev/null && sudo docker info &>/dev/null; then
     info "Docker уже установлен ($(docker --version 2>/dev/null | awk '{print $3}' | tr -d ,))"
 elif (

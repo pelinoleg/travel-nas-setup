@@ -136,8 +136,6 @@ EOF
     cd "$APP_DIR"
     sudo docker compose pull
     sudo docker compose up -d   # применяет cpus-лимит к backend-контейнеру
-    # Старый CasaOS-каталог (compose принят по name: ytarchiver) — убираем.
-    sudo rm -rf /var/lib/casaos/apps/ytarchiver 2>/dev/null || true
 
     # Авто-применение YT_CPU_LIMIT при правке конфига (path-unit) и при boot'е —
     # чтобы менять лимит просто правкой конфига, без команд. docker update

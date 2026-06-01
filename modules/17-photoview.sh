@@ -74,9 +74,6 @@ EOF
 
     cd /opt/stacks/photoview
     sudo docker compose up -d
-    # Старый каталог CasaOS-эпохи. compose уже принят по name: photoview
-    # (тот же проект + те же bind-mount данные) → можно убрать.
-    sudo rm -rf /opt/photoview 2>/dev/null || true
 ); then
     mark_ok "PHOTOVIEW" "http://$(hostname).local:8000 (UI path: /storage/usb-imports)"
 else

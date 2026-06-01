@@ -46,7 +46,6 @@ stacks/<name>/
 | yt-archiver | 8081 | YouTube-архиватор |
 | Syncthing | 8384 | синхронизация (+22000 sync, 21027 discovery) |
 | Filebrowser | 8082 | файлы + редактор конфигов |
-| TinyFileManager | 8085 | лёгкий файл-менеджер (только диск) |
 | Dozzle | 8083 | live-логи контейнеров (stateless) |
 | Scrutiny | 8084 | SMART-здоровье диска |
 | Navidrome | 4533 | стриминг музыки |
@@ -56,7 +55,6 @@ stacks/<name>/
 - **ytarchiver** — `/opt/stacks/ytarchiver`, данные `/mnt/storage/media/YT-Archiver`. CPU/RAM-лимит через `${YT_CPU_LIMIT}`/`${MEM_LIMIT}` в `.env` (пишется `stack_pre`, адаптивно по модели Pi).
 - **syncthing** — PUID/PGID=1000, данные `/mnt/storage/sync`, конфиг `/mnt/storage/_appdata/syncthing`.
 - **filebrowser** — PUID/PGID=1000, монтирует `/mnt/storage` (`/srv/storage`) и `/etc/travel-nas` (`/srv/config`).
-- **tinyfilemanager** — PHP-файл-менеджер (один скрипт), отдаёт только `/mnt/storage`. Креды — `config.php` (bcrypt-хеш из `tinyfilemanager.conf`), `setup.sh` генерит хеш через php самого образа.
 - **dozzle** — live-логи контейнеров, читает `docker.sock:ro`. Stateless (нет appdata, нет setup.sh).
 - **scrutiny** — SMART-мониторинг (omnibus: web+influxdb+collector). `setup.sh` резолвит блок-устройство диска хранилища (T7) в `.env` (`SCRUTINY_DEV`) и пробрасывает его + `cap SYS_RAWIO/SYS_ADMIN` для smartctl.
 - **navidrome** — стриминг музыки, библиотека `/mnt/storage/media/Music:ro`, база в appdata. User 1000.
@@ -73,8 +71,7 @@ stacks/<name>/
 **Безопасность**: монтирует **весь** `/etc/travel-nas/` (секреты: токен бота,
 пароль NAS) и бежит PUID=1000 (иначе не прочитать 600-секреты) — кто залогинится,
 видит секреты. Не открывай :8082 наружу. После правки конфига через веб
-`CONF_PERMS` path-unit вернёт owner/mode. (TinyFileManager :8085 секреты НЕ
-монтирует — отдаёт только диск, безопаснее для просто файлов.)
+`CONF_PERMS` path-unit вернёт owner/mode.
 
 ## Автозапуск стеков на ребуте
 Две вещи, чтобы после power-cycle всё поднялось (а не висело в `stop`):

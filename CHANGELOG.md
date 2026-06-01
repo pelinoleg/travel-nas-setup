@@ -2,12 +2,17 @@
 
 Significant changes to travel-nas-setup. Newest first.
 
-## 2026-06-01 — Фиксы стеков + TinyFileManager + Vellum + автозапуск
+## 2026-06-01 — Фиксы стеков + Vellum + автозапуск
 
 ### Фиксы
 - **Автозапуск на ребуте**: docker.service drop-in `RequiresMountsFor=/mnt/storage`
   (стартует после монтирования диска) + `travel-nas-stacks.service` (oneshot
   `up -d` всех стеков). Лечит «все докеры в stop после reboot» (гонка docker vs mount).
+- **MHS35-драйвер: повторный setup больше не спрашивает** — детект по
+  `dtoverlay=mhs35` в config.txt (персистентно) вместо `/tmp/LCD-show` (чистится
+  ребутом) + tty-guard (не висит на `read` в неинтерактиве).
+- **TinyFileManager убран** — образ `tinyfilemanager:master` только amd64, на
+  arm64 (Pi) нет манифеста.
 - **ytarchiver порт кликабельный в Dockge**: `ports` переведён с длинного синтаксиса
   (`target/published`) на короткий `"8081:80"` — Dockge парсит только его.
 - **Filebrowser пароль**: образ LSIO/s6 генерит случайный пароль в БД (bbolt,
@@ -16,9 +21,6 @@ Significant changes to travel-nas-setup. Newest first.
   показывает `admin / <пароль>`.
 
 ### Новое
-- **TinyFileManager** (:8085) — лёгкий PHP файл-менеджер, отдаёт только диск (без
-  `/etc`-секретов). Креды детерминированы: `config.php` с bcrypt-хешем из
-  `tinyfilemanager.conf` (хеш генерит php самого образа).
 - **Syncthing Vellum**: тема (light+dark) ставится в `<config>/gui/` из репо
   pelinoleg/syncthing-vellum; дефолт `vellum-dark` (правка `config.xml`).
 

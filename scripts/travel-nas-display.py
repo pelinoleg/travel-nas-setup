@@ -67,7 +67,6 @@ SERVICES_DEFAULTS = [
     ("yt-archiver", "http://{host}:8081"),
     ("Syncthing",   "http://{host}:8384"),
     ("Filebrowser", "http://{host}:8082"),
-    ("TinyFileManager", "http://{host}:8085"),
     ("Dozzle",      "http://{host}:8083"),
     ("Scrutiny",    "http://{host}:8084"),
     ("Navidrome",   "http://{host}:4533"),

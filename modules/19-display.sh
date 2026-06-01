@@ -168,8 +168,17 @@ else
     mark_fail "DISPLAY_DASHBOARD" "autostart setup failed"
 fi
 
-# Драйвер MHS35 — только если ещё не установлен
-if [[ ! -f /etc/X11/xorg.conf.d/40-libinput.conf.bak ]] && [[ ! -d /tmp/LCD-show ]]; then
+# Драйвер MHS35 — ставим только если ещё не стоит. Надёжный признак установки —
+# строка dtoverlay=mhs35 в config.txt (персистентна, переживает ребут; в отличие
+# от /tmp/LCD-show, который чистится при ребуте → раньше спрашивал повторно).
+MHS_CONFIG=/boot/firmware/config.txt
+[[ -f "$MHS_CONFIG" ]] || MHS_CONFIG=/boot/config.txt
+if grep -qE '^[[:space:]]*dtoverlay=mhs35' "$MHS_CONFIG" 2>/dev/null; then
+    info "Драйвер MHS35 уже установлен (dtoverlay=mhs35 в config.txt) — пропускаю"
+elif [[ ! -t 0 ]]; then
+    # Неинтерактивный запуск (--all / pipe) — не висим на read, просто подсказываем.
+    info "Драйвер MHS35 не установлен. Запусти интерактивно: cd /tmp/LCD-show && sudo ./MHS35-show 90 (РЕБУТНЕТ Pi)"
+else
     warn "Драйвер MHS35 РЕБУТИТ Pi!"
     echo "Запустить установку драйвера MHS35 сейчас? (y/N)"
     read -r ans
@@ -185,6 +194,4 @@ if [[ ! -f /etc/X11/xorg.conf.d/40-libinput.conf.bak ]] && [[ ! -d /tmp/LCD-show
     else
         info "Драйвер MHS35 пропущен (запусти потом: cd /tmp/LCD-show && sudo ./MHS35-show 90)"
     fi
-else
-    info "Драйвер MHS35 уже установлен"
 fi

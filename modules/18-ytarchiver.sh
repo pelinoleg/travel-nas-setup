@@ -186,7 +186,9 @@ EOF
     sudo systemctl daemon-reload
     sudo systemctl enable --now yt-cpu-apply.service yt-cpu-apply.path
 ); then
-    mark_ok "YTARCHIVER" "http://$(hostname).local:8081 (CPU≤${YT_CPU_LIMIT})"
+    # YT_CPU_LIMIT живёт ВНУТРИ subshell выше — снаружи он unbound (set -u → краш
+    # всего setup.sh). Не ссылаемся на него здесь.
+    mark_ok "YTARCHIVER" "http://$(hostname).local:8081"
 else
     mark_fail "YTARCHIVER" "docker compose failed"
 fi

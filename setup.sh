@@ -253,6 +253,7 @@ done
 # =============================================================================
 # Загрузка модулей — каждый сам решит запускаться или нет (по DO_*)
 # =============================================================================
+INSTALL_START=$SECONDS   # отсчёт времени установки (после выбора в меню)
 for m in "${MODULES[@]}"; do
     mod_file="$MODULES_DIR/${m}.sh"
     if [[ -f "$mod_file" ]]; then
@@ -287,8 +288,15 @@ if [[ ${#FAILED[@]} -gt 0 ]]; then
     done
 fi
 
+# Длительность установки (h/m/s по необходимости)
+DUR=$(( SECONDS - INSTALL_START ))
+if   (( DUR >= 3600 )); then ELAPSED="$(( DUR/3600 ))ч $(( (DUR%3600)/60 ))м $(( DUR%60 ))с"
+elif (( DUR >= 60   )); then ELAPSED="$(( DUR/60 ))м $(( DUR%60 ))с"
+else                         ELAPSED="${DUR}с"; fi
+
 echo ""
 IP=$(hostname -I | awk '{print $1}')
+echo "Время:    $ELAPSED"
 echo "IP:       $IP"
 echo "Hostname: $(hostname).local"
 
@@ -308,6 +316,7 @@ $(printf '• %s\n' "${FAILED[@]}")"
 
     REPORT+="
 
+⏱ Время: $ELAPSED
 IP: $IP
 Hostname: $(hostname).local"
 

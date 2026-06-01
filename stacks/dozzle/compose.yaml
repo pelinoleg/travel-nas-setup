@@ -1,0 +1,14 @@
+# Dozzle — live-просмотр логов всех контейнеров в вебе. Stateless: читает
+# docker.sock read-only, без appdata/БД. NO_ANALYTICS глушит телеметрию.
+name: dozzle
+services:
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: dozzle
+    restart: unless-stopped
+    environment:
+      - DOZZLE_NO_ANALYTICS=true
+    ports:
+      - "8083:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro

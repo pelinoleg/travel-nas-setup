@@ -41,6 +41,9 @@ Filebrowser=http://{host}:8082
     Файл-менеджер + редактор конфигов
     Логин: {user} / <твой FB_PASS>  (смени!)
 
+Dozzle=http://{host}:8083
+    Live-логи всех Docker-контейнеров
+
 # Компактный inline для коротких записей:
 >Samba=smb://{host}/travel-nas
 >SSH=ssh {user}@{host}

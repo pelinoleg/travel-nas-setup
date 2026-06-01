@@ -66,6 +66,7 @@ SERVICES_DEFAULTS = [
     ("yt-archiver", "http://{host}:8081"),
     ("Syncthing",   "http://{host}:8384"),
     ("Filebrowser", "http://{host}:8082"),
+    ("Dozzle",      "http://{host}:8083"),
     ("Samba",       "smb://{host}/travel-nas"),
     ("SSH",         "ssh {user}@{host}"),
 ]

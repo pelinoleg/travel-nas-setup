@@ -46,12 +46,14 @@ stacks/<name>/
 | yt-archiver | 8081 | YouTube-архиватор |
 | Syncthing | 8384 | синхронизация (+22000 sync, 21027 discovery) |
 | Filebrowser | 8082 | файлы + редактор конфигов |
+| Dozzle | 8083 | live-логи контейнеров (stateless) |
 
 ## Стеки
 - **photoview** — `/opt/stacks/photoview`, БД на `/mnt/storage/_appdata/photoview` (mariadb uid 999), диск как `/storage:ro`.
 - **ytarchiver** — `/opt/stacks/ytarchiver`, данные `/mnt/storage/media/YT-Archiver`. CPU/RAM-лимит через `${YT_CPU_LIMIT}`/`${MEM_LIMIT}` в `.env` (пишется `stack_pre`, адаптивно по модели Pi).
 - **syncthing** — PUID/PGID=1000, данные `/mnt/storage/sync`, конфиг `/mnt/storage/_appdata/syncthing`.
 - **filebrowser** — PUID/PGID=1000, монтирует `/mnt/storage` (`/srv/storage`) и `/etc/travel-nas` (`/srv/config`).
+- **dozzle** — live-логи контейнеров, читает `docker.sock:ro`. Stateless (нет appdata, нет setup.sh).
 
 ## Filebrowser — безопасность
 Монтирует **весь** `/etc/travel-nas/` (вкл. секреты: токен бота, пароль NAS) и

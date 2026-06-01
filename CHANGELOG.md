@@ -20,9 +20,10 @@ request»), ставил devmon (асинхронный авто-маунт ло
   `17-photoview` / `18-ytarchiver` / `18b-syncthing` / `18c-filebrowser`.
 - **Стеки** (все с `name:`): photoview (`/opt/photoview`→, :8000), ytarchiver
   (`/var/lib/casaos/apps`→, убран x-casaos, :8081), Syncthing (:8384,
-  `/mnt/storage/sync`), Filebrowser (:8082, файл-менеджер + редактор `/etc/travel-nas`).
-  Креды Filebrowser в `/etc/travel-nas/filebrowser.conf` (НЕ в git). Существующие
-  контейнеры адаптируются по имени проекта.
+  `/mnt/storage/sync`), Filebrowser (:8082, файл-менеджер + редактор `/etc/travel-nas`),
+  Dozzle (:8083, live-логи контейнеров, stateless). Креды Filebrowser в
+  `/etc/travel-nas/filebrowser.conf` (НЕ в git). Существующие контейнеры
+  адаптируются по имени проекта.
 - **comitup web_port 8090 → 80** — captive-portal детект бьёт в :80 (порт теперь свободен).
 - devmon-ripples: формат диска глушит `udisks2` (а не devmon); pi-config-backup/
   restore — `/opt/stacks` вместо `/var/lib/casaos`; thermal-guard EXCLUDE `^casaos`→`^dockge`.

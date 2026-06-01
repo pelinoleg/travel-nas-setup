@@ -6,3 +6,4 @@ photoview
 ytarchiver
 syncthing
 filebrowser
+dozzle

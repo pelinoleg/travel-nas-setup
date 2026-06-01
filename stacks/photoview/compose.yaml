@@ -24,6 +24,12 @@ services:
     image: viktorstrate/photoview:latest
     container_name: photoview
     restart: unless-stopped
+    # Лимит CPU на скан/тумбнейлинг (на ARM жрёт все ядра). ${PV_*} из .env
+    # (пишет setup.sh адаптивно под модель Pi). cgroup-кап + число воркеров скана.
+    deploy:
+      resources:
+        limits:
+          cpus: "${PV_CPU_LIMIT:-2.0}"
     ports:
       - "8000:80"
     depends_on:
@@ -35,6 +41,7 @@ services:
       - PHOTOVIEW_LISTEN_IP=0.0.0.0
       - PHOTOVIEW_LISTEN_PORT=80
       - PHOTOVIEW_MEDIA_CACHE=/app/cache
+      - PHOTOVIEW_CONCURRENT_WORKERS=${PV_WORKERS:-2}
     volumes:
       - /mnt/storage/_appdata/photoview/cache:/app/cache
       - /mnt/storage:/storage:ro

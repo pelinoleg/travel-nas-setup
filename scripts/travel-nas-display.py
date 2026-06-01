@@ -963,8 +963,8 @@ def _top_processes(n=5, sort="cpu"):
 
 # TTL 6с (не 3) — ps -eo сканит весь /proc и сам мелькает в top на ~100% ядра,
 # особенно когда параллельно жмёт ffmpeg. Список процессов glanceable, реже = ок.
-c_top_cpu = Cached(lambda: _top_processes(5, "cpu"), 6)
-c_top_mem = Cached(lambda: _top_processes(5, "mem"), 6)
+c_top_cpu = Cached(lambda: _top_processes(8, "cpu"), 6)
+c_top_mem = Cached(lambda: _top_processes(8, "mem"), 6)
 
 
 def _ensure_desktop_icons():
@@ -2914,7 +2914,7 @@ def page_system_detail():
         screen.blit(F_SMALL.render("(idle, <0.5%)", True, MUTED), (10, y))
         y += 16
     else:
-        for r in rows[:5]:
+        for r in rows[:8]:
             screen.blit(F_SMALL.render(r["name"], True, FG), (10, y))
             v = F_SMALL.render(f"{r['cpu']:.1f}%", True, ACCENT if r["cpu"] < 50 else WARN)
             screen.blit(v, (SCREEN_W - 10 - v.get_width(), y))
@@ -2932,7 +2932,7 @@ def page_system_detail():
         screen.blit(F_SMALL.render("(<0.5%)", True, MUTED), (10, y))
         y += 16
     else:
-        for r in rows[:5]:
+        for r in rows[:8]:
             screen.blit(F_SMALL.render(r["name"], True, FG), (10, y))
             v = F_SMALL.render(f"{r['mem']:.1f}%", True, INFO)
             screen.blit(v, (SCREEN_W - 10 - v.get_width(), y))

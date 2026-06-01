@@ -51,7 +51,7 @@ stacks/<name>/
 | Navidrome | 4533 | стриминг музыки |
 
 ## Стеки
-- **photoview** — `/opt/stacks/photoview`, БД на `/mnt/storage/_appdata/photoview` (mariadb uid 999), диск как `/storage:ro`.
+- **photoview** — `/opt/stacks/photoview`, БД на `/mnt/storage/_appdata/photoview` (mariadb uid 999), диск как `/storage:ro`. CPU-лимит скана/тумбнейлинга: `${PV_CPU_LIMIT}` (cgroup-кап) + `${PV_WORKERS}` (воркеров скана) в `.env`, адаптивно под Pi.
 - **ytarchiver** — `/opt/stacks/ytarchiver`, данные `/mnt/storage/media/YT-Archiver`. CPU/RAM-лимит через `${YT_CPU_LIMIT}`/`${MEM_LIMIT}` в `.env` (пишется `stack_pre`, адаптивно по модели Pi).
 - **syncthing** — PUID/PGID=1000, данные `/mnt/storage/sync`, конфиг `/mnt/storage/_appdata/syncthing`.
 - **filebrowser** — классический Filebrowser (образ `:v2` без s6), user 1000, root `/srv` (диск как `/srv/storage`, `/etc/travel-nas` как `/srv/config`). Пароль детерминирован — `setup.sh` pre-seed'ит БД из `filebrowser.conf` до старта.

@@ -67,6 +67,8 @@ SERVICES_DEFAULTS = [
     ("Syncthing",   "http://{host}:8384"),
     ("Filebrowser", "http://{host}:8082"),
     ("Dozzle",      "http://{host}:8083"),
+    ("Scrutiny",    "http://{host}:8084"),
+    ("Navidrome",   "http://{host}:4533"),
     ("Samba",       "smb://{host}/travel-nas"),
     ("SSH",         "ssh {user}@{host}"),
 ]

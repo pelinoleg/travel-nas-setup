@@ -1,0 +1,21 @@
+# Scrutiny — SMART-мониторинг дисков (omnibus: web + influxdb + collector в одном).
+# Collector гоняется по cron внутри контейнера и пишет в influxdb. Нужен доступ
+# к блок-устройству (SCRUTINY_DEV резолвится в setup.sh = диск хранилища, обычно
+# T7 по USB) + cap SYS_RAWIO/SYS_ADMIN для smartctl. /run/udev — метаданные дисков.
+name: scrutiny
+services:
+  scrutiny:
+    image: ghcr.io/analogj/scrutiny:master-omnibus
+    container_name: scrutiny
+    restart: unless-stopped
+    cap_add:
+      - SYS_RAWIO
+      - SYS_ADMIN
+    ports:
+      - "8084:8080"
+    devices:
+      - "${SCRUTINY_DEV:-/dev/sda}:${SCRUTINY_DEV:-/dev/sda}"
+    volumes:
+      - /run/udev:/run/udev:ro
+      - /mnt/storage/_appdata/scrutiny/config:/opt/scrutiny/config
+      - /mnt/storage/_appdata/scrutiny/influxdb:/opt/scrutiny/influxdb

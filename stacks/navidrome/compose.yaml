@@ -1,0 +1,17 @@
+# Navidrome — лёгкий стриминг музыки (Subsonic API). Библиотека read-only,
+# база/кэш в appdata. Админ создаётся при первом заходе в веб. PUID/PGID=1000.
+name: navidrome
+services:
+  navidrome:
+    image: deluan/navidrome:latest
+    container_name: navidrome
+    restart: unless-stopped
+    user: "1000:1000"
+    environment:
+      - ND_SCANSCHEDULE=1h
+      - ND_LOGLEVEL=info
+    ports:
+      - "4533:4533"
+    volumes:
+      - /mnt/storage/_appdata/navidrome:/data
+      - /mnt/storage/media/Music:/music:ro

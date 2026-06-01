@@ -7,3 +7,5 @@ ytarchiver
 syncthing
 filebrowser
 dozzle
+scrutiny
+navidrome

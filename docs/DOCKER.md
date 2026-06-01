@@ -47,6 +47,8 @@ stacks/<name>/
 | Syncthing | 8384 | синхронизация (+22000 sync, 21027 discovery) |
 | Filebrowser | 8082 | файлы + редактор конфигов |
 | Dozzle | 8083 | live-логи контейнеров (stateless) |
+| Scrutiny | 8084 | SMART-здоровье диска |
+| Navidrome | 4533 | стриминг музыки |
 
 ## Стеки
 - **photoview** — `/opt/stacks/photoview`, БД на `/mnt/storage/_appdata/photoview` (mariadb uid 999), диск как `/storage:ro`.
@@ -54,6 +56,8 @@ stacks/<name>/
 - **syncthing** — PUID/PGID=1000, данные `/mnt/storage/sync`, конфиг `/mnt/storage/_appdata/syncthing`.
 - **filebrowser** — PUID/PGID=1000, монтирует `/mnt/storage` (`/srv/storage`) и `/etc/travel-nas` (`/srv/config`).
 - **dozzle** — live-логи контейнеров, читает `docker.sock:ro`. Stateless (нет appdata, нет setup.sh).
+- **scrutiny** — SMART-мониторинг (omnibus: web+influxdb+collector). `setup.sh` резолвит блок-устройство диска хранилища (T7) в `.env` (`SCRUTINY_DEV`) и пробрасывает его + `cap SYS_RAWIO/SYS_ADMIN` для smartctl.
+- **navidrome** — стриминг музыки, библиотека `/mnt/storage/media/Music:ro`, база в appdata. User 1000.
 
 ## Filebrowser — безопасность
 Монтирует **весь** `/etc/travel-nas/` (вкл. секреты: токен бота, пароль NAS) и

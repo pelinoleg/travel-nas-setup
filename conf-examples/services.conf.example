@@ -44,6 +44,12 @@ Filebrowser=http://{host}:8082
 Dozzle=http://{host}:8083
     Live-логи всех Docker-контейнеров
 
+Scrutiny=http://{host}:8084
+    SMART-здоровье T7 (температура, износ, bad sectors)
+
+Navidrome=http://{host}:4533
+    Музыка → /mnt/storage/media/Music (админ — при первом заходе)
+
 # Компактный inline для коротких записей:
 >Samba=smb://{host}/travel-nas
 >SSH=ssh {user}@{host}

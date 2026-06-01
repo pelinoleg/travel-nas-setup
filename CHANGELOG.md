@@ -2,6 +2,13 @@
 
 Significant changes to travel-nas-setup. Newest first.
 
+## 2026-06-01 — Стеки Dozzle, Scrutiny, Navidrome
+
+- **Dozzle** (:8083) — live-логи всех контейнеров, stateless.
+- **Scrutiny** (:8084) — SMART-здоровье диска (omnibus). `setup.sh` резолвит блок-
+  устройство T7 в `.env`, пробрасывает + `cap SYS_RAWIO/SYS_ADMIN` для smartctl.
+- **Navidrome** (:4533) — стриминг музыки, библиотека `/mnt/storage/media/Music`.
+
 ## 2026-06-01 — CasaOS → Docker + Dockge; comitup на :80; Syncthing + Filebrowser
 
 ### Почему

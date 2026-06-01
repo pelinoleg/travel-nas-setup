@@ -336,15 +336,17 @@ def _disk_info():
     except OSError:
         return "io_error"
     try:
+        # -B1 = байты → форматируем сами с 2 знаками (df -h даёт только 1).
         out = subprocess.check_output(
-            ["df", "-h", "--output=used,avail,size,pcent", STORAGE_MOUNT], timeout=2
+            ["df", "-B1", "--output=used,avail,size,pcent", STORAGE_MOUNT], timeout=2
         ).decode().splitlines()
     except Exception:
         return "io_error"
     if len(out) < 2:
         return None
     p = out[1].split()
-    return {"used": p[0], "avail": p[1], "total": p[2], "pct": int(p[3].rstrip("%"))}
+    return {"used":  human_bytes(int(p[0]), 2), "avail": human_bytes(int(p[1]), 2),
+            "total": human_bytes(int(p[2]), 2), "pct": int(p[3].rstrip("%"))}
 
 
 def _ip():
@@ -596,14 +598,14 @@ def _size_lt(a, b, tolerance=0.95):
     return av < bv * tolerance
 
 
-def human_bytes(n):
+def human_bytes(n, prec=1):
     if n is None: return "?"
     n = float(n)
     for u in ("B", "K", "M", "G", "T"):
         if n < 1024:
-            return f"{int(n)}{u}" if u == "B" else f"{n:.1f}{u}"
+            return f"{int(n)}{u}" if u == "B" else f"{n:.{prec}f}{u}"
         n /= 1024
-    return f"{n:.1f}P"
+    return f"{n:.{prec}f}P"
 
 
 def get_progress():

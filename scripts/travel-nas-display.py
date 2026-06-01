@@ -3653,8 +3653,13 @@ def main():
             last_activity = now
             go(PAGE_PROGRESS)
         elif not prog_active and prev_progress:
-            # Бэкап завершился → продлить активность, чтобы итог был виден до sleep.
+            # Бэкап завершился → будим экран и показываем итог (toast + переход на
+            # STATUS ниже), держим активность до sleep.
+            if not display_on:
+                display_on = True
+                set_backlight(True)
             last_activity = now
+            toast("Бэкап завершён", ACCENT)
         prev_progress = prog_active
 
         # Внешний запрос «разбудить экран» — tg-notify пишет wake-req на важный

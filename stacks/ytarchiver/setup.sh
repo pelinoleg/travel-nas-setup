@@ -41,7 +41,10 @@ Wants=docker.service
 
 [Service]
 Type=oneshot
-ExecStart=/bin/bash -c 'source /etc/travel-nas/yt-archiver.conf 2>/dev/null; [[ "${YT_CPU_LIMIT:-}" =~ ^[0-9]+([.][0-9]+)?$ ]] && docker update --cpus="$YT_CPU_LIMIT" ytarchiver-backend || true'
+# Применяет лимит из conf к живому контейнеру (docker update) И синхронит .env
+# стека — иначе при пересоздании контейнера (recreate/pull) docker compose взял
+# бы стейл-значение из .env, и лимит откатился бы.
+ExecStart=/bin/bash -c 'source /etc/travel-nas/yt-archiver.conf 2>/dev/null; [[ "${YT_CPU_LIMIT:-}" =~ ^[0-9]+([.][0-9]+)?$ ]] || exit 0; docker update --cpus="$YT_CPU_LIMIT" ytarchiver-backend 2>/dev/null || true; env=/opt/stacks/ytarchiver/.env; [[ -f "$env" ]] && sed -i "s/^YT_CPU_LIMIT=.*/YT_CPU_LIMIT=$YT_CPU_LIMIT/" "$env" || true'
 
 [Install]
 WantedBy=multi-user.target

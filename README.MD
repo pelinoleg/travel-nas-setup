@@ -61,6 +61,9 @@ sudo curl -fsSL "https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/ma
 | 📺 **YTARCHIVER** | YouTube archiver (Docker, после DOCKER, UI на `:8081`) |
 | 🔄 **SYNCTHING** | P2P-синхронизация папок (`:8384`, данные `/mnt/storage/sync`) |
 | 📂 **FILEBROWSER** | Web файл-менеджер + редактор конфигов (`:8082`, монтирует диск + `/etc/travel-nas`) |
+| 📋 **DOZZLE** | Live-логи всех Docker-контейнеров в вебе (`:8083`, stateless) |
+| 🩺 **SCRUTINY** | SMART-здоровье диска T7 — температура, износ, bad sectors (`:8084`) |
+| 🎵 **NAVIDROME** | Стриминг музыки (Subsonic API), библиотека `/mnt/storage/media/Music` (`:4533`) |
 | 🖥 **DISPLAY** | MHS35 3.5" сенсорный + Python dashboard в X-kiosk |
 | 💻 **DESKTOP** | Ярлыки на рабочий стол: Dashboard, Update, Calibrate Touch |
 | 🔐 **TAILSCALE** | Zero-config VPN — доступ к Pi из любой сети мира + SSH без ключей. См. [docs/TAILSCALE.md](docs/TAILSCALE.md) |
@@ -68,6 +71,8 @@ sudo curl -fsSL "https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/ma
 | 🌡 **THERMAL_GUARD** | Защита от перегрева — staged docker throttle/pause/stop при sustained высокой темпе. MODE=warn по умолчанию. См. [docs/THERMAL-GUARD.md](docs/THERMAL-GUARD.md) |
 | 🔧 **PI_TWEAKS** | HW watchdog (BCM2712), EEPROM auto-update, WiFi powersave OFF, sysctl tunes. См. [docs/PI-TWEAKS.md](docs/PI-TWEAKS.md) |
 | 🛡 **CONF_PERMS** | systemd path-unit смотрит за `/etc/travel-nas/` и восстанавливает owner/mode после правок через Filebrowser/веб |
+
+> Docker-приложения (PHOTOVIEW … NAVIDROME) — **стеки** в `stacks/<name>/`, авто-обнаруживаются wizard'ом и деплоятся в `/opt/stacks/`. Добавить новое = папка + строка в `stacks/index.txt`, без нового модуля. См. [docs/DOCKER.md](docs/DOCKER.md).
 
 ## Hardware
 
@@ -208,11 +213,21 @@ Auto-логика (при `pref=auto`):
 (`<host>` ниже = hostname который ты задал в Pi Imager, например `pi` или `pi-tn1`.)
 
 - **Samba**: `smb://<host>.local/travel-nas` (Cmd+K в Finder)
-- **Dockge**: `http://<host>.local:5001` · **Filebrowser**: `:8082` · **Syncthing**: `:8384`
-- **Photoview**: `http://<host>.local:8000` (в UI указывай путь `/storage/usb-imports` или `/storage/media`)
-- **YT-Archiver**: `http://<host>.local:8081`
-- **SSH**: `ssh oleg@<host>.local`
+- **SSH**: `ssh <user>@<host>.local`
 - **AP mode** (полевой): подключиться к WiFi `comitup-NNN` (без пароля) → `http://10.41.0.1` для настройки нового WiFi
+- **Веб-сервисы** — `http://<host>.local:<порт>`:
+
+| Сервис | Порт | |
+|---|---|---|
+| comitup captive-portal | **80** | поле: «войти в сеть» бьёт сюда |
+| Dockge | 5001 | менеджер docker-стеков |
+| Photoview | 8000 | фото-галерея (в UI пути `/storage/*`, см. ниже) |
+| YT-Archiver | 8081 | YouTube-архив |
+| Filebrowser | 8082 | файлы + редактор конфигов |
+| Dozzle | 8083 | live-логи контейнеров |
+| Scrutiny | 8084 | SMART-здоровье T7 |
+| Syncthing | 8384 | синхронизация папок |
+| Navidrome | 4533 | стриминг музыки |
 
 > ⚠️ **Photoview** UI принимает только пути ВНУТРИ контейнера. Мы монтируем `/mnt/storage` как `/storage:ro`. То есть в Photoview указывай `/storage/usb-imports`, а **не** `/mnt/storage/usb-imports`. Иначе получишь "Server error: internal system error at initialSetupWizard".
 

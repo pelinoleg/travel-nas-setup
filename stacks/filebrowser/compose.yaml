@@ -1,17 +1,19 @@
-# Filebrowser Quantum (форк gtsteffaniak) — приятный UI, индексный поиск,
-# мультиисточник. В отличие от оригинала пароль детерминирован: config.yaml
-# (auth.adminPassword), генерится setup.sh из filebrowser.conf. Бежит user 1000
-# чтобы читать 600-секреты в /etc/travel-nas. config.yaml + БД — в data-каталоге.
+# Filebrowser — классический UI (образ :v2 без s6: entrypoint /filebrowser, без
+# авто-генерации случайного пароля). Пароль детерминирован: setup.sh pre-seed'ит
+# БД (config init + users add/update) из filebrowser.conf ДО старта сервера.
+# user 1000 — читать 600-секреты в /etc/travel-nas. Root /srv → диск и конфиги
+# подкаталогами (storage/, config/).
 name: filebrowser
 services:
   filebrowser:
-    image: gtstef/filebrowser:latest
+    image: filebrowser/filebrowser:v2
     container_name: filebrowser
     restart: unless-stopped
     user: "1000:1000"
+    command: ["-d", "/database/filebrowser.db", "-r", "/srv"]
     ports:
-      - "8082:8080"
+      - "8082:80"
     volumes:
-      - /mnt/storage/_appdata/filebrowser-quantum:/home/filebrowser/data   # config.yaml + sqlite
-      - /mnt/storage:/srv/storage          # файлы диска (источник по умолчанию)
-      - /etc/travel-nas:/srv/config        # конфиги (правка через веб)
+      - /mnt/storage/_appdata/filebrowser:/database     # bbolt БД
+      - /mnt/storage:/srv/storage                       # файлы диска
+      - /etc/travel-nas:/srv/config                     # конфиги (правка через веб)

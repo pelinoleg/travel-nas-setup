@@ -1,10 +1,11 @@
-# Filebrowser Quantum pre: data-каталог + config.yaml с детерминированными
-# кредами (auth.adminPassword) и источниками (/srv/storage + /srv/config).
-# Пароль сидится из filebrowser.conf при ПЕРВОМ старте (пустая БД). Меняешь
-# пароль — в самой веб-морде, либо снеси БД в _appdata/filebrowser-quantum и
-# перезапусти setup. config.yaml пишется python'ом (безопасное YAML-квотирование).
+# Filebrowser pre-seed: задаём пароль детерминированно ДО старта сервера, чтобы
+# образ не сгенерил случайный (как s6-вариант). Образ :v2 умеет config init /
+# users add|update через CLI. БД (bbolt) залочена работающим сервером — поэтому
+# сперва останавливаем контейнер (если жив), потом правим БД одноразовыми
+# `docker run`, владельца чиним на 1000 (docker run пишет от root).
 stack_pre() {
-    local data="/mnt/storage/_appdata/filebrowser-quantum"
+    local data="/mnt/storage/_appdata/filebrowser" db="/database/filebrowser.db"
+    local img="filebrowser/filebrowser:v2"
     sudo install -d -o 1000 -g 1000 "$data"
 
     sudo mkdir -p "$CONFIG_DIR"
@@ -19,27 +20,15 @@ stack_pre() {
     sudo chown "$U:$U" "$CONFIG_DIR/filebrowser.conf"; sudo chmod 0600 "$CONFIG_DIR/filebrowser.conf"
     [[ "$FB_PASS" == "changeme" ]] && warn "Filebrowser: пароль 'changeme' — поставь свой в $CONFIG_DIR/filebrowser.conf и перезапусти setup"
 
-    local tmp; tmp="$(mktemp)"
-    python3 - "$tmp" "$FB_USER" "$FB_PASS" <<'PY'
-import sys
-path, user, pw = sys.argv[1], sys.argv[2], sys.argv[3]
-def q(s): return "'" + s.replace("'", "''") + "'"   # безопасное YAML single-quote
-open(path, "w").write(f"""server:
-  port: 8080
-  sources:
-    - path: "/srv/storage"
-      config:
-        defaultEnabled: true
-    - path: "/srv/config"
-auth:
-  adminUsername: {q(user)}
-  adminPassword: {q(pw)}
-  methods:
-    password:
-      enabled: true
-""")
-PY
-    sudo install -o 1000 -g 1000 -m 600 "$tmp" "$data/config.yaml"
-    rm -f "$tmp"
-    info "Filebrowser (Quantum): логин $FB_USER (пароль из filebrowser.conf)"
+    sudo docker stop filebrowser >/dev/null 2>&1 || true     # release bbolt lock
+    [[ -f "$data/filebrowser.db" ]] || \
+        sudo docker run --rm -v "$data:/database" "$img" config init -d "$db" >/dev/null 2>&1 || true
+    # выставить/обновить пароль admin'а из conf (update если юзер уже есть, иначе add)
+    if ! sudo docker run --rm -v "$data:/database" "$img" \
+            users update "$FB_USER" --password "$FB_PASS" -d "$db" >/dev/null 2>&1; then
+        sudo docker run --rm -v "$data:/database" "$img" \
+            users add "$FB_USER" "$FB_PASS" --perm.admin -d "$db" >/dev/null 2>&1 || true
+    fi
+    sudo chown -R 1000:1000 "$data"
+    info "Filebrowser: логин $FB_USER (пароль из filebrowser.conf)"
 }

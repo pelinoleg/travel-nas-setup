@@ -54,22 +54,24 @@ stacks/<name>/
 - **photoview** — `/opt/stacks/photoview`, БД на `/mnt/storage/_appdata/photoview` (mariadb uid 999), диск как `/storage:ro`.
 - **ytarchiver** — `/opt/stacks/ytarchiver`, данные `/mnt/storage/media/YT-Archiver`. CPU/RAM-лимит через `${YT_CPU_LIMIT}`/`${MEM_LIMIT}` в `.env` (пишется `stack_pre`, адаптивно по модели Pi).
 - **syncthing** — PUID/PGID=1000, данные `/mnt/storage/sync`, конфиг `/mnt/storage/_appdata/syncthing`.
-- **filebrowser** — Filebrowser **Quantum** (`gtstef/filebrowser`), user 1000, источники `/srv/storage` (диск) + `/srv/config` (`/etc/travel-nas`). Пароль детерминирован — `config.yaml` (`auth.adminPassword`) из `filebrowser.conf`. config+sqlite в `_appdata/filebrowser-quantum`.
+- **filebrowser** — классический Filebrowser (образ `:v2` без s6), user 1000, root `/srv` (диск как `/srv/storage`, `/etc/travel-nas` как `/srv/config`). Пароль детерминирован — `setup.sh` pre-seed'ит БД из `filebrowser.conf` до старта.
 - **dozzle** — live-логи контейнеров, читает `docker.sock:ro`. Stateless (нет appdata, нет setup.sh).
 - **scrutiny** — SMART-мониторинг (omnibus: web+influxdb+collector). `setup.sh` резолвит блок-устройство диска хранилища (T7) в `.env` (`SCRUTINY_DEV`) и пробрасывает его + `cap SYS_RAWIO/SYS_ADMIN` для smartctl.
 - **navidrome** — стриминг музыки, библиотека `/mnt/storage/media/Music:ro`, база в appdata. User 1000.
 
-## Filebrowser (Quantum) — пароль и безопасность
-Форк **Filebrowser Quantum** (`gtstef/filebrowser`) — пароль задаётся
-детерминированно (в отличие от оригинального filebrowser, что генерил случайный
-в залоченной bbolt → `users add` извне давал 403):
-- `stack_pre` пишет `config.yaml` (`auth.adminUsername`/`adminPassword`) из
-  `/etc/travel-nas/filebrowser.conf` (`FB_USER`/`FB_PASS`, **не** в git).
-- Сидится при ПЕРВОМ старте (пустая sqlite). Сменить потом — в веб-морде или
-  снести БД в `_appdata/filebrowser-quantum` + перезапустить `travel-nas-setup`.
+## Filebrowser — пароль и безопасность
+Классический Filebrowser (`:v2`, без s6). Пароль детерминирован, без возни со
+случайным паролем s6-варианта (тот генерил его в залоченной bbolt → `users add`
+извне давал 403). Трюк — **pre-seed БД ДО старта сервера**:
+- `stack_pre` останавливает контейнер (снять lock), затем одноразовыми
+  `docker run` делает `config init` + `users add|update <FB_USER> <FB_PASS>` из
+  `/etc/travel-nas/filebrowser.conf` (`FB_USER`/`FB_PASS`, **не** в git), чинит
+  владельца БД на 1000. Сервер стартует с уже готовым пользователем — случайный
+  пароль не генерится.
+- Меняешь `FB_PASS` → перезапусти `travel-nas-setup` (сделает `users update`).
 - Дашборд (Services) показывает `admin / <пароль>`.
 
-**Безопасность**: источник `/srv/config` = весь `/etc/travel-nas/` (секреты: токен
+**Безопасность**: `/etc/travel-nas/` смонтирован как `/srv/config` (секреты: токен
 бота, пароль NAS), контейнер бежит user 1000 (иначе не прочитать 600-секреты) —
 кто залогинится, видит секреты. Не открывай :8082 наружу. После правки конфига
 через веб `CONF_PERMS` path-unit вернёт owner/mode.

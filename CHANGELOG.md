@@ -20,11 +20,16 @@ Significant changes to travel-nas-setup. Newest first.
   его из логов → `filebrowser.conf` (`FB_GENERATED_PASS`); дашборд (Services)
   показывает `admin / <пароль>`.
 
+### Filebrowser
+- Пароль стал детерминированным: образ s6 генерил случайный в залоченной bbolt
+  (`users add` извне → 403). Решение — **pre-seed БД** одноразовыми `docker run`
+  (`config init` + `users add|update` из `filebrowser.conf`) ДО старта сервера.
+- Кратко был Quantum (`gtstef/filebrowser`) — откатили, UI не понравился. Вернули
+  классический Filebrowser (образ `:v2` без s6), user 1000, root `/srv`.
+- Меню setup: размеры whiptail по `tput cols/lines` — длинные `STACK_*` теги
+  больше не вылезают за рамку.
+
 ### Новое
-- **Filebrowser → Quantum** (`gtstef/filebrowser`): приятнее UI, индексный поиск,
-  и главное — **пароль детерминирован** (`config.yaml` `auth.adminPassword` из
-  `filebrowser.conf` `FB_USER`/`FB_PASS`), без скрейпа логов. user 1000, источники
-  `/srv/storage` + `/srv/config`. (Заменил оригинал, тот же :8082 и name.)
 - **Syncthing Vellum**: тема (light+dark) ставится в `<config>/gui/` из репо
   pelinoleg/syncthing-vellum; дефолт `vellum-light` (правка `config.xml`).
 

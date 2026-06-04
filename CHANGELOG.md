@@ -2,6 +2,23 @@
 
 Significant changes to travel-nas-setup. Newest first.
 
+## 2026-06-04 — Выбор экрана: + Waveshare 4.3″ DSI
+
+- **Визард выбора экрана** (`19-display.sh`): MHS35 (SPI) / Waveshare 4.3″ DSI /
+  skip. Тип определяется один раз (config.txt → `display.conf` → whiptail →
+  default mhs35 в неинтерактиве). MHS35-путь и его дашборд/`screen-rotate.sh`
+  не тронуты — старый экран работает как раньше (используется на другом Pi).
+- **DSI = только screen-enablement, без дашборда** (дашборд под 800×480 — отдельный
+  шаг). При выборе DSI модуль: дописывает оверлеи `vc4-kms-v3d` +
+  `vc4-kms-dsi-7inch` в config.txt (идемпотентно), пишет `SCREEN_TYPE=dsi43` в
+  `/etc/travel-nas/display.conf`, ставит udev-правило (group video 0664 на
+  `/sys/class/backlight/*`) + добавляет uid-1000 в группу video. Тач ёмкостный,
+  driver-free. Нужен reboot.
+- **Новые CLI-хелперы** (DSI): `dsi-backlight.sh <0-255|N%|±N|on|off>` — яркость
+  через sysfs без sudo; `dsi-rotate.sh {0|90|180|270}` — поворот дисплея
+  (cmdline.txt `video=DSI-1:…rotate=N`) + тача (udev `LIBINPUT_CALIBRATION_MATRIX`).
+  Управление из UI/Telegram — отдельным шагом.
+
 ## 2026-06-01 — Фиксы стеков + Vellum + автозапуск
 
 ### Фиксы

@@ -313,7 +313,9 @@ def _disk_temp():
         return None
     device = device.rstrip("0123456789")
     out = subprocess.check_output(
-        ["sudo", "-n", "/usr/sbin/smartctl", "-a", "-d", "sat", device],
+        # без -d: smartctl сам определяет тип (T7 = NVMe за ASMedia-мостом →
+        # sntasmedia; SATA → sat). Жёсткий -d sat падал на T7 "unsupported opcode".
+        ["sudo", "-n", "/usr/sbin/smartctl", "-a", device],
         timeout=5, stderr=subprocess.DEVNULL,
     ).decode()
     for line in out.splitlines():
@@ -2327,18 +2329,21 @@ def _disk_diag():
     # 6) SMART через smartctl (sudo NOPASSWD есть)
     src = info["source"] if info["source"] != "?" else "/dev/sda"
     try:
-        out = subprocess.check_output(
-            ["sudo", "-n", "/usr/sbin/smartctl", "-H", "-d", "sat", src],
-            timeout=5, stderr=subprocess.STDOUT,
-        ).decode(errors="replace")
-        if "PASSED" in out:
+        # smartctl возвращает код-битмаску (PASSED бывает с ненулевым кодом),
+        # поэтому парсим текст, а не полагаемся на exit-код.
+        r = subprocess.run(
+            ["sudo", "-n", "/usr/sbin/smartctl", "-H", src],
+            capture_output=True, text=True, timeout=5,
+        )
+        out = (r.stdout or "") + (r.stderr or "")
+        if "PASSED" in out or "Health Status: OK" in out:
             info["smart_ok"] = True; info["smart_msg"] = "PASSED"
         elif "FAILED" in out:
             info["smart_ok"] = False; info["smart_msg"] = "FAILED"
+        elif r.returncode != 0:
+            info["smart_msg"] = f"err {r.returncode}"
         else:
             info["smart_msg"] = "unknown"
-    except subprocess.CalledProcessError as e:
-        info["smart_msg"] = f"err {e.returncode}"
     except Exception:
         info["smart_msg"] = "n/a"
 
@@ -2346,7 +2351,7 @@ def _disk_diag():
     # Fallback цепочка: smartctl → /sys/block/.../model → /sys/block/.../vendor.
     try:
         out = subprocess.check_output(
-            ["sudo", "-n", "/usr/sbin/smartctl", "-i", "-d", "sat", src],
+            ["sudo", "-n", "/usr/sbin/smartctl", "-i", src],
             timeout=5, stderr=subprocess.DEVNULL,
         ).decode(errors="replace")
         for line in out.splitlines():

@@ -1243,14 +1243,19 @@ def _card_storage(rect):
         return
     col = ACCENT if disk["pct"] < 80 else (WARN if disk["pct"] < 90 else ERROR)
 
-    # Главная строка: used/total слева, t°C + free справа
+    # Главная строка: used/total слева. Температура — крупно и ЦВЕТОМ в правом
+    # верхнем углу карточки; free мелким серым под ней.
     main = F_MED.render(f"{disk['used']} / {disk['total']}", True, FG)
     screen.blit(main, (inner.x, inner.y))
-    right_parts = []
-    if t7t: right_parts.append(f"{t7t}°C")
-    right_parts.append(f"{disk['avail']} free")
-    rt = F_SMALL.render(" · ".join(right_parts), True, MUTED)
-    screen.blit(rt, (inner.right - rt.get_width(), inner.y + 4))
+    if t7t:
+        tcol = ACCENT if t7t < 50 else (WARN if t7t < 60 else ERROR)
+        ts = F_MED.render(f"{t7t}°C", True, tcol)
+        screen.blit(ts, (inner.right - ts.get_width(), inner.y))
+    # free — мелким под температурой (только если карточка высокая; на узкой
+    # во время бэкапа места нет, чтоб не налезть на бар).
+    if inner.height >= 48:
+        fs = F_SMALL.render(f"{disk['avail']} free", True, MUTED)
+        screen.blit(fs, (inner.right - fs.get_width(), inner.y + 20))
 
     # Bar внизу + % справа в КОНЦЕ строки (а не на самом баре — не сливается)
     pct_s = F_SMALL.render(f"{disk['pct']}%", True, col)

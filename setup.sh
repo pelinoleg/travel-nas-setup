@@ -191,7 +191,7 @@ Components:
   DOCKER         Docker engine (apt-репо) — основа для стеков
   DOCKGE         Dockge — web-менеджер docker-compose стеков (:5001)
   --- Docker-стеки (авто из stacks/, после DOCKER) ---
-${STACK_HELP}  DISPLAY        MHS35 + Python dashboard (X11 kiosk)
+${STACK_HELP}  DISPLAY        Python dashboard (X11 kiosk) + выбор экрана (MHS35 SPI / Waveshare DSI)
   DESKTOP        Ярлыки на десктоп (Dashboard, Setup, Storage Files, ...)
   TAILSCALE      Zero-config VPN — доступ к Pi из любой сети мира
   VERIFY         Ежемесячный bit-rot/IO scrub storage (sha256 manifest)
@@ -223,7 +223,7 @@ else
     )
     MENU+=( "${STACK_MENU[@]}" )      # авто-стеки после DOCKGE
     MENU+=(
-        "DISPLAY"      "MHS35 + dashboard"                                ON
+        "DISPLAY"      "Дашборд + выбор экрана (MHS35 SPI / Waveshare DSI)" ON
         "DESKTOP"      "Ярлыки на десктоп"                                ON
         "TAILSCALE"    "Tailscale VPN (доступ к Pi из любой сети)"        ON
         "VERIFY"       "Ежемесячный bit-rot/IO scrub storage"            ON

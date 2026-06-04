@@ -1,6 +1,6 @@
 [[ -n "${DO_DISPLAY:-}" ]] || return 0
 
-info "=== MHS35 + Display dashboard (X11 kiosk) ==="
+info "=== Display dashboard (X11 kiosk) + screen driver ==="
 
 # Удаляем старый systemd-сервис (мы перешли на autostart)
 if [[ -f /etc/systemd/system/travel-nas-display.service ]]; then
@@ -193,34 +193,65 @@ else
     mark_fail "DISPLAY_DASHBOARD" "autostart setup failed"
 fi
 
-# Драйвер MHS35 — ставим только если ещё не стоит. Надёжный признак установки —
-# строка dtoverlay=mhs35 в config.txt (персистентна, переживает ребут; в отличие
-# от /tmp/LCD-show, который чистится при ребуте → раньше спрашивал повторно).
-# Дефолтная ориентация: 270 — портрет 320×480 «вверх ногами» относительно 90
-# (обе SwapAxes=1, развёрнуты на 180°). Под физический монтаж экрана. Сменить —
-# дашборд (rotate/flip) или screen-rotate.sh; значение живёт в config.txt.
+# === Драйвер/оверлей под конкретный экран ====================================
+# Дашборд-часть выше одинаковая для любой матрицы. Здесь — только то, что зависит
+# от модели экрана. Признак «уже настроено» — строка в config.txt (персистентна,
+# переживает ребут; /tmp/LCD-show чистится при ребуте и раньше спрашивал повторно).
+#
+#   MHS35  — SPI 3.5″ 320×480 портрет, резистивный тач (ADS7846). Ставится
+#            скриптом goodtft/LCD-show (РЕБУТИТ Pi). Дефолтная ориентация 270 —
+#            портрет «вверх ногами» относительно 90 (обе SwapAxes=1, +180°), под
+#            физический монтаж. Сменить — дашборд (rotate/flip) / screen-rotate.sh.
+#   DSI43  — Waveshare 4.3″ DSI LCD 800×480, ёмкостный тач работает из коробки
+#            (Bookworm/Bullseye, драйвер не нужен) — только оверлеи в config.txt.
+#            Pi 4B → 15-pin DSI, Pi 5 → 22-pin кабель; оверлей одинаковый (DSI1).
 MHS35_ROT=270
-MHS_CONFIG=/boot/firmware/config.txt
-[[ -f "$MHS_CONFIG" ]] || MHS_CONFIG=/boot/config.txt
-if grep -qE '^[[:space:]]*dtoverlay=mhs35' "$MHS_CONFIG" 2>/dev/null; then
-    info "Драйвер MHS35 уже установлен (dtoverlay=mhs35 в config.txt) — пропускаю"
+BOOT_CFG=/boot/firmware/config.txt
+[[ -f "$BOOT_CFG" ]] || BOOT_CFG=/boot/config.txt
+
+if grep -qE '^[[:space:]]*dtoverlay=mhs35' "$BOOT_CFG" 2>/dev/null; then
+    info "Экран MHS35 уже настроен (dtoverlay=mhs35 в config.txt) — пропускаю"
+elif grep -qE '^[[:space:]]*dtoverlay=vc4-kms-dsi-7inch' "$BOOT_CFG" 2>/dev/null; then
+    info "Экран Waveshare DSI уже настроен (dtoverlay=vc4-kms-dsi-7inch) — пропускаю"
 elif [[ ! -t 0 ]]; then
-    # Неинтерактивный запуск (--all / pipe) — не висим на read, просто подсказываем.
-    info "Драйвер MHS35 не установлен. Запусти интерактивно: cd /tmp/LCD-show && sudo ./MHS35-show $MHS35_ROT (РЕБУТНЕТ Pi)"
+    # Неинтерактивный запуск (--all / pipe) — не висим на whiptail, просто подсказываем.
+    info "Экран не настроен. Запусти интерактивно travel-nas-setup и выбери модель экрана."
 else
-    warn "Драйвер MHS35 РЕБУТИТ Pi!"
-    echo "Запустить установку драйвера MHS35 сейчас? (y/N)"
-    read -r ans
-    if [[ "$ans" == "y" || "$ans" == "Y" ]]; then
-        cd /tmp
-        if sudo git clone https://github.com/goodtft/LCD-show.git 2>/dev/null; then
-            cd /tmp/LCD-show
-            sudo "./MHS35-show" "$MHS35_ROT"
-            # сюда не дойдём — ребут
-        else
-            mark_fail "DISPLAY_DRIVER" "git clone failed"
-        fi
-    else
-        info "Драйвер MHS35 пропущен (запусти потом: cd /tmp/LCD-show && sudo ./MHS35-show $MHS35_ROT)"
-    fi
+    SCREEN=$(whiptail --title "Выбор экрана" --notags --radiolist \
+        "Какой экран подключён к Pi?\n(Space — выбор, Enter — OK)" 14 74 3 \
+        "MHS35" "MHS35 — SPI 3.5″ 320×480, резистивный тач (РЕБУТИТ Pi)" ON \
+        "DSI43" "Waveshare 4.3″ DSI 800×480, тач из коробки (нужен REBOOT)" OFF \
+        "SKIP"  "Пропустить — настрою экран позже"                         OFF \
+        3>&1 1>&2 2>&3) || SCREEN="SKIP"
+
+    case "$SCREEN" in
+        DSI43)
+            # vc4-kms-v3d обычно уже в дефолтном config.txt — добавляем если нет.
+            grep -qE '^[[:space:]]*dtoverlay=vc4-kms-v3d' "$BOOT_CFG" \
+                || echo "dtoverlay=vc4-kms-v3d" | sudo tee -a "$BOOT_CFG" >/dev/null
+            echo "dtoverlay=vc4-kms-dsi-7inch" | sudo tee -a "$BOOT_CFG" >/dev/null
+            mark_ok "DISPLAY_DRIVER" "Waveshare 4.3″ DSI — оверлеи в config.txt"
+            warn "Waveshare DSI: оверлеи добавлены в $BOOT_CFG — СДЕЛАЙ REBOOT. Тач работает из коробки, драйвер не нужен."
+            ;;
+        MHS35)
+            warn "Драйвер MHS35 РЕБУТИТ Pi!"
+            echo "Запустить установку драйвера MHS35 сейчас? (y/N)"
+            read -r ans
+            if [[ "$ans" == "y" || "$ans" == "Y" ]]; then
+                cd /tmp
+                if sudo git clone https://github.com/goodtft/LCD-show.git 2>/dev/null; then
+                    cd /tmp/LCD-show
+                    sudo "./MHS35-show" "$MHS35_ROT"
+                    # сюда не дойдём — ребут
+                else
+                    mark_fail "DISPLAY_DRIVER" "git clone failed"
+                fi
+            else
+                info "Драйвер MHS35 пропущен (запусти потом: cd /tmp/LCD-show && sudo ./MHS35-show $MHS35_ROT)"
+            fi
+            ;;
+        *)
+            info "Экран пропущен — выбери позже через travel-nas-setup."
+            ;;
+    esac
 fi

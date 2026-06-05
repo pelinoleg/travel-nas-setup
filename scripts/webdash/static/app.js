@@ -42,7 +42,15 @@ function drawSpark(cv,arr,color,max){const w=cv.width=cv.clientWidth*2,h=cv.heig
   const x=cv.getContext('2d');x.clearRect(0,0,w,h);if(arr.length<2)return;
   x.beginPath();arr.forEach((v,i)=>{const px=i/(arr.length-1)*w,py=h-Math.min(1,v/max)*(h-6)-3;i?x.lineTo(px,py):x.moveTo(px,py);});
   x.strokeStyle=color;x.lineWidth=2;x.lineJoin='round';x.stroke();x.lineTo(w,h);x.lineTo(0,h);x.closePath();x.fillStyle=color+'33';x.fill();}
-function updateSparks(){$$('.spark').forEach(cv=>{const k=cv.dataset.s;if(!SPARK[k])return;const arr=SPARK[k].slice(winStart(k));drawSpark(cv,arr,MET[k].col,sparkMax(k,arr));});}
+const SPARKHIST={};  /* metric -> {t,v} для длинных окон (>15м) из history-sqlite */
+const histRange=w=>w<=3600?'1h':w<=86400?'24h':'7d';
+async function fetchSparkHist(m){if(sparkWin(m)<=900)return;
+  try{const r=await(await fetch(`/api/history?m=${m}&range=${histRange(sparkWin(m))}`)).json();SPARKHIST[m]={t:r.t||[],v:r.v||[]};updateSparks();}catch(e){}}
+function updateSparks(){$$('.spark').forEach(cv=>{const k=cv.dataset.s;if(!SPARK[k])return;const w=sparkWin(k);let arr;
+  if(w<=900)arr=SPARK[k].slice(winStart(k));
+  else{const h=SPARKHIST[k];if(h&&h.t.length){const now=h.t[h.t.length-1];let i=0;while(i<h.t.length&&h.t[i]<now-w)i++;arr=h.v.slice(i).filter(x=>x!=null);}else arr=SPARK[k].slice(winStart(k));}
+  drawSpark(cv,arr,MET[k].col,sparkMax(k,arr));});}
+setInterval(()=>['cpu','temp','mem','net_rx','disk'].forEach(m=>{if(sparkWin(m)>900)fetchSparkHist(m);}),60000);
 
 /* render */
 const chip=(cls,txt)=>`<span class="chip"><span class="dot ${cls}"></span>${txt}</span>`;
@@ -268,8 +276,20 @@ function connectWifi(ssid,sec){if(sec&&sec!=='--'&&sec!==''){
 $('#wifi-scan').onclick=loadWifi;
 
 /* Today + recent */
-async function renderToday(){try{const d=await(await fetch('/api/today')).json();const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span>${typeof v==='object'?JSON.stringify(v):v}</span></div>`;
-  $('#today-body').innerHTML=Object.keys(d).length?Object.entries(d).map(([k,v])=>R(k,v)).join(''):'<div class="note">No summary yet (daily 21:00).</div>';}catch(e){$('#today-body').innerHTML='error';}loadRecent();}
+async function renderToday(){try{const d=await(await fetch('/api/today')).json();
+  const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span>${v}</span></div>`;let h='';
+  if(d.date)h+=R('Date',d.date);if(d.uptime)h+=R('Uptime',d.uptime);
+  if(d.cpu_temp!=null)h+=R('CPU temp',d.cpu_temp+'°C');
+  if(d.ip)h+=R('IP',d.ip);if(d.ssid)h+=R('WiFi',d.ssid);
+  if(d.storage)h+=R('Storage',`${d.storage.used} / ${d.storage.total} (${d.storage.pct}%)`+(d.storage.temp!=null?` · ${d.storage.temp}°C`:''));
+  if(d.throttle)h+=R('Throttle',d.throttle.now?'NOW ⚠':(d.throttle.past?'past':'no'));
+  if(d.photo_today)h+=R('Photo today',`${d.photo_today.cards} cards · ${d.photo_today.files} files · ${d.photo_today.size}`);
+  h+=R('NAS today',d.nas_today?(typeof d.nas_today==='object'?(d.nas_today.status||'done'):d.nas_today):'—');
+  if(d.errors_today!=null)h+=R('Errors',d.errors_today);if(d.incomplete!=null)h+=R('Incomplete',d.incomplete);
+  $('#today-body').innerHTML=h||'<div class="note">No summary yet (daily 21:00).</div>';
+  const ev=Array.isArray(d.events)?d.events:[];
+  $('#today-events').innerHTML=ev.length?ev.slice().reverse().map(e=>`<div class="svc-item"><span>${e}</span></div>`).join(''):'<div class="note">no events</div>';
+  }catch(e){$('#today-body').innerHTML='error';}loadRecent();}
 async function loadRecent(){try{const d=await(await fetch('/api/recent')).json();
   $('#recent-list').innerHTML=d.count?d.items.map(i=>`<div class="svc-item"><span>${i.path}</span><span class="u">${(i.size/1e6).toFixed(1)} MB</span></div>`).join(''):'<div class="note">nothing new in 24h</div>';}catch(e){}}
 
@@ -334,7 +354,8 @@ function applyNight(){const f=$('#night-from').value,t=$('#night-to').value;if(!
 
 /* mini-graph period per metric */
 $$('select[data-sp]').forEach(s=>{const m=s.dataset.sp;s.value=localStorage['spark_'+m]||'300';
-  s.onchange=()=>{localStorage['spark_'+m]=s.value;updateSparks();};});
+  s.onchange=()=>{localStorage['spark_'+m]=s.value;fetchSparkHist(m);updateSparks();};
+  if(+s.value>900)fetchSparkHist(m);});
 
 /* accent */
 function applyAccent(c){document.documentElement.style.setProperty('--acc',c);}

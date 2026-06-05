@@ -61,6 +61,18 @@ main{position:relative;height:382px}
 .appcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 10px;text-align:center;min-height:92px}
 .appcard:active{border-color:var(--acc)}
 .appcard .ic{width:30px;height:30px;color:var(--acc);margin-bottom:4px}
+.appico{width:36px;height:36px;display:block;margin:0 auto 5px;object-fit:contain;color:var(--acc)}
+/* fullscreen app (iframe) */
+.appframe{position:fixed;inset:0;z-index:25;background:var(--bg);display:flex;flex-direction:column}
+.appframe.hidden{display:none}
+.afbar{display:flex;align-items:center;gap:10px;height:44px;padding:0 8px;background:var(--panel);border-bottom:1px solid var(--line)}
+.afbar span{flex:1;font-weight:600;font-size:15px}
+.afbar .bigbtn{font-size:14px}
+#appframe-iframe{flex:1;width:100%;border:0;background:#fff}
+/* detail stat blocks */
+.dstats{display:flex;gap:8px;margin-bottom:10px}
+.dstat{flex:1;text-align:center;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 4px}
+.dstat .dn{font-size:19px;font-weight:700;line-height:1.1}.dstat .dl{color:var(--mut);font-size:11px}
 .appcard .an{font-weight:600;font-size:14px}.appcard .au{color:var(--mut);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* YT pills */
 .pills{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}

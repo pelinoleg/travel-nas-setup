@@ -182,7 +182,8 @@
 <div id="page-yt" class="page hidden">
   <div class="phead"><button class="bigbtn back"><svg class="ic"><use href="#i-back"/></svg></button><span>YT-Archiver</span></div>
   <div class="pbody"><div id="yt-pills" class="pills"></div><div class="sideinfo" id="yt-info"></div>
-    <button id="yt-toggle" class="wide"></button></div>
+    <button id="yt-toggle" class="wide"></button>
+    <div class="h" style="margin-top:12px">Recent</div><div id="yt-recent" class="svc-list"></div></div>
 </div>
 
 <div id="page-today" class="page hidden">
@@ -212,6 +213,13 @@
   <div class="phead"><button class="bigbtn back"><svg class="ic"><use href="#i-back"/></svg></button><span>Update</span>
     <button id="update-run" class="rbtn"><svg class="ic"><use href="#i-restart"/></svg></button></div>
   <pre id="update-body" class="scrollbox">Press ⟳ to pull latest scripts from GitHub.</pre>
+</div>
+
+<div id="appframe" class="appframe hidden">
+  <div class="afbar"><button id="appframe-back" class="bigbtn"><svg class="ic"><use href="#i-back"/></svg></button>
+    <span id="appframe-title"></span>
+    <button id="appframe-qr" class="bigbtn">QR</button></div>
+  <iframe id="appframe-iframe" src="about:blank"></iframe>
 </div>
 
 <div id="modal" class="modal hidden"><div class="modalbox">

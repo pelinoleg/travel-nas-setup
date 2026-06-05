@@ -10,8 +10,14 @@ sudo sed -i 's/^#\?PERCENT=.*/PERCENT=50/' /etc/default/zramswap 2>/dev/null || 
 if sudo systemctl restart zramswap 2>/dev/null; then
     mark_ok "ZRAM" "zstd, 50%"
 else
-    warn "zramswap не запустился (PiOS уже использует встроенный zram — это норма)"
-    mark_ok "ZRAM" "уже работает (встроенный)"
+    # На Trixie /dev/zram0 уже держит встроенный zram (systemd-zram-generator)
+    # → zramswap падает с 'Device or resource busy' и висит failed-юнитом
+    # (мозолит глаза в Failed-панели/алертах). Встроенный zram и так работает —
+    # отключаем дублирующий zramswap и чистим failed-состояние.
+    sudo systemctl disable --now zramswap 2>/dev/null || true
+    sudo systemctl reset-failed zramswap 2>/dev/null || true
+    warn "zramswap отключён — встроенный zram (zram0) уже активен"
+    mark_ok "ZRAM" "встроенный zram (zramswap отключён)"
 fi
 
 if [[ -f /etc/sysctl.conf ]] && ! grep -q "vm.swappiness" /etc/sysctl.conf; then

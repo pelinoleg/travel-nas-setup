@@ -48,9 +48,9 @@ function whichBackup(pr){if(!pr||!pr.active)return null;return ((pr.target||'')+
 function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{},sv=d.services||{};
   if(s.mem_total)memTotal=s.mem_total;
   const memPct=s.mem_total?Math.round(s.mem_used/s.mem_total*100):null;
-  $('#cpu').textContent=s.cpu??'–';colorVal('cpu','cpu',s.cpu);
-  $('#temp').textContent=s.temp??'–';colorVal('temp','temp',s.temp);
-  $('#mem').textContent=s.mem_total?s.mem_used:'–';$('#mem-tot').textContent=s.mem_total?'/'+s.mem_total:'';colorVal('mem','disk',memPct);
+  $('#cpu').textContent=s.cpu!=null?Math.round(s.cpu):'–';colorVal('cpu','cpu',s.cpu);
+  $('#temp').textContent=s.temp!=null?Math.round(s.temp):'–';colorVal('temp','temp',s.temp);
+  $('#mem').textContent=s.mem_total?(+s.mem_used).toFixed(1):'–';$('#mem-tot').textContent=s.mem_total?'/'+Math.round(s.mem_total):'';colorVal('mem','disk',memPct);
   $('#net').textContent=`↑${s.net_tx??0}  ↓${s.net_rx??0}`;
   $('#disk').textContent=st.pct??'–';colorVal('disk','disk',st.pct);
   const dbar=$('#disk-bar');if(dbar){dbar.style.width=(st.pct||0)+'%';dbar.className=st.pct>=95?'crit':st.pct>=88?'high':st.pct>=75?'warn':'';}
@@ -85,7 +85,8 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   const wc=nw.mode==='AP'?'warn':(nw.ip&&nw.ip!=='?'?'ok':'err');
   $('#topchips').innerHTML=chip(wc,nw.mode==='AP'?`Hotspot ${nw.ssid||''}`:`${nw.ssid||'no wifi'} ${nw.signal?nw.signal+'dB':''}`);
   if($('#net-url'))$('#net-url').textContent=`http://${(nw.host||'nas')}.local:8090 · http://${nw.ip||'?'}:8090`;
-  $('#screen-sub').textContent=`${br.value}%`+(($('#night-from').value&&$('#night-to').value)?` · 🌙${$('#night-from').value}`:'');
+  {const nf=$('#night-from').value,nt=$('#night-to').value;
+   $('#screen-sub').innerHTML=`☀ ${br.value}%`+(nf&&nt?`&nbsp;&nbsp; 🌙 ${nf}–${nt}`:'');}
   renderAlerts(s,st,sv,nw);
   if(!$('#page-power').classList.contains('hidden'))renderPower();
   if(!$('#page-network').classList.contains('hidden'))renderNetwork();
@@ -124,12 +125,13 @@ function setDetail(t,v){if(dchart)dchart.setData([t,v]);const vv=v.filter(x=>x!=
   const cur=vv.length?vv[vv.length-1]:'–',mn=vv.length?Math.min(...vv).toFixed(1):'–',mx=vv.length?Math.max(...vv).toFixed(1):'–',av=vv.length?(vv.reduce((a,b)=>a+b,0)/vv.length).toFixed(1):'–';
   const s=last.system||{},nw=last.network||{},st=last.storage||{},R=(k,vl)=>`<div class="row"><span class="k">${k}</span><span>${vl}</span></div>`;
   let extra='';
-  if(dMetric==='cpu')extra=R('load',(s.load||[]).join(' '))+R('freq',(s.freq_mhz||0)+' MHz')+R('governor',s.governor||'?');
-  else if(dMetric==='temp')extra=R('throttle',s.throttled_now?'YES':'no')+R('disk',st.disk_temp!=null?st.disk_temp+'°C':'—');
-  else if(dMetric==='mem')extra=R('used',s.mem_used+' GB')+R('total',s.mem_total+' GB');
-  else if(dMetric==='net_rx')extra=R('down',s.net_rx+' MB/s')+R('up',s.net_tx+' MB/s')+R('ip',nw.ip||'?');
-  else if(dMetric==='disk')extra=R('used',TB(st.used))+R('free',TB(st.avail))+R('temp',(st.disk_temp||'?')+'°C');
-  $('#detail-info').innerHTML=`<div class="dstats">now <b>${cur}</b> · min ${mn} · avg ${av} · max ${mx}</div>${extra}`;}
+  if(dMetric==='cpu')extra=R('Load avg (1/5/15m)',(s.load||[]).join(' / '))+R('Frequency',(s.freq_mhz||0)+' MHz')+R('Governor',s.governor||'?');
+  else if(dMetric==='temp')extra=R('Throttled',s.throttled_now?'YES':'no')+R('Disk temp',st.disk_temp!=null?st.disk_temp+'°C':'—');
+  else if(dMetric==='mem')extra=R('Used',(+s.mem_used).toFixed(1)+' GB')+R('Total',Math.round(s.mem_total)+' GB');
+  else if(dMetric==='net_rx')extra=R('Download',s.net_rx+' MB/s')+R('Upload',s.net_tx+' MB/s')+R('IP',nw.ip||'?');
+  else if(dMetric==='disk')extra=R('Used',TB(st.used))+R('Free',TB(st.avail))+R('Temp',(st.disk_temp||'?')+'°C');
+  const stat=(n,l)=>`<div class="dstat"><div class="dn">${n}</div><div class="dl">${l}</div></div>`;
+  $('#detail-info').innerHTML=`<div class="dstats">${stat(cur,'now')}${stat(mn,'min')}${stat(av,'avg')}${stat(mx,'max')}</div>${extra}`;}
 async function loadDetailProc(m){try{const r=await(await fetch('/api/processes')).json();const rows=(m==='mem'?r.mem:r.cpu)||[];
   $('#detail-proc').innerHTML='<tr><td colspan="3" class="k" style="padding-top:8px">Top by '+(m==='mem'?'RAM':'CPU')+'</td></tr>'
     +rows.map(p=>`<tr><td>${p.cmd}</td><td>${p.cpu}%</td><td>${p.mem}%</td></tr>`).join('');}catch(e){}}
@@ -144,8 +146,11 @@ function renderProjects(){const pr=(last.services||{}).projects||[];
 
 /* Apps tab: launcher of service UIs (tap → QR) */
 async function renderApps(){try{const r=await(await fetch('/api/services')).json();
-  $('#apps-grid').innerHTML=r.map((s,i)=>`<div class="appcard" data-i="${i}">${ic('i-grid')}<div class="an">${s.name}</div><div class="au">${s.url.replace('http://','')}</div></div>`).join('')||'<div class="note">нет сервисов (поставь docker-стеки)</div>';
-  $$('#apps-grid .appcard').forEach(el=>el.onclick=()=>{const s=r[el.dataset.i];showQR(s.name,s.url);});}catch(e){$('#apps-grid').innerHTML='error';}}
+  $('#apps-grid').innerHTML=r.map((s,i)=>`<div class="appcard" data-i="${i}"><img class="appico" src="${s.url}/favicon.ico" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><svg class="ic appico" style="display:none"><use href="#i-grid"/></svg><div class="an">${s.name}</div><div class="au">${s.url.replace('http://','')}</div></div>`).join('')||'<div class="note">нет сервисов (поставь docker-стеки)</div>';
+  $$('#apps-grid .appcard').forEach(el=>el.onclick=()=>{const s=r[el.dataset.i];openApp(s.name,s.url);});}catch(e){$('#apps-grid').innerHTML='error';}}
+function openApp(name,url){$('#appframe-title').textContent=name;$('#appframe-iframe').src=url;
+  $('#appframe-qr').onclick=()=>showQR(name,url);$('#appframe').classList.remove('hidden');}
+$('#appframe-back').onclick=()=>{$('#appframe-iframe').src='about:blank';$('#appframe').classList.add('hidden');};
 function showQR(name,url){$('#modal-title').textContent=name;const qr=qrcode(0,'M');qr.addData(url);qr.make();
   $('#modal-body').innerHTML=`<div style="background:#fff;padding:10px;border-radius:10px;display:inline-block">${qr.createSvgTag({cellSize:5,margin:1})}</div><div style="margin-top:10px;color:var(--mut);font-size:13px">${url}</div>`;
   $('#modal').classList.remove('hidden');}
@@ -172,19 +177,19 @@ function renderBackupTiles(sv){const nb=sv.nas_backup||{},pr=sv.progress||{},ph=
 function renderBackupPage(){const sv=last.services||{},nb=sv.nas_backup||{},pr=sv.progress||{},ph=sv.photo||{},w=whichBackup(pr);
   const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span>${v}</span></div>`,bar=p=>`<div class="bar-fill"><i style="width:${p||0}%"></i></div>`;
   const big=(pct,done,total)=>`<div class="bigstat"><div><div class="n">${pct||0}%</div><div class="l">progress</div></div><div><div class="n">${done||0}<span style="font-size:22px;color:var(--mut)"> / ${total||'?'}</span></div><div class="l">files</div></div></div>`;
-  let h='<div class="h">Photo import (SD/USB)</div>';
+  // --- Photo import (карта → /mnt/storage/usb-imports), + чистка ---
+  let h='<div class="h">📷 Photo import (SD/USB → this disk)</div>';
   if(w==='photo')h+=big(pr.percent,pr.files_done,pr.files_total)+bar(pr.percent)+`<div class="sideinfo">${R('card',pr.label||'?')}${R('speed',pr.speed||'?')}${R('eta',pr.eta||'?')}</div>`;
-  else h+=`<div class="sideinfo">${R('last import',ph.last||'—')}${R('mode','auto on card insert')}</div>`;
-  h+='<div class="h" style="margin-top:14px">NAS backup</div>';
+  else h+=`<div class="sideinfo">${R('last import',ph.last||'—')}${R('mode','automatic on card insert')}</div>`;
+  h+='<div class="h" style="margin-top:10px">Imports on disk <span id="imp-total" class="k"></span></div><div id="bk-cleanup" class="svc-list"></div>';
+  // --- NAS backup (копируем С домашнего NAS → сюда) ---
+  h+='<div class="h" style="margin-top:16px">☁ NAS backup (copy FROM home NAS → here)</div>';
   if(w==='nas')h+=big(pr.percent,pr.files_done,pr.files_total)+bar(pr.percent)+`<div class="sideinfo">${R('speed',pr.speed||'?')}${R('eta',pr.eta||'?')}</div><button id="bk-stop" class="wide" style="color:var(--crit)">${ic('i-stop')}Stop backup</button>`;
-  else h+=`<div class="sideinfo" id="nas-hist"></div><button id="bk-run" class="wide">${ic('i-cloud')}Run NAS backup</button>`;
-  h+='<div class="h" style="margin-top:14px">Photo imports on disk <span id="imp-total" class="k"></span></div><div id="bk-cleanup" class="svc-list"></div>';
+  else{const configured=Object.keys(nb).length>0;let rows='';
+    if(!configured)rows=R('status','not configured — задай NAS в Settings → Configs → nas-backup.conf');
+    else for(const[k,v]of Object.entries(nb))rows+=R(k,(v&&typeof v==='object')?(v.last_run||v.status||''):v);
+    h+=`<div class="sideinfo">${rows}</div><button id="bk-run" class="wide">${ic('i-cloud')}Run NAS backup</button>`;}
   $('#backup-body').innerHTML=h;
-  // nas history (модули + last_run)
-  if(nb&&typeof nb==='object'&&!w){const mods=nb.modules||nb.entries||nb;let rows='';
-    if(Array.isArray(mods))mods.forEach(m=>rows+=R(m.module||m.name||'?',m.last_run||m.status||''));
-    else for(const[k,v]of Object.entries(nb))if(typeof v!=='object')rows+=R(k,v);
-    if($('#nas-hist'))$('#nas-hist').innerHTML=rows||R('status','idle');}
   const run=$('#bk-run'),stop=$('#bk-stop');
   if(run)run.onclick=()=>{doAction('nas-backup');toast('backup started');};
   if(stop)stop.onclick=()=>{doAction('nas-stop');toast('stopping');};
@@ -204,7 +209,14 @@ function renderYT(){const yt=(last.services||{}).yt||{};
   const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span>${v}</span></div>`;
   $('#yt-info').innerHTML=R('state',yt.paused?'paused':'running')+R('errors',yt.error||0)+R('max parallel',yt.max_concurrent||1);
   const t=$('#yt-toggle');t.style.display='';t.innerHTML=yt.paused?ic('i-play')+'Resume all':ic('i-stop')+'Pause all';
-  t.onclick=async()=>{await api('/api/yt',{action:yt.paused?'resume':'pause'});toast(yt.paused?'resumed':'paused');setTimeout(()=>api('/api/snapshot').then(r=>r.json()).then(d=>{last=d;renderYT();}),800);};}
+  t.onclick=async()=>{await api('/api/yt',{action:yt.paused?'resume':'pause'});toast(yt.paused?'resumed':'paused');setTimeout(()=>api('/api/snapshot').then(r=>r.json()).then(d=>{last=d;renderYT();}),800);};
+  // обогащаем напрямую с YT-бэкенда (CORS=*): музыка + недавние
+  fetch(`http://${location.hostname}:8081/api/videos`).then(r=>r.json()).then(v=>{
+    const music=v.filter(x=>x.is_music||x.is_music_via_playlist).length;
+    $('#yt-pills').insertAdjacentHTML('beforeend',pill(music,'music'));
+    const rec=v.filter(x=>x.downloaded_at).sort((a,b)=>(b.downloaded_at||'').localeCompare(a.downloaded_at||'')).slice(0,8);
+    $('#yt-recent').innerHTML=(rec.length?rec:v.slice(0,8)).map(x=>`<div class="svc-item"><span>${(x.is_music||x.is_music_via_playlist)?'🎵 ':'🎬 '}${(x.title||'').slice(0,46)}</span><span class="u">${x.file_size_bytes?TB(x.file_size_bytes):''}</span></div>`).join('')||'<div class="note">пусто</div>';
+  }).catch(()=>{$('#yt-recent').innerHTML='<div class="note">нет связи с YT-бэкендом</div>';});}
 
 /* Power */
 const MODEDESC={auto:'Auto — system picks governor by temp/throttle.',normal:'Normal — ondemand, up to max clock.',saver:'Saver — powersave, min clock.'};
@@ -266,7 +278,7 @@ $('#logs-refresh').onclick=loadLogs;$('#logs-filter').oninput=renderLogs;
 
 /* update page */
 let updTimer=null;
-$('#update-run').onclick=async()=>{$('#update-body').textContent='Starting…';await api('/api/update/run');
+$('#update-run').onclick=async()=>{$('#update-body').textContent='Starting…';await api('/api/update/run',{});
   clearInterval(updTimer);updTimer=setInterval(async()=>{try{$('#update-body').textContent=await(await fetch('/api/update/log')).text();const b=$('#update-body');b.scrollTop=b.scrollHeight;}catch(e){}},1500);};
 
 /* actions / modal */
@@ -279,7 +291,7 @@ $('#modal-cancel').onclick=closeModal;
 async function doAction(name,body){if(name.startsWith('__del:'))return delImport(name.slice(6));
   toast('…');try{const r=await(await api('/api/action/'+name,body||{})).json();toast(r.ok||r.detached?'OK':('Error: '+(r.err||r.error||'')));}catch(e){toast('Network error');}}
 $('#btn-exit').onclick=()=>doAction('screen',{exit_kiosk:true});
-$('#diag-run').onclick=async()=>{toast('building diag…');try{const r=await(await api('/api/diag')).json();toast(r.ok?(r.sent?'sent to Telegram ✓':'saved: '+r.path):'error: '+(r.error||''));}catch(e){toast('error');}};
+$('#diag-run').onclick=async()=>{toast('building diag…');try{const r=await(await api('/api/diag',{})).json();toast(r.ok?(r.sent?'sent to Telegram ✓':'saved: '+r.path):'error: '+(r.error||''));}catch(e){toast('error');}};
 
 /* screen */
 const LS=localStorage,br=$('#brightness'),bv=$('#brightness-val');

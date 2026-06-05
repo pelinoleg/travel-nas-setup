@@ -263,7 +263,9 @@ def db():
     Path(CONF["HISTORY_DB"]).parent.mkdir(parents=True, exist_ok=True)
     c = sqlite3.connect(CONF["HISTORY_DB"], timeout=5)
     c.execute("CREATE TABLE IF NOT EXISTS m (ts INT, cpu REAL, temp REAL, mem REAL, "
-              "disk REAL, net_rx REAL, net_tx REAL)")
+              "disk REAL, net_rx REAL, net_tx REAL, dtemp REAL)")
+    try: c.execute("ALTER TABLE m ADD COLUMN dtemp REAL")   # миграция старой БД
+    except Exception: pass
     return c
 def sampler_history():
     while True:
@@ -272,9 +274,9 @@ def sampler_history():
             with _lock: s, st = dict(SAMPLE["system"]), dict(SAMPLE["storage"])
             if not s: continue
             c = db()
-            c.execute("INSERT INTO m VALUES (?,?,?,?,?,?,?)",
+            c.execute("INSERT INTO m VALUES (?,?,?,?,?,?,?,?)",
                       (int(time.time()), s.get("cpu", 0), s.get("temp", 0), s.get("mem_used", 0),
-                       st.get("pct") or 0, s.get("net_rx", 0), s.get("net_tx", 0)))
+                       st.get("pct") or 0, s.get("net_rx", 0), s.get("net_tx", 0), st.get("disk_temp") or 0))
             c.execute("DELETE FROM m WHERE ts < ?", (int(time.time()) - 8 * 86400,))
             c.commit(); c.close()
         except Exception as e: print("history:", e)
@@ -335,7 +337,7 @@ def api_stream():
 def api_history():
     m, rng = request.args.get("m", "temp"), request.args.get("range", "1h")
     secs = {"5m": 300, "1h": 3600, "24h": 86400, "7d": 7 * 86400}.get(rng, 3600)
-    if m not in {"cpu", "temp", "mem", "disk", "net_rx", "net_tx"}:
+    if m not in {"cpu", "temp", "mem", "disk", "net_rx", "net_tx", "dtemp"}:
         return jsonify({"error": "bad"}), 400
     try:
         c = db(); rows = c.execute(f"SELECT ts,{m} FROM m WHERE ts>=? ORDER BY ts",

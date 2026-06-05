@@ -54,7 +54,7 @@ function updateSparks(){$$('.spark').forEach(cv=>{const k=cv.dataset.s;if(!SPARK
   else{const h=SPARKHIST[k];if(h&&h.t.length){const now=h.t[h.t.length-1];let i=0;while(i<h.t.length&&h.t[i]<now-w)i++;arr=h.v.slice(i).filter(x=>x!=null);}else arr=SPARK[k].slice(winStart(k));}
   const col=(k==='temp'||k==='dtemp')?heatColor(k,arr.length?arr[arr.length-1]:0):MET[k].col;
   drawSpark(cv,arr,col,sparkMax(k,arr));});}
-setInterval(()=>['cpu','temp','mem','net_rx','disk'].forEach(m=>{if(sparkWin(m)>900)fetchSparkHist(m);}),60000);
+setInterval(()=>['cpu','temp','mem','net_rx','disk','dtemp'].forEach(m=>{if(sparkWin(m)>900)fetchSparkHist(m);}),60000);
 
 /* render */
 const chip=(cls,txt)=>`<span class="chip"><span class="dot ${cls}"></span>${txt}</span>`;
@@ -66,7 +66,7 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   $('#temp').textContent=s.temp!=null?Math.round(s.temp):'–';colorVal('temp','temp',s.temp);
   $('#mem').textContent=s.mem_total?(+s.mem_used).toFixed(1):'–';$('#mem-tot').textContent=s.mem_total?'/'+Math.round(s.mem_total):'';colorVal('mem','disk',memPct);
   {const tx=s.net_tx||0,rx=s.net_rx||0;
-   $('#net').innerHTML=`<span class="ul ${tx>=1?'on':''}">↑ ${fmtNet(tx)}</span><br><span class="dl ${rx>=1?'on':''}">↓ ${fmtNet(rx)}</span>`;}
+   $('#net').innerHTML=`<span class="dl ${rx>=1?'on':''}">${ic('i-dl')}${fmtNet(rx)}</span><span class="ul ${tx>=1?'on':''}">${ic('i-ul')}${fmtNet(tx)}</span>`;}
   $('#disk').textContent=st.pct??'–';colorVal('disk','disk',st.pct);
   const dbar=$('#disk-bar');if(dbar){dbar.style.width=(st.pct||0)+'%';dbar.className=st.pct>=95?'crit':st.pct>=88?'high':st.pct>=75?'warn':'';}
   $('#disk-sub').textContent=st.size?`${(st.used/1e12).toFixed(2)} / ${(st.size/1e12).toFixed(2)} TB`:'';
@@ -79,7 +79,7 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   $('#uptime').textContent='up '+fmtUp(s.uptime||0);
   {const ap=nw.mode==='AP',sig=nw.signal,q=sig!=null?Math.max(0,Math.min(100,2*(sig+100))):null;  // dBm→~%
    $('#wifi-v').textContent=ap?'Hotspot':(nw.ssid||'—');
-   $('#wifi-sub').innerHTML=ap?(nw.ap_ssid||nw.ap_name||''):`${q!=null?'📶 '+q+'%':''} ${nw.ip&&nw.ip!=='?'?'· '+nw.ip:'(no ip)'}`+(nw.ts_up?' · TS':'');}
+   $('#wifi-sub').innerHTML=ap?(nw.ap_ssid||nw.ap_name||''):`${q!=null?ic('i-net')+' '+q+'%':''} ${nw.ip&&nw.ip!=='?'?'· '+nw.ip:'(no ip)'}`+(nw.ts_up?' · TS':'');}
   // docker tile — проекты + контейнеры
   const proj=sv.projects||[],down=proj.filter(p=>p.running<p.total).length;
   const totC=proj.reduce((a,p)=>a+p.total,0),runC=proj.reduce((a,p)=>a+p.running,0);
@@ -89,7 +89,7 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   // yt tile
   const yt=sv.yt||{};
   if(Object.keys(yt).length){$('#yt-v').textContent=(yt.videos||0)+' vids';
-    $('#yt-sub').textContent=`${TB(yt.total_bytes)}${yt.music?' · '+yt.music+'♪':''}${yt.paused?' · paused':(yt.downloading?' · '+yt.downloading+'↓':'')}`;}
+    $('#yt-sub').textContent=`${TB(yt.total_bytes)}${yt.music?' · '+yt.music+' mus':''}${yt.paused?' · paused':(yt.downloading?' · '+yt.downloading+' dl':'')}`;}
   else{$('#yt-v').textContent='–';$('#yt-sub').textContent='offline';}
   // backups tiles (photo/nas раздельно)
   renderBackupTiles(sv);
@@ -106,20 +106,20 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   $('#topchips').innerHTML=chip(wc,nw.mode==='AP'?`Hotspot ${nw.ssid||''}`:`${nw.ssid||'no wifi'} ${nw.signal?nw.signal+'dB':''}`);
   if($('#net-url'))$('#net-url').textContent=`http://${(nw.host||'nas')}.local:8090 · http://${nw.ip||'?'}:8090`;
   {const nf=$('#night-from').value,nt=$('#night-to').value;
-   $('#screen-sub').innerHTML=`<span>☀ ${br.value}%</span>${nf&&nt?`<span>🌙 ${nf}–${nt}</span>`:''}`;}
+   $('#screen-sub').innerHTML=`<span>${ic('i-sun')} ${br.value}%</span>${nf&&nt?`<span>${ic('i-moon')} ${nf}–${nt}</span>`:''}`;}
   renderAlerts(s,st,sv,nw);
   // live-обновление только лёгких частей открытой страницы (без полного rebuild → нет дёрганья)
   if(!$('#page-power').classList.contains('hidden'))renderPower();
   updateBackupLive();}
 
 function renderAlerts(s,st,sv,nw){const a=[];
-  if(s.throttled_now)a.push(['crit','⚡ Throttled']);
-  if(s.temp>=82)a.push(['crit','🌡 CPU '+s.temp+'°C']);else if(s.temp>=72)a.push(['warn','🌡 '+s.temp+'°C']);
-  if(st.mounted===false)a.push(['crit','💾 Disk not mounted']);
-  else if(st.pct>=95)a.push(['crit','💾 Disk '+st.pct+'%']);else if(st.pct>=88)a.push(['warn','💾 Disk '+st.pct+'%']);
-  if((nw.ip||'?')==='?')a.push(['warn','📡 No network']);
-  const nb=sv.nas_backup||{};if((nb.last_status||'')==='failed')a.push(['crit','☁ Backup failed']);
-  $('#alerts').innerHTML=a.map(([c,t])=>`<span class="alert ${c}">${t}</span>`).join('');
+  if(s.throttled_now)a.push(['crit','i-zap','Throttled']);
+  if(s.temp>=82)a.push(['crit','i-thermo','CPU '+s.temp+'°C']);else if(s.temp>=72)a.push(['warn','i-thermo',s.temp+'°C']);
+  if(st.mounted===false)a.push(['crit','i-disk','Disk not mounted']);
+  else if(st.pct>=95)a.push(['crit','i-disk','Disk '+st.pct+'%']);else if(st.pct>=88)a.push(['warn','i-disk','Disk '+st.pct+'%']);
+  if((nw.ip||'?')==='?')a.push(['warn','i-net','No network']);
+  const nb=sv.nas_backup||{};if((nb.last_status||'')==='failed')a.push(['crit','i-cloud','Backup failed']);
+  $('#alerts').innerHTML=a.map(([c,i,t])=>`<span class="alert ${c}">${ic(i)}${t}</span>`).join('');
   $('#lastrow').style.display=a.length?'none':'';}   // alerts на всю ширину → прячем последний ряд
 
 /* SSE */
@@ -187,11 +187,12 @@ function renderDisks(){const disks=(last.storage||{}).disks||[];
 function bkbg(pct){return pct!=null?`background:linear-gradient(90deg,rgba(59,130,246,.28) ${pct}%,transparent ${pct}%)`:'';}
 function renderBackupTiles(sv){const nb=sv.nas_backup||{},pr=sv.progress||{},ph=sv.photo||{},w=whichBackup(pr);
   const pt=$('#bk-photo'),nt=$('#bk-nas');
-  $('#photo-v').textContent=w==='photo'?(pr.percent||0)+'%':'idle';
-  $('#photo-sub').textContent=w==='photo'?`${pr.files_done||0}/${pr.files_total||'?'} files`:(ph.last?'last '+ph.last:'—');
+  $('#photo-v').textContent=w==='photo'?(pr.percent||0)+'%':(ph.files?ph.files+' files':'idle');
+  $('#photo-sub').textContent=w==='photo'?`${pr.files_done||0}/${pr.files_total||'?'} files`:(ph.bytes?TB(ph.bytes)+(ph.last?' · '+ph.last:''):(ph.last?'last '+ph.last:'—'));
   pt.setAttribute('style',w==='photo'?bkbg(pr.percent):'');
   $('#nas-v').textContent=w==='nas'?(pr.percent||0)+'%':(nb.last_status||nb.status||'idle');
-  $('#nas-sub').textContent=w==='nas'?`${pr.speed||''} eta ${pr.eta||'?'}`:(nb.last_run?'last '+nb.last_run:'');
+  const sched=sv.nas_sched&&sv.nas_sched!=='off'?sv.nas_sched:null;
+  $('#nas-sub').textContent=w==='nas'?`${pr.speed||''} eta ${pr.eta||'?'}`:(sched?'auto '+sched:(nb.last_run?'last '+nb.last_run:'manual'));
   nt.setAttribute('style',w==='nas'?bkbg(pr.percent):'');}
 const bkCard=(icon,title,body)=>`<div class="bkcard">${icon}<div class="bkc"><div class="bkt">${title}</div>${body}</div></div>`;
 const bkProg=pr=>`<div class="bkbar"><i id="bk-bar" style="width:${pr.percent||0}%"></i></div><div class="bks"><b id="bk-pct">${pr.percent||0}%</b> · <span id="bk-files">${pr.files_done||0}/${pr.files_total||'?'}</span> files · <span id="bk-speed">${pr.speed||'…'}</span> · eta <span id="bk-eta">${pr.eta||'?'}</span></div>`;
@@ -207,7 +208,9 @@ function renderPhotoPage(){const sv=last.services||{},pr=sv.progress||{},ph=sv.p
 function renderNasPage(){const sv=last.services||{},nb=sv.nas_backup||{},pr=sv.progress||{},active=pr.active&&pr.kind==='nas',sched=sv.nas_sched||'off';
   const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span>${v}</span></div>`,cfg=Object.keys(nb).length>0;
   let h=bkCard(ic('i-cloud'),'Pull backup from home NAS',active?bkProg(pr):`<div class="bks">${cfg?'idle':'not configured — set NAS in Settings → Configs → nas-backup.conf'}</div>`);
-  h+=`<div class="sideinfo">${R('Schedule',sched==='off'?'manual (off)':sched)}${nb.last_run?R('Last run',nb.last_run):''}${nb.last_status?R('Last status',nb.last_status):''}${nb.host?R('NAS host',nb.host):''}${nb.dest?R('Dest',nb.dest):''}</div>`;
+  const schOn=sched&&sched!=='off';
+  const schVal=`<span class="dot ${schOn?'ok':'off'}"></span> ${schOn?'ON · '+sched:'OFF (manual only)'}`;
+  h+=`<div class="sideinfo">${R('Schedule',schVal)}${nb.last_run?R('Last run',nb.last_run):''}${nb.last_status?R('Last status',(nb.last_status==='failed'?'<span style="color:var(--crit)">failed</span>':'<span style="color:var(--ok)">'+nb.last_status+'</span>')):''}${nb.host?R('NAS host',nb.host):''}${nb.dest?R('Dest',nb.dest):''}</div>`;
   const sm=(sched||'').match(/^(daily|weekly) (\d\d:\d\d)/),stime=sm?sm[2]:'03:00';
   h+=`<div class="h" style="margin-top:8px">Auto-schedule</div>
     <div class="schedrow"><select id="sch-freq"><option value="daily">daily</option><option value="weekly">weekly (Sun)</option></select>
@@ -270,7 +273,7 @@ function renderYT(){const yt=(last.services||{}).yt||{};
     const music=v.filter(x=>x.is_music||x.is_music_via_playlist).length;
     $('#yt-pills').insertAdjacentHTML('beforeend',pill(music,'music'));
     const rec=v.filter(x=>x.downloaded_at).sort((a,b)=>(b.downloaded_at||'').localeCompare(a.downloaded_at||'')).slice(0,8);
-    $('#yt-recent').innerHTML=(rec.length?rec:v.slice(0,8)).map(x=>`<div class="svc-item"><span>${(x.is_music||x.is_music_via_playlist)?'🎵 ':'🎬 '}${(x.title||'').slice(0,46)}</span><span class="u">${x.file_size_bytes?TB(x.file_size_bytes):''}</span></div>`).join('')||'<div class="note">пусто</div>';
+    $('#yt-recent').innerHTML=(rec.length?rec:v.slice(0,8)).map(x=>`<div class="svc-item"><span>${ic((x.is_music||x.is_music_via_playlist)?'i-music':'i-video')} ${(x.title||'').slice(0,44)}</span><span class="u">${x.file_size_bytes?TB(x.file_size_bytes):''}</span></div>`).join('')||'<div class="note">empty</div>';
   }).catch(()=>{$('#yt-recent').innerHTML='<div class="note">нет связи с YT-бэкендом</div>';});}
 
 /* Power */
@@ -279,7 +282,7 @@ function renderPower(){const s=last.system||{},pm=s.pmode||'auto';
   $$('#powermode button').forEach(b=>b.classList.toggle('active',b.dataset.mode===pm));
   $('#mode-desc').textContent=MODEDESC[pm]||'';
   const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span>${v}</span></div>`;
-  $('#power-info').innerHTML=R('mode',pm)+R('governor',s.governor||'?')+R('frequency',(s.freq_mhz||0)+' MHz')+R('CPU temp',(s.temp??'?')+'°C')+R('throttled',s.throttled_now?'YES ⚠':'no')+R('load',(s.load||[]).join(' '));}
+  $('#power-info').innerHTML=R('mode',pm)+R('governor',s.governor||'?')+R('frequency',(s.freq_mhz||0)+' MHz')+R('CPU temp',(s.temp??'?')+'°C')+R('throttled',s.throttled_now?'YES':'no')+R('load',(s.load||[]).join(' '));}
 $$('#powermode button').forEach(b=>b.onclick=()=>{doAction('power-mode',{mode:b.dataset.mode});setTimeout(renderPower,800);});
 $$('#boost-seg button').forEach(b=>b.onclick=()=>{doAction('cpu-boost',{min:+b.dataset.min});toast('CPU boost '+b.dataset.min+'m');});
 
@@ -296,7 +299,7 @@ async function loadTsList(){try{const d=await(await fetch('/api/tailscale')).jso
   $$('#ts-list .svc-item').forEach(el=>el.onclick=async()=>{toast('ping '+el.dataset.ip+'…');const r=await(await api('/api/ts-ping',{ip:el.dataset.ip})).json();toast((r.out||'no reply').split('\n').pop());});}catch(e){}}
 async function loadWifi(){$('#wifi-list').innerHTML='<div class="note">scanning…</div>';
   try{const n=await(await fetch('/api/wifi/scan')).json();
-  $('#wifi-list').innerHTML=n.map(w=>`<div class="svc-item" data-ssid="${w.ssid}" data-sec="${w.sec}"><span>${w.active?'● ':''}${w.ssid}</span><span class="u">${w.signal}%${w.sec&&w.sec!=='--'?' 🔒':''}</span></div>`).join('')||'<div class="note">none</div>';
+  $('#wifi-list').innerHTML=n.map(w=>`<div class="svc-item" data-ssid="${w.ssid}" data-sec="${w.sec}"><span>${w.active?'● ':''}${w.ssid}</span><span class="u">${w.signal}%${w.sec&&w.sec!=='--'?'':''}</span></div>`).join('')||'<div class="note">none</div>';
   $$('#wifi-list .svc-item').forEach(el=>el.onclick=()=>connectWifi(el.dataset.ssid,el.dataset.sec));}catch(e){$('#wifi-list').innerHTML='error';}}
 function connectWifi(ssid,sec){if(sec&&sec!=='--'&&sec!==''){
     $('#wifi-list').innerHTML=`<div class="h">${ssid}</div><input id="wifi-pw" class="lfilter" type="password" placeholder="password" style="max-width:100%"><div style="display:flex;gap:8px;margin-top:8px"><button id="wifi-go" class="wide">Connect</button><button id="wifi-cancel" class="wide">Cancel</button></div>`;
@@ -311,7 +314,7 @@ async function renderToday(){try{const d=await(await fetch('/api/today')).json()
   if(d.cpu_temp!=null)h+=R('CPU temp',d.cpu_temp+'°C');
   if(d.ip)h+=R('IP',d.ip);if(d.ssid)h+=R('WiFi',d.ssid);
   if(d.storage)h+=R('Storage',`${d.storage.used} / ${d.storage.total} (${d.storage.pct}%)`+(d.storage.temp!=null?` · ${d.storage.temp}°C`:''));
-  if(d.throttle)h+=R('Throttle',d.throttle.now?'NOW ⚠':(d.throttle.past?'past':'no'));
+  if(d.throttle)h+=R('Throttle',d.throttle.now?'NOW':(d.throttle.past?'past':'no'));
   if(d.photo_today)h+=R('Photo today',`${d.photo_today.cards} cards · ${d.photo_today.files} files · ${d.photo_today.size}`);
   h+=R('NAS today',d.nas_today?(typeof d.nas_today==='object'?(d.nas_today.status||'done'):d.nas_today):'—');
   if(d.errors_today!=null)h+=R('Errors',d.errors_today);if(d.incomplete!=null)h+=R('Incomplete',d.incomplete);
@@ -324,16 +327,16 @@ async function loadRecent(){try{const d=await(await fetch('/api/recent')).json()
 
 /* Failed units */
 async function renderFailed(){try{const u=await(await fetch('/api/failed')).json();
-  $('#failed-body').innerHTML=u.length?'<div class="svc-list">'+u.map(n=>`<div class="svc-item"><span>${n}</span><button class="minib" data-u="${n}">Restart</button></div>`).join('')+'</div>':'<div class="note">No failed units ✓</div>';
+  $('#failed-body').innerHTML=u.length?'<div class="svc-list">'+u.map(n=>`<div class="svc-item"><span>${n}</span><button class="minib" data-u="${n}">Restart</button></div>`).join('')+'</div>':'<div class="note">No failed units</div>';
   $$('#failed-body .minib').forEach(b=>b.onclick=()=>{doAction('restart-unit',{unit:b.dataset.u});toast('restart '+b.dataset.u);setTimeout(renderFailed,1500);});}catch(e){$('#failed-body').innerHTML='error';}}
 
 /* Configs */
 async function renderConfigs(){try{const r=await(await fetch('/api/configs')).json();
-  $('#configs-body').innerHTML='<div class="svc-list">'+r.map(c=>`<div class="svc-item" data-n="${c.name}"><span>${c.name}${c.desc?' — <span style="color:var(--mut)">'+c.desc+'</span>':''}</span><span class="u">edit ✎</span></div>`).join('')+'</div><div class="note">Tap to edit. Некоторые содержат пароли/токены.</div>';
+  $('#configs-body').innerHTML='<div class="svc-list">'+r.map(c=>`<div class="svc-item" data-n="${c.name}"><span>${c.name}${c.desc?' — <span style="color:var(--mut)">'+c.desc+'</span>':''}</span><span class="u">edit</span></div>`).join('')+'</div><div class="note">Tap to edit. Некоторые содержат пароли/токены.</div>';
   $$('#configs-body .svc-item').forEach(el=>el.onclick=()=>editConfig(el.dataset.n));}catch(e){$('#configs-body').innerHTML='error';}}
 async function editConfig(name){try{const r=await(await fetch('/api/config?name='+encodeURIComponent(name))).json();const esc=(r.content||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
   $('#configs-body').innerHTML=`<div class="h">${name}</div><textarea id="cfg-edit" class="editor">${esc}</textarea><div style="display:flex;gap:8px;margin-top:8px"><button id="cfg-save" class="wide">Save</button><button id="cfg-back" class="wide">Back</button></div>`;
-  $('#cfg-save').onclick=async()=>{const x=await(await api('/api/config',{name,content:$('#cfg-edit').value})).json();toast(x.ok?'saved ✓':'error: '+(x.err||x.error||''));};
+  $('#cfg-save').onclick=async()=>{const x=await(await api('/api/config',{name,content:$('#cfg-edit').value})).json();toast(x.ok?'saved':'error: '+(x.err||x.error||''));};
   $('#cfg-back').onclick=renderConfigs;}catch(e){toast('error');}}
 
 /* Logs */
@@ -358,7 +361,7 @@ $('#modal-cancel').onclick=closeModal;
 async function doAction(name,body){if(name.startsWith('__del:'))return delImport(name.slice(6));
   toast('…');try{const r=await(await api('/api/action/'+name,body||{})).json();toast(r.ok||r.detached?'OK':('Error: '+(r.err||r.error||'')));}catch(e){toast('Network error');}}
 $('#btn-exit').onclick=()=>doAction('screen',{exit_kiosk:true});
-$('#diag-run').onclick=async()=>{toast('building diag…');try{const r=await(await api('/api/diag',{})).json();toast(r.ok?(r.sent?'sent to Telegram ✓':'saved: '+r.path):'error: '+(r.error||''));}catch(e){toast('error');}};
+$('#diag-run').onclick=async()=>{toast('building diag…');try{const r=await(await api('/api/diag',{})).json();toast(r.ok?(r.sent?'sent to Telegram':'saved: '+r.path):'error: '+(r.error||''));}catch(e){toast('error');}};
 /* log files viewer (#3) + nas-run log (#4) */
 async function renderLogfiles(){try{const r=await(await fetch('/api/logfiles')).json();
   $('#lf-body').innerHTML='<div class="svc-list">'+r.map(f=>`<div class="svc-item" data-n="${f.name}"><span>${f.name}</span><span class="u">${(f.size/1024).toFixed(0)} KB</span></div>`).join('')+'</div>'+(r.length?'':'<div class="note">no log files</div>');

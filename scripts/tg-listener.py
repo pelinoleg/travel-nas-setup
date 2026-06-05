@@ -1006,41 +1006,38 @@ def cmd_screenshot(token, chat_id, args):
     Механика: touch SCREENSHOT_REQ → dashboard на следующем тике main loop'а
     (≤ ~1 сек при FPS=30) сохраняет screen в SCREENSHOT_PNG и убирает флаг."""
     import subprocess, os
-    png = SCREENSHOT_PNG
-    got = False
-    # 1) pygame-дашборд (MHS35): file-IPC — touch req, ждём обновления PNG.
-    #    Best-effort: stale root-owned флаг может дать PermissionError — тогда
-    #    просто падаем в grim (DSI всё равно отвечает им).
+    png = None
+    # 1) Wayland-дашборд (DSI) — grim основной путь. На MHS35 grim не сработает
+    #    (не Wayland) → падаем в pygame-IPC. НЕ трогаем screenshot-req первым:
+    #    он бывает root-owned (Errno 13), а на DSI вовсе не нужен.
     try:
-        if SCREENSHOT_REQ.parent.exists():
-            old_mtime = SCREENSHOT_PNG.stat().st_mtime if SCREENSHOT_PNG.exists() else 0
-            SCREENSHOT_REQ.touch()
-            deadline = time.time() + 2.5
-            while time.time() < deadline:
-                if SCREENSHOT_PNG.exists() and SCREENSHOT_PNG.stat().st_mtime > old_mtime:
-                    got = True; break
-                time.sleep(0.2)
-            if not got:
-                try: SCREENSHOT_REQ.unlink()
-                except Exception: pass
-    except Exception:
-        got = False
-    # 2) Wayland-дашборд (DSI): нет pygame → снимаем экран через grim.
-    if not got:
-        png = Path("/tmp/tg-screenshot.png")
+        out = Path("/tmp/tg-screenshot.png")
         env = dict(os.environ, WAYLAND_DISPLAY="wayland-0",
                    XDG_RUNTIME_DIR="/run/user/%d" % os.getuid())
+        subprocess.run(["grim", str(out)], env=env, timeout=10, stderr=subprocess.DEVNULL)
+        if out.exists() and out.stat().st_size > 0:
+            png = out
+    except Exception:
+        pass
+    # 2) pygame-дашборд (MHS35): file-IPC — touch req, ждём обновления PNG.
+    if png is None:
         try:
-            subprocess.run(["grim", str(png)], env=env, timeout=10,
-                          stderr=subprocess.DEVNULL)
+            if SCREENSHOT_REQ.parent.exists():
+                old_mtime = SCREENSHOT_PNG.stat().st_mtime if SCREENSHOT_PNG.exists() else 0
+                SCREENSHOT_REQ.touch()
+                deadline = time.time() + 2.5
+                while time.time() < deadline:
+                    if SCREENSHOT_PNG.exists() and SCREENSHOT_PNG.stat().st_mtime > old_mtime:
+                        png = SCREENSHOT_PNG; break
+                    time.sleep(0.2)
         except Exception:
             pass
-        if not png.exists():
-            send(token, chat_id, "❌ скриншот не получился (дашборд не отвечает, grim недоступен)")
-            return
+    if png is None:
+        send(token, chat_id, "скриншот не получился (нет grim / дашборд не отвечает)")
+        return
     r = send_photo(token, chat_id, png)
     if not r or not r.get("ok"):
-        send(token, chat_id, "❌ sendPhoto failed")
+        send(token, chat_id, "sendPhoto failed")
 
 
 COMMANDS = {

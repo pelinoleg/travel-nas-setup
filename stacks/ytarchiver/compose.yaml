@@ -6,7 +6,10 @@
 # bgutil-provider — Proof-of-Origin token provider: backend's yt-dlp ходит к нему
 # по сети (POT_PROVIDER_URL) и проходит YouTube «Sign in to confirm you're not a
 # bot» без cookies. watchtower авто-обновляет ТОЛЬКО его (label-scoped) — YouTube
-# периодически меняет анти-бот. Cookies (./cookies/youtube.txt) — опц. fallback.
+# периодически меняет анти-бот. Cookies (cookies/youtube.txt) — опц. fallback.
+# VPN exit-pool (opt-in): положи WireGuard *.conf в wireguard/ — backend через
+# docker.sock поднимет gluetun-туннели (wgvpn-*) и погонит yt-dlp через них.
+# Пустая папка = прямые загрузки. Сервисы для VPN тут НЕ нужны — туннели рантайм.
 name: ytarchiver
 services:
   backend:
@@ -50,6 +53,13 @@ services:
       COOKIES_FILE: /cookies/youtube.txt
       # Принудительный yt-dlp player client. Пусто = yt-dlp выбирает сам.
       YOUTUBE_PLAYER_CLIENT: ""
+      # VPN exit-pool (folder-driven WireGuard): backend через docker.sock
+      # поднимает по gluetun-туннелю (wgvpn-*) на каждый *.conf в /wireguard,
+      # гоняет yt-dlp через здоровые, ротирует при блоке YouTube. ПУСТАЯ папка
+      # = прямые загрузки (VPN выключен). VPN_DOCKER_NETWORK = имя нашей сети,
+      # чтобы туннели поднимались в ней и backend их резолвил.
+      WIREGUARD_CONFIGS_DIR: /wireguard
+      VPN_DOCKER_NETWORK: ytarchiver_ytarchiver_net
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/health"]
       interval: 30s
@@ -69,6 +79,12 @@ services:
         source: /mnt/storage/media/YT-Archiver/cookies
         target: /cookies
         read_only: true
+      # VPN exit-pool: docker.sock — чтобы backend спавнил gluetun-туннели;
+      # wireguard/ — папка с *.conf (положи туда конфиги, чтобы включить VPN).
+      - /var/run/docker.sock:/var/run/docker.sock
+      - type: bind
+        source: /mnt/storage/media/YT-Archiver/wireguard
+        target: /wireguard
   frontend:
     image: ghcr.io/pelinoleg/ytarchiver-frontend:latest
     container_name: ytarchiver-frontend

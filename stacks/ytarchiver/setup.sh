@@ -7,6 +7,8 @@ stack_pre() {
     sudo install -d -o "$U" -g "$U" /mnt/storage/media/YT-Archiver/video
     # cookies/ — опц. fallback (положи youtube.txt). Mount :ro, но папка нужна.
     sudo install -d -o "$U" -g "$U" /mnt/storage/media/YT-Archiver/cookies
+    # wireguard/ — VPN exit-pool: положи сюда *.conf чтобы включить VPN (пусто = off).
+    sudo install -d -o "$U" -g "$U" /mnt/storage/media/YT-Archiver/wireguard
 
     # Дефолт CPU-лимита под модель Pi (Pi5 быстрее → больше ядер).
     local model; model=$(tr -d '\0' < /proc/device-tree/model 2>/dev/null || echo "")

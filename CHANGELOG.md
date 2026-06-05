@@ -2,6 +2,18 @@
 
 Significant changes to travel-nas-setup. Newest first.
 
+## 2026-06-05 — ytarchiver: VPN exit-pool (folder-driven WireGuard)
+
+- Поддержка нового VPN-механизма upstream: backend через docker.sock поднимает по
+  gluetun-туннелю (`wgvpn-*`) на каждый `*.conf` в `/wireguard`, гоняет yt-dlp
+  через здоровые, ротирует при блоке YouTube, дохлые конфиги карантинит. Opt-in
+  через файлы: **пустая папка = прямые загрузки** (VPN выключен).
+- compose backend: + env `WIREGUARD_CONFIGS_DIR=/wireguard`,
+  `VPN_DOCKER_NETWORK=ytarchiver_ytarchiver_net`; + mount `/var/run/docker.sock`
+  (спавн туннелей) + bind `wireguard/` → `/wireguard`. `stack_pre` создаёт папку.
+- ⚠ docker.sock у backend = root-эквивалент на хосте (требование фичи). Туннели
+  `wgvpn-*` — рантайм, не в compose/Dockge.
+
 ## 2026-06-05 — ytarchiver: POT-провайдер (обход YouTube bot-wall)
 
 - Синхронизация стека с upstream `pelinoleg/ytarchiver`. Backend's yt-dlp теперь

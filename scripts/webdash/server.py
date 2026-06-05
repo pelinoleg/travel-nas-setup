@@ -448,6 +448,60 @@ def send_document(token, chat, path):
                                  headers={"Content-Type": "multipart/form-data; boundary=" + b})
     urllib.request.urlopen(req, timeout=30)
 
+ICON_CACHE = {}
+@app.route("/api/appicon")
+def api_appicon():
+    u = request.args.get("u", "")
+    if not u.startswith("http"): return ("", 404)
+    base = u.rstrip("/")
+    if base in ICON_CACHE:
+        d, ct = ICON_CACHE[base]; return Response(d, mimetype=ct)
+    def fetch(url):
+        with urllib.request.urlopen(url, timeout=4) as r:
+            return r.read(300000), r.headers.get("Content-Type", "image/png")
+    try:
+        html = ""
+        try: html = fetch(base + "/")[0].decode("utf-8", "ignore")
+        except Exception: pass
+        href = ""
+        for tag in re.findall(r'<link[^>]+rel="[^"]*icon[^"]*"[^>]*>', html, re.I):
+            m = re.search(r'href="([^"]+)"', tag)
+            if m:
+                href = m.group(1)
+                if re.search(r'apple-touch|android-chrome|192|180', href, re.I): break
+        if href.startswith("http"): iu = href
+        elif href.startswith("/"): iu = base + href
+        elif href: iu = base + "/" + href
+        else: iu = base + "/favicon.ico"
+        data, ct = fetch(iu)
+        if "image" not in ct and "icon" not in ct and data[:4] != b"\x89PNG":
+            data, ct = fetch(base + "/favicon.ico")
+        ICON_CACHE[base] = (data, ct); return Response(data, mimetype=ct)
+    except Exception:
+        return ("", 404)
+
+@app.route("/api/smart")
+def api_smart():
+    src = sh(["findmnt", "-n", "-o", "SOURCE", "--target", CONF["STORAGE_MOUNT"]])
+    dev = re.sub(r'p?\d+$', '', src) if src else ''
+    if not dev: return jsonify({"error": "no device"}), 404
+    out = sh(["sudo", "-n", "smartctl", "-a", dev], timeout=12)
+    def g(*pats):
+        for p in pats:
+            m = re.search(p, out, re.I | re.M)
+            if m: return m.group(1).strip()
+        return None
+    return jsonify({"device": dev,
+        "model": g(r'(?:Device Model|Model Number):\s*(.+)'),
+        "capacity": g(r'User Capacity:.*\[(.+?)\]', r'Total NVM Capacity:.*\[(.+?)\]', r'Namespace 1 Size.*\[(.+?)\]'),
+        "health": g(r'overall-health[^:]*:\s*(\w+)'),
+        "temp": g(r'Temperature[_ ]?Celsius.*?(\d+)', r'Temperature:\s*(\d+)'),
+        "power_on_hours": g(r'Power[_ ]On[_ ]Hours.*?(\d[\d,]*)', r'Power On Hours:\s*([\d,]+)'),
+        "power_cycles": g(r'Power[_ ]Cycle[_ ]Count.*?(\d+)', r'Power Cycles:\s*([\d,]+)'),
+        "wear": g(r'Percentage Used:\s*(\d+%?)', r'Wear_Leveling_Count.*?(\d+)\s*$'),
+        "realloc": g(r'Reallocated_Sector_Ct.*?(\d+)\s*$'),
+        "spare": g(r'Available Spare:\s*(\d+%)')})
+
 @app.route("/api/failed")
 def api_failed():
     units = []

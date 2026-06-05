@@ -27,7 +27,7 @@ setInterval(()=>{const d=new Date();$('#clock').textContent=`${('0'+d.getHours()
 function openPage(id){$$('.page').forEach(p=>p.classList.add('hidden'));$('#'+id).classList.remove('hidden');
   ({'page-power':renderPower,'page-backup':renderBackupPage,'page-logs':loadLogs,'page-network':()=>{renderNetwork();loadTsList();},
     'page-services':renderServices,'page-yt':renderYT,'page-configs':renderConfigs,'page-today':renderToday,
-    'page-failed':renderFailed,'page-docker':renderProjects}[id]||(()=>{}))();}
+    'page-failed':renderFailed,'page-docker':renderProjects,'page-disk':renderDiskPage}[id]||(()=>{}))();}
 const closePages=()=>$$('.page').forEach(p=>p.classList.add('hidden'));
 $$('.page .back').forEach(b=>b.onclick=closePages);
 $$('[data-open]').forEach(el=>el.onclick=()=>{const o=el.dataset.open;
@@ -51,7 +51,7 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   $('#cpu').textContent=s.cpu!=null?Math.round(s.cpu):'–';colorVal('cpu','cpu',s.cpu);
   $('#temp').textContent=s.temp!=null?Math.round(s.temp):'–';colorVal('temp','temp',s.temp);
   $('#mem').textContent=s.mem_total?(+s.mem_used).toFixed(1):'–';$('#mem-tot').textContent=s.mem_total?'/'+Math.round(s.mem_total):'';colorVal('mem','disk',memPct);
-  $('#net').textContent=`↑${s.net_tx??0}  ↓${s.net_rx??0}`;
+  {const ne=$('#net');ne.textContent=`↑${s.net_tx??0}  ↓${s.net_rx??0}`;ne.classList.toggle('dim',(s.net_rx||0)===0&&(s.net_tx||0)===0);}
   $('#disk').textContent=st.pct??'–';colorVal('disk','disk',st.pct);
   const dbar=$('#disk-bar');if(dbar){dbar.style.width=(st.pct||0)+'%';dbar.className=st.pct>=95?'crit':st.pct>=88?'high':st.pct>=75?'warn':'';}
   $('#disk-sub').textContent=st.size?`${(st.used/1e12).toFixed(2)} / ${(st.size/1e12).toFixed(2)} TB`:'';
@@ -86,12 +86,11 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   $('#topchips').innerHTML=chip(wc,nw.mode==='AP'?`Hotspot ${nw.ssid||''}`:`${nw.ssid||'no wifi'} ${nw.signal?nw.signal+'dB':''}`);
   if($('#net-url'))$('#net-url').textContent=`http://${(nw.host||'nas')}.local:8090 · http://${nw.ip||'?'}:8090`;
   {const nf=$('#night-from').value,nt=$('#night-to').value;
-   $('#screen-sub').innerHTML=`☀ ${br.value}%`+(nf&&nt?`&nbsp;&nbsp; 🌙 ${nf}–${nt}`:'');}
+   $('#screen-sub').innerHTML=`<span>☀ ${br.value}%</span>${nf&&nt?`<span>🌙 ${nf}–${nt}</span>`:''}`;}
   renderAlerts(s,st,sv,nw);
+  // live-обновление только лёгких частей открытой страницы (без полного rebuild → нет дёрганья)
   if(!$('#page-power').classList.contains('hidden'))renderPower();
-  if(!$('#page-network').classList.contains('hidden'))renderNetwork();
-  if(!$('#page-yt').classList.contains('hidden'))renderYT();
-  if(!$('#page-backup').classList.contains('hidden'))renderBackupPage();}
+  if(!$('#page-backup').classList.contains('hidden'))updateBackupLive();}
 
 function renderAlerts(s,st,sv,nw){const a=[];
   if(s.throttled_now)a.push(['crit','⚡ Throttled']);
@@ -146,7 +145,7 @@ function renderProjects(){const pr=(last.services||{}).projects||[];
 
 /* Apps tab: launcher of service UIs (tap → QR) */
 async function renderApps(){try{const r=await(await fetch('/api/services')).json();
-  $('#apps-grid').innerHTML=r.map((s,i)=>`<div class="appcard" data-i="${i}"><img class="appico" src="${s.url}/favicon.ico" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><svg class="ic appico" style="display:none"><use href="#i-grid"/></svg><div class="an">${s.name}</div><div class="au">${s.url.replace('http://','')}</div></div>`).join('')||'<div class="note">нет сервисов (поставь docker-стеки)</div>';
+  $('#apps-grid').innerHTML=r.map((s,i)=>`<div class="appcard" data-i="${i}"><img class="appico" src="/api/appicon?u=${encodeURIComponent(s.url)}" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><svg class="ic appico" style="display:none"><use href="#i-grid"/></svg><div class="an">${s.name}</div><div class="au">${s.url.replace('http://','')}</div></div>`).join('')||'<div class="note">нет сервисов (поставь docker-стеки)</div>';
   $$('#apps-grid .appcard').forEach(el=>el.onclick=()=>{const s=r[el.dataset.i];openApp(s.name,s.url);});}catch(e){$('#apps-grid').innerHTML='error';}}
 function openApp(name,url){$('#appframe-title').textContent=name;$('#appframe-iframe').src=url;
   $('#appframe-qr').onclick=()=>showQR(name,url);$('#appframe').classList.remove('hidden');}
@@ -174,26 +173,43 @@ function renderBackupTiles(sv){const nb=sv.nas_backup||{},pr=sv.progress||{},ph=
   $('#nas-v').textContent=w==='nas'?(pr.percent||0)+'%':(nb.last_status||nb.status||'idle');
   $('#nas-sub').textContent=w==='nas'?`${pr.speed||''} eta ${pr.eta||'?'}`:(nb.last_run?'last '+nb.last_run:'');
   nt.setAttribute('style',w==='nas'?bkbg(pr.percent):'');}
-function renderBackupPage(){const sv=last.services||{},nb=sv.nas_backup||{},pr=sv.progress||{},ph=sv.photo||{},w=whichBackup(pr);
-  const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span>${v}</span></div>`,bar=p=>`<div class="bar-fill"><i style="width:${p||0}%"></i></div>`;
-  const big=(pct,done,total)=>`<div class="bigstat"><div><div class="n">${pct||0}%</div><div class="l">progress</div></div><div><div class="n">${done||0}<span style="font-size:22px;color:var(--mut)"> / ${total||'?'}</span></div><div class="l">files</div></div></div>`;
-  // --- Photo import (карта → /mnt/storage/usb-imports), + чистка ---
-  let h='<div class="h">📷 Photo import (SD/USB → this disk)</div>';
-  if(w==='photo')h+=big(pr.percent,pr.files_done,pr.files_total)+bar(pr.percent)+`<div class="sideinfo">${R('card',pr.label||'?')}${R('speed',pr.speed||'?')}${R('eta',pr.eta||'?')}</div>`;
-  else h+=`<div class="sideinfo">${R('last import',ph.last||'—')}${R('mode','automatic on card insert')}</div>`;
-  h+='<div class="h" style="margin-top:10px">Imports on disk <span id="imp-total" class="k"></span></div><div id="bk-cleanup" class="svc-list"></div>';
-  // --- NAS backup (копируем С домашнего NAS → сюда) ---
-  h+='<div class="h" style="margin-top:16px">☁ NAS backup (copy FROM home NAS → here)</div>';
-  if(w==='nas')h+=big(pr.percent,pr.files_done,pr.files_total)+bar(pr.percent)+`<div class="sideinfo">${R('speed',pr.speed||'?')}${R('eta',pr.eta||'?')}</div><button id="bk-stop" class="wide" style="color:var(--crit)">${ic('i-stop')}Stop backup</button>`;
-  else{const configured=Object.keys(nb).length>0;let rows='';
-    if(!configured)rows=R('status','not configured — задай NAS в Settings → Configs → nas-backup.conf');
-    else for(const[k,v]of Object.entries(nb))rows+=R(k,(v&&typeof v==='object')?(v.last_run||v.status||''):v);
-    h+=`<div class="sideinfo">${rows}</div><button id="bk-run" class="wide">${ic('i-cloud')}Run NAS backup</button>`;}
-  $('#backup-body').innerHTML=h;
+let bkOpenW='__init';
+function renderBackupPage(){const sv=last.services||{},nb=sv.nas_backup||{},pr=sv.progress||{},ph=sv.photo||{},w=whichBackup(pr);bkOpenW=w;
+  const prog=()=>`<div class="bkbar"><i id="bk-bar" style="width:${pr.percent||0}%"></i></div><div class="bks"><b id="bk-pct">${pr.percent||0}%</b> · <span id="bk-files">${pr.files_done||0}/${pr.files_total||'?'}</span> files · <span id="bk-speed">${pr.speed||'…'}</span> · eta <span id="bk-eta">${pr.eta||'?'}</span></div>`;
+  const card=(icon,title,body)=>`<div class="bkcard">${icon}<div class="bkc"><div class="bkt">${title}</div>${body}</div></div>`;
+  const photoBody=w==='photo'?prog():`<div class="bks">${ph.last?'last import '+ph.last:'idle'} · auto on card insert</div>`;
+  let nasBody,nasBtn;
+  if(w==='nas'){nasBody=prog();nasBtn=`<button id="bk-stop" class="wide" style="color:var(--crit)">${ic('i-stop')}Stop backup</button>`;}
+  else{const cfg=Object.keys(nb).length>0;nasBody=`<div class="bks">${cfg?'configured'+(nb.last_run?' · last '+nb.last_run:''):'not configured — set NAS in Settings → Configs → nas-backup.conf'}</div>`;
+    nasBtn=`<button id="bk-run" class="wide">${ic('i-cloud')}Run NAS backup</button>`;}
+  $('#backup-body').innerHTML=card(ic('i-camera'),'Photo import (SD/USB → this disk)',photoBody)
+    +'<div class="h" style="margin-top:4px">Imports on disk <span id="imp-total" class="k"></span></div><div id="bk-cleanup" class="svc-list"></div>'
+    +card(ic('i-cloud'),'NAS backup (home NAS → here)',nasBody)+nasBtn;
   const run=$('#bk-run'),stop=$('#bk-stop');
   if(run)run.onclick=()=>{doAction('nas-backup');toast('backup started');};
   if(stop)stop.onclick=()=>{doAction('nas-stop');toast('stopping');};
   loadCleanup();}
+function updateBackupLive(){const pr=(last.services||{}).progress||{},w=whichBackup(pr);
+  if(w!==bkOpenW){renderBackupPage();return;}
+  if(!w)return;const set=(id,v)=>{const e=$('#'+id);if(e)e.textContent=v;};
+  const bar=$('#bk-bar');if(bar)bar.style.width=(pr.percent||0)+'%';
+  set('bk-pct',(pr.percent||0)+'%');set('bk-files',(pr.files_done||0)+'/'+(pr.files_total||'?'));set('bk-speed',pr.speed||'…');set('bk-eta',pr.eta||'?');}
+
+/* Disk page — SMART + ёмкость (вместо бесполезного графика заполненности) */
+async function renderDiskPage(){const st=last.storage||{},pct=st.pct||0,cl=pct>=95?'crit':pct>=88?'high':pct>=75?'warn':'';
+  const pill=(n,l)=>`<div class="pill"><div class="pn">${n}</div><div class="pl">${l}</div></div>`;
+  $('#disk-page').innerHTML=`<div class="bkbar big"><i class="${cl}" style="width:${pct}%"></i></div>
+    <div class="bks">${(st.used/1e12).toFixed(2)} / ${(st.size/1e12).toFixed(2)} TB · ${pct}% · ${TB(st.avail)} free</div>
+    <div id="smart-pills" class="pills" style="margin-top:14px"><div class="note">loading SMART…</div></div>
+    <div class="sideinfo" id="smart-info"></div>`;
+  try{const s=await(await fetch('/api/smart')).json();const P=[];
+    if(s.temp)P.push(pill(s.temp+'°C','temp'));if(s.health)P.push(pill(s.health,'health'));
+    if(s.power_on_hours)P.push(pill(s.power_on_hours,'power-on h'));if(s.power_cycles)P.push(pill(s.power_cycles,'cycles'));
+    if(s.wear)P.push(pill(s.wear,'wear used'));if(s.spare)P.push(pill(s.spare,'spare'));if(s.realloc)P.push(pill(s.realloc,'realloc'));
+    $('#smart-pills').innerHTML=P.join('')||'<div class="note">SMART n/a (microSD)</div>';
+    const R=(k,v)=>v?`<div class="row"><span class="k">${k}</span><span>${v}</span></div>`:'';
+    $('#smart-info').innerHTML=R('Model',s.model)+R('Capacity',s.capacity)+R('Device',s.device);
+  }catch(e){$('#smart-pills').innerHTML='<div class="note">SMART error</div>';}}
 async function loadCleanup(){try{const r=await(await fetch('/api/imports')).json();
   $('#imp-total').textContent='· '+TB(r.total);
   $('#bk-cleanup').innerHTML=r.items.map(i=>`<div class="svc-item"><span>${i.name} · ${TB(i.size)}</span><button class="del" data-n="${i.name}">${ic('i-stop')}Delete</button></div>`).join('')||'<div class="note">пусто</div>';
@@ -257,8 +273,8 @@ async function loadRecent(){try{const d=await(await fetch('/api/recent')).json()
 
 /* Failed units */
 async function renderFailed(){try{const u=await(await fetch('/api/failed')).json();
-  $('#failed-body').innerHTML=u.length?'<div class="svc-list">'+u.map(n=>`<div class="svc-item"><span>${n}</span><button class="del" data-u="${n}">Restart</button></div>`).join('')+'</div>':'<div class="note">No failed units ✓</div>';
-  $$('#failed-body .del').forEach(b=>b.onclick=()=>{doAction('restart-unit',{unit:b.dataset.u});toast('restart '+b.dataset.u);setTimeout(renderFailed,1500);});}catch(e){$('#failed-body').innerHTML='error';}}
+  $('#failed-body').innerHTML=u.length?'<div class="svc-list">'+u.map(n=>`<div class="svc-item"><span>${n}</span><button class="minib" data-u="${n}">Restart</button></div>`).join('')+'</div>':'<div class="note">No failed units ✓</div>';
+  $$('#failed-body .minib').forEach(b=>b.onclick=()=>{doAction('restart-unit',{unit:b.dataset.u});toast('restart '+b.dataset.u);setTimeout(renderFailed,1500);});}catch(e){$('#failed-body').innerHTML='error';}}
 
 /* Configs */
 async function renderConfigs(){try{const r=await(await fetch('/api/configs')).json();

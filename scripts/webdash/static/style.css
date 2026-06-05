@@ -73,6 +73,21 @@ main{position:relative;height:382px}
 .dstats{display:flex;gap:8px;margin-bottom:10px}
 .dstat{flex:1;text-align:center;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 4px}
 .dstat .dn{font-size:19px;font-weight:700;line-height:1.1}.dstat .dl{color:var(--mut);font-size:11px}
+.dim{opacity:.4}
+#screen-sub{display:flex;justify-content:space-between;width:100%;gap:6px;font-size:11px}
+/* delete / mini buttons */
+.del{display:inline-flex;align-items:center;gap:5px;background:var(--panel2);border:1px solid var(--crit);color:var(--crit);border-radius:8px;padding:7px 13px;font-size:13px}
+.del .ic{width:15px;height:15px}
+.minib{background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:7px 13px;font-size:13px}
+/* backup cards */
+.bkcard{display:flex;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:8px}
+.bkcard>.ic{width:28px;height:28px;color:var(--acc);flex:none}
+.bkc{flex:1;min-width:0}.bkt{font-weight:600;margin-bottom:6px}.bks{color:var(--mut);font-size:13px}
+.bks b{color:var(--fg)}
+.bkbar{height:14px;background:var(--panel2);border-radius:7px;overflow:hidden;margin:2px 0 6px}
+.bkbar>i{display:block;height:100%;background:var(--acc);transition:width .3s}
+.bkbar.big{height:22px}
+.bkbar>i.warn{background:var(--warn)}.bkbar>i.high{background:var(--high)}.bkbar>i.crit{background:var(--crit)}
 .appcard .an{font-weight:600;font-size:14px}.appcard .au{color:var(--mut);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* YT pills */
 .pills{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}

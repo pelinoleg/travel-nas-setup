@@ -63,7 +63,7 @@
       <div class="tile" data-open="detail" data-metric="temp"><div class="th"><svg class="ic"><use href="#i-thermo"/></svg>Temp</div><div class="tv"><b id="temp">–</b><span class="u2">°C</span></div><canvas class="spark" data-s="temp"></canvas></div>
       <div class="tile" data-open="detail" data-metric="mem"><div class="th"><svg class="ic"><use href="#i-ram"/></svg>RAM</div><div class="tv"><b id="mem">–</b><span class="u2" id="mem-tot"></span></div><canvas class="spark" data-s="mem"></canvas></div>
       <div class="tile" data-open="detail" data-metric="net_rx"><div class="th"><svg class="ic"><use href="#i-net"/></svg>Traffic</div><div class="tv2" id="net">–</div><canvas class="spark" data-s="net_rx"></canvas></div>
-      <div class="tile" data-open="detail" data-metric="disk"><span id="disk-temp" class="dtemp"></span><div class="th"><svg class="ic"><use href="#i-disk"/></svg>Disk</div><div class="tv"><b id="disk">–</b><span class="u2">%</span></div><div class="bar-fill sm"><i id="disk-bar"></i></div><div class="sub" id="disk-sub"></div></div>
+      <div class="tile" data-open="page-disk"><span id="disk-temp" class="dtemp"></span><div class="th"><svg class="ic"><use href="#i-disk"/></svg>Disk</div><div class="tv"><b id="disk">–</b><span class="u2">%</span></div><div class="bar-fill sm"><i id="disk-bar"></i></div><div class="sub" id="disk-sub"></div></div>
       <div class="tile" id="power-tile" data-open="page-power"><div class="th"><svg class="ic"><use href="#i-zap"/></svg>Power</div><div class="tv2" id="power">–</div><div class="sub" id="power-sub"></div></div>
       <div class="tile" data-open="page-screen" id="screen-tile"><div class="th"><svg class="ic"><use href="#i-sun"/></svg>Screen</div>
         <div class="ring"><svg viewBox="0 0 40 40"><circle class="rbg" cx="20" cy="20" r="16"/><circle class="rfg" id="ring" cx="20" cy="20" r="16"/></svg><span id="screen-cd">∞</span></div>
@@ -172,6 +172,11 @@
 <div id="page-services" class="page hidden">
   <div class="phead"><button class="bigbtn back"><svg class="ic"><use href="#i-back"/></svg></button><span>Services</span></div>
   <div class="pbody" id="services-body"></div>
+</div>
+
+<div id="page-disk" class="page hidden">
+  <div class="phead"><button class="bigbtn back"><svg class="ic"><use href="#i-back"/></svg></button><span>Storage disk</span></div>
+  <div class="pbody" id="disk-page"></div>
 </div>
 
 <div id="page-backup" class="page hidden">

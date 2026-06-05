@@ -35,12 +35,14 @@ $$('[data-open]').forEach(el=>el.onclick=()=>{const o=el.dataset.open;
 
 /* sparklines */
 const TBUF=[],SPARK={cpu:[],temp:[],mem:[],net_rx:[],disk:[]};
-const sparkMax=m=>MET[m].max||(m==='mem'?memTotal:Math.max(1,...SPARK[m],0.1));
+const sparkMax=(m,arr)=>MET[m].max||(m==='mem'?memTotal:Math.max(1,...arr,0.1));
+const sparkWin=m=>+(localStorage['spark_'+m]||300);  /* сек, настраивается в Settings */
+function winStart(m){const w=sparkWin(m),now=TBUF.length?TBUF[TBUF.length-1]:0;let i=0;while(i<TBUF.length&&TBUF[i]<now-w)i++;return i;}
 function drawSpark(cv,arr,color,max){const w=cv.width=cv.clientWidth*2,h=cv.height=cv.clientHeight*2;
   const x=cv.getContext('2d');x.clearRect(0,0,w,h);if(arr.length<2)return;
   x.beginPath();arr.forEach((v,i)=>{const px=i/(arr.length-1)*w,py=h-Math.min(1,v/max)*(h-6)-3;i?x.lineTo(px,py):x.moveTo(px,py);});
-  x.strokeStyle=color;x.lineWidth=2;x.lineJoin='round';x.stroke();x.lineTo(w,h);x.lineTo(0,h);x.closePath();x.fillStyle=color+'1f';x.fill();}
-function updateSparks(){$$('.spark').forEach(cv=>{const k=cv.dataset.s;if(SPARK[k])drawSpark(cv,SPARK[k],MET[k].col,sparkMax(k));});}
+  x.strokeStyle=color;x.lineWidth=2;x.lineJoin='round';x.stroke();x.lineTo(w,h);x.lineTo(0,h);x.closePath();x.fillStyle=color+'33';x.fill();}
+function updateSparks(){$$('.spark').forEach(cv=>{const k=cv.dataset.s;if(!SPARK[k])return;const arr=SPARK[k].slice(winStart(k));drawSpark(cv,arr,MET[k].col,sparkMax(k,arr));});}
 
 /* render */
 const chip=(cls,txt)=>`<span class="chip"><span class="dot ${cls}"></span>${txt}</span>`;
@@ -76,7 +78,7 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   // buffers + sparks
   TBUF.push(Date.now()/1000|0);
   [['cpu',s.cpu],['temp',s.temp],['mem',s.mem_used],['net_rx',s.net_rx],['disk',st.pct]].forEach(([k,v])=>SPARK[k].push(v==null?0:v));
-  if(TBUF.length>150){TBUF.shift();for(const k in SPARK)SPARK[k].shift();}
+  if(TBUF.length>460){TBUF.shift();for(const k in SPARK)SPARK[k].shift();}
   updateSparks();
   if(!$('#detail').classList.contains('hidden'))liveDetail();
   // header + chips
@@ -329,6 +331,10 @@ function applyNight(){const f=$('#night-from').value,t=$('#night-to').value;if(!
   const d=new Date(),cur=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
   const inWin=f<t?(cur>=f&&cur<t):(cur>=f||cur<t),target=inWin?+$('#night-level').value:+br.value;
   if(!screenOff&&target!==nightApplied){nightApplied=target;api('/api/action/screen',{brightness:target+'%'});}}
+
+/* mini-graph period per metric */
+$$('select[data-sp]').forEach(s=>{const m=s.dataset.sp;s.value=localStorage['spark_'+m]||'300';
+  s.onchange=()=>{localStorage['spark_'+m]=s.value;updateSparks();};});
 
 /* accent */
 function applyAccent(c){document.documentElement.style.setProperty('--acc',c);}

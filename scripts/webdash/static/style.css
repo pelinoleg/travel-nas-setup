@@ -37,7 +37,8 @@ main{position:relative;height:382px}
 .tab.active{display:block}
 
 .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-.tile{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:7px 9px;min-height:96px;position:relative}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:7px 9px;min-height:96px;position:relative;overflow:hidden}
+.tile>:not(.spark){position:relative;z-index:1}
 .tile[data-open]:active{border-color:var(--acc)}
 .th{display:flex;align-items:center;gap:6px;color:var(--mut);font-size:12px}
 .th .ic{width:15px;height:15px}
@@ -48,7 +49,7 @@ main{position:relative;height:382px}
 .dtemp.warn{color:var(--warn)}.dtemp.high{color:var(--high)}.dtemp.crit{color:var(--crit)}
 .tv2{font-size:18px;font-weight:600;margin-top:6px;text-transform:capitalize}
 .tile .sub{color:var(--mut);font-size:11px}
-.spark{display:block;width:100%;height:30px;margin-top:4px}
+.spark{position:absolute;left:0;right:0;bottom:0;width:100%;height:56px;z-index:0;opacity:.8}
 .ring{position:relative;width:62px;height:62px;margin:2px auto 0}
 .ring svg{transform:rotate(-90deg)}
 .ring .rbg{fill:none;stroke:var(--panel2);stroke-width:4}
@@ -147,6 +148,8 @@ table#proc-cpu,table#proc-mem{width:100%;border-collapse:collapse;font-size:12px
 select,input[type=number],input[type=time]{background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:7px;padding:9px;font-size:14px}
 .setrow button{background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:9px;padding:10px 16px;font-size:14px}
 .note{color:var(--mut);font-size:12px;margin-top:12px}
+.gp{display:flex;flex-wrap:wrap;gap:12px;align-items:center;color:var(--mut);font-size:13px}
+.gp select{padding:5px 7px}
 .editor{width:100%;height:230px;background:var(--panel2);border:1px solid var(--line);color:var(--fg);
   border-radius:9px;padding:10px;font:12px/1.45 ui-monospace,monospace;resize:none;touch-action:auto;-webkit-user-select:text;user-select:text}
 

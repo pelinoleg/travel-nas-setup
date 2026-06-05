@@ -281,6 +281,13 @@ def compose_file(project):
         if f"name: {project}" in read(c): return c
     return None
 
+@app.after_request
+def _nocache(resp):
+    # kiosk локальный — не кэшируем, чтобы свежий код после travel-nas-update
+    # подхватывался без перезапуска Chromium (раньше ловили старый app.js).
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
 @app.route("/")
 def index(): return send_from_directory(STATIC, "index.html")
 @app.route("/static/<path:p>")

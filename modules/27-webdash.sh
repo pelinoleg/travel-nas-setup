@@ -27,7 +27,7 @@ if (
     # uPlot (вендорим локально — дашборд должен работать оффлайн)
     UP=1.6.31
     if [[ ! -s "$WD_DIR/static/uplot.min.js" ]]; then
-        sudo curl -fsSL "https://cdn.jsdelivr.net/npm/uplot@$UP/dist/uPlot.min.js"  -o "$WD_DIR/static/uplot.min.js"
+        sudo curl -fsSL "https://cdn.jsdelivr.net/npm/uplot@$UP/dist/uPlot.iife.min.js" -o "$WD_DIR/static/uplot.min.js"
         sudo curl -fsSL "https://cdn.jsdelivr.net/npm/uplot@$UP/dist/uPlot.min.css" -o "$WD_DIR/static/uplot.min.css"
     fi
 

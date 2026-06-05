@@ -214,6 +214,8 @@ def sample_services():
     try:
         with urllib.request.urlopen("http://localhost:8081/api/queue/status", timeout=3) as r:
             yt = json.loads(r.read())
+        with urllib.request.urlopen("http://localhost:8081/api/stats", timeout=3) as r:
+            yt.update(json.loads(r.read()))   # videos, total_bytes, channels
     except Exception:
         pass
     return {"projects": projects, "photo": photo, "yt": yt,

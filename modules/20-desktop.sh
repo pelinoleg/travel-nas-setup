@@ -142,6 +142,25 @@ Terminal=false
 Categories=Network;
 EOF
         fi
+        # Ярлык на хранилище — открыть /mnt/storage в файл-менеджере. Это
+        # системный fstab-маунт (на нём Samba/докеры/бэкапы) → НЕ том с eject,
+        # а просто launcher на папку (нельзя случайно отмонтировать).
+        if [[ -d "${STORAGE_MOUNT:-/mnt/storage}" ]]; then
+            sdrv=$(ls /usr/share/icons/PiXtrix/48x48/devices/drive-harddisk.png \
+                      /usr/share/icons/*/48x48/devices/drive-harddisk.png 2>/dev/null | head -1)
+            sdrv="${sdrv:-drive-harddisk}"
+            cat > "$DESKTOP_DIR/Storage.desktop" << EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Storage
+Comment=Хранилище ${STORAGE_MOUNT:-/mnt/storage}
+Exec=pcmanfm "${STORAGE_MOUNT:-/mnt/storage}"
+Icon=$sdrv
+Terminal=false
+Categories=System;
+EOF
+        fi
     else
         # MHS35: дашборд + калибровка (как было). Сервис-ярлыки убираем.
         rm -f "$DESKTOP_DIR"/Service-*.desktop 2>/dev/null

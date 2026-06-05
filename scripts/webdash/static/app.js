@@ -21,7 +21,7 @@ let last={}, activeTab='overview';
 function switchTab(t){$$('#tabs button').forEach(x=>x.classList.toggle('active',x.dataset.tab===t));
   $$('.tab').forEach(x=>x.classList.toggle('active',x.id==='tab-'+t));activeTab=t;onTab(t);}
 $$('#tabs button').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
-function onTab(t){if(t==='system'){loadProc();sysGraphs();}else if(t==='storage')renderDisks();else if(t==='docker')renderProjects();}
+function onTab(t){if(t==='system'){loadProc();sysGraphs();}else if(t==='storage'){renderDisks();renderCleanup();}else if(t==='docker')renderProjects();}
 setInterval(()=>{const d=new Date();$('#clock').textContent=`${('0'+d.getHours()).slice(-2)}:${('0'+d.getMinutes()).slice(-2)}`;},1000);
 
 /* pages (overlays) */
@@ -32,16 +32,20 @@ function openPage(id){$$('.page').forEach(p=>p.classList.add('hidden'));$('#'+id
 
 /* Network page */
 function renderNetwork(){const nw=last.network||{};const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span>${v}</span></div>`;
-  $('#net-info').innerHTML=R('hostname',(nw.host||'nas')+'.local')+R('IP',nw.ip||'—')+R('WiFi SSID',nw.ssid||'—')
+  const apBig=`<div style="text-align:center;margin-bottom:14px;padding:12px;background:var(--panel);border:1px solid var(--line);border-radius:12px">
+    <div class="k">Hotspot SSID</div><div style="font-size:26px;font-weight:700">${nw.ap_ssid||'—'}</div>
+    <div class="k" style="margin-top:8px">Password</div><div style="font-size:18px;font-weight:600">${nw.ap_pass||'open'}</div></div>`;
+  $('#net-info').innerHTML=apBig+R('hostname',(nw.host||'nas')+'.local')+R('IP',nw.ip||'—')+R('WiFi SSID',nw.ssid||'—')
     +R('signal',nw.signal?nw.signal+' dB':'—')+R('mode',nw.mode==='AP'?'Hotspot (AP)':'Client')
-    +R('comitup',nw.comitup||'—')+R('AP name',nw.ap_name||'—')+R('Tailscale',nw.tailscale||'—');}
+    +R('comitup',nw.comitup||'—')+R('Tailscale',nw.tailscale||'—');}
 $('#force-ap').onclick=()=>openModal('Force hotspot',[['Drop WiFi → start AP','force-ap',1]]);
 
 /* Services page */
 async function renderServices(){$('#services-body').innerHTML='<div class="h">loading…</div>';
   try{const r=await(await fetch('/api/services')).json();
-    $('#services-body').innerHTML='<div class="svc-list">'+r.map(s=>`<div class="svc-item"><span>${s.name}</span><span class="u">${s.url.replace('http://','')}</span></div>`).join('')+'</div>'
-      +'<div class="note">Open these on your phone/laptop in the same network.</div>';
+    $('#services-body').innerHTML='<div class="svc-list">'+r.map((s,i)=>`<div class="svc-item" data-i="${i}"><span>${s.name}</span><span class="u">${s.url.replace('http://','')} ⮕ QR</span></div>`).join('')+'</div>'
+      +'<div class="note">Tap a service → QR code to open it on your phone (same network).</div>';
+    $$('#services-body .svc-item').forEach(el=>el.onclick=()=>{const s=r[el.dataset.i];showQR(s.name,s.url);});
     $('#svc-v').textContent=r.length;}catch(e){$('#services-body').innerHTML='error';}}
 
 /* Thermal page */
@@ -184,23 +188,42 @@ function renderProjects(){const pr=(last.services||{}).projects||[];const ic=n=>
   $$('#projects button').forEach(b=>b.onclick=async()=>{toast(b.dataset.a+' '+b.dataset.p+'…');await api('/api/docker',{project:b.dataset.p,action:b.dataset.a});
     setTimeout(()=>api('/api/snapshot').then(r=>r.json()).then(d=>{last=d;if(activeTab==='docker')renderProjects();}),1800);});}
 
-/* Backups: overview tiles + page */
-function renderBackups(){const sv=last.services||{},nb=sv.nas_backup||{},pr=sv.progress||{},ph=sv.photo||{};const ic=n=>`<svg class="ic"><use href="#${n}"/></svg>`;
-  const nasRun=pr.active,nasS=nasRun?`running ${pr.percent||0}%`:(nb.last_status||nb.status||'not set up');
-  const bar=nasRun?`<div class="pbar"><i style="width:${pr.percent||0}%"></i></div>`:'';
-  $('#backups').innerHTML=
-    `<div class="bk" data-open="page-backup">${ic('i-camera')}<div><div class="t">Photo import</div><div class="s">${ph.last?'last '+ph.last:'idle'}</div></div></div>`+
-    `<div class="bk" data-open="page-backup">${ic('i-cloud')}<div style="flex:1"><div class="t">NAS backup</div><div class="s">${nasS}</div>${bar}</div></div>`;
-  $$('#backups .bk').forEach(b=>b.onclick=()=>openPage('page-backup'));}
+/* Backups: progress routed photo↔nas, shown as tile background; auto-open page */
+const ic=n=>`<svg class="ic"><use href="#${n}"/></svg>`;
+function whichBackup(pr){if(!pr||!pr.active)return null;
+  return ((pr.target||'')+(pr.source||'')).includes('usb-imports')||pr.device?'photo':'nas';}
+let lastBkActive=null;
+function bkTile(icon,title,sub,pct){const bg=pct!=null?`style="background:linear-gradient(90deg,rgba(59,130,246,.28) ${pct}%,transparent ${pct}%)"`:'';
+  return `<div class="bk" data-open="page-backup" ${bg}>${icon}<div style="flex:1"><div class="t">${title}</div><div class="s">${sub}</div></div></div>`;}
+function renderBackups(){const sv=last.services||{},nb=sv.nas_backup||{},pr=sv.progress||{},ph=sv.photo||{};
+  const w=whichBackup(pr);
+  const pSub=w==='photo'?`${pr.label||'card'} · ${pr.percent||0}% · ${pr.files_done||0}/${pr.files_total||'?'} files`:(ph.last?'last '+ph.last:'idle');
+  const nSub=w==='nas'?`${pr.percent||0}% · ${pr.speed||''} · eta ${pr.eta||'?'}`:(nb.last_status||nb.status||'not configured');
+  $('#backups').innerHTML=bkTile(ic('i-camera'),'Photo import',pSub,w==='photo'?pr.percent||0:null)
+    +bkTile(ic('i-cloud'),'NAS backup',nSub,w==='nas'?pr.percent||0:null);
+  $$('#backups .bk').forEach(b=>b.onclick=()=>openPage('page-backup'));
+  if(w&&lastBkActive!==w){lastBkActive=w;openPage('page-backup');}   // авто-переход при старте
+  if(!w)lastBkActive=null;
+  if(!$('#page-backup').classList.contains('hidden'))renderBackupPage();}
 function renderBackupPage(){const sv=last.services||{},nb=sv.nas_backup||{},pr=sv.progress||{},ph=sv.photo||{};
-  const nasRun=pr.active;const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span>${v}</span></div>`;
-  $('#backup-body').innerHTML=
-    `<div class="h">NAS backup</div><div class="sideinfo">${R('status',nasRun?`running ${pr.percent||0}%`:(nb.last_status||nb.status||'not configured'))}${R('last run',nb.last_run||nb.ts||'—')}${R('host',nb.host||'—')}</div>`+
-    (nasRun?'<button id="bk-stop" class="wide" style="color:var(--crit)"><svg class="ic"><use href="#i-stop"/></svg>Stop backup</button>':'<button id="bk-run" class="wide"><svg class="ic"><use href="#i-cloud"/></svg>Run NAS backup</button>')+
-    `<div class="h" style="margin-top:14px">Photo import (SD/USB)</div><div class="sideinfo">${R('last import',ph.last||'—')}<div class="row"><span class="k">mode</span><span>automatic on card insert</span></div></div>`;
+  const w=whichBackup(pr);const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span>${v}</span></div>`;
+  const bar=p=>`<div class="bar-fill"><i style="width:${p||0}%"></i></div>`;
+  let html='';
+  if(w==='photo')html+=`<div class="h">Photo import — running</div>${bar(pr.percent)}<div class="sideinfo">${R('card',pr.label||'?')}${R('progress',(pr.percent||0)+'%')}${R('files',(pr.files_done||0)+'/'+(pr.files_total||'?'))}${R('speed',pr.speed||'?')}${R('eta',pr.eta||'?')}${R('to',pr.target||'usb-imports')}</div>`;
+  else html+=`<div class="h">Photo import (SD/USB)</div><div class="sideinfo">${R('last import',ph.last||'—')}${R('mode','automatic on card insert')}</div>`;
+  html+='<div class="h" style="margin-top:14px">NAS backup</div>';
+  if(w==='nas')html+=`${bar(pr.percent)}<div class="sideinfo">${R('progress',(pr.percent||0)+'%')}${R('speed',pr.speed||'?')}${R('eta',pr.eta||'?')}</div><button id="bk-stop" class="wide" style="color:var(--crit)">${ic('i-stop')}Stop backup</button>`;
+  else html+=`<div class="sideinfo">${R('status',nb.last_status||nb.status||'not configured')}${R('last run',nb.last_run||'—')}</div><button id="bk-run" class="wide">${ic('i-cloud')}Run NAS backup</button>`;
+  $('#backup-body').innerHTML=html;
   const run=$('#bk-run'),stop=$('#bk-stop');
   if(run)run.onclick=()=>{doAction('nas-backup');toast('backup started');};
   if(stop)stop.onclick=()=>{doAction('nas-stop');toast('stopping');};}
+/* Storage cleanup (usb-imports) */
+async function renderCleanup(){try{const r=await(await fetch('/api/imports')).json();
+  $('#cleanup').innerHTML=`<div class="h" style="margin-top:12px">Photo imports — ${TB(r.total)} total</div><div class="svc-list">`
+    +r.items.map(i=>`<div class="svc-item"><span>${i.name} · ${TB(i.size)}</span><button class="del" data-n="${i.name}">${ic('i-stop')}Delete</button></div>`).join('')+'</div>';
+  $$('#cleanup .del').forEach(b=>b.onclick=()=>openModal('Delete import?',[['Delete '+b.dataset.n,'__del:'+b.dataset.n,1]]));}catch(e){}}
+async function delImport(name){await api('/api/imports/delete',{name});toast('deleted');renderCleanup();}
 
 /* Logs */
 async function loadLogs(){$('#logs-body').textContent='loading…';
@@ -226,7 +249,12 @@ function openModal(title,btns){$('#modal-title').textContent=title;$('#modal-bod
   $('#modal').classList.remove('hidden');}
 const closeModal=()=>$('#modal').classList.add('hidden');
 $('#modal-cancel').onclick=closeModal;
-async function doAction(name,body){toast('…');try{const r=await(await api('/api/action/'+name,body||{})).json();toast(r.ok||r.detached?'OK':('Error: '+(r.err||r.error||'')));}catch(e){toast('Network error');}}
+async function doAction(name,body){if(name.startsWith('__del:'))return delImport(name.slice(6));
+  toast('…');try{const r=await(await api('/api/action/'+name,body||{})).json();toast(r.ok||r.detached?'OK':('Error: '+(r.err||r.error||'')));}catch(e){toast('Network error');}}
+function showQR(name,url){$('#modal-title').textContent=name;
+  const qr=qrcode(0,'M');qr.addData(url);qr.make();
+  $('#modal-body').innerHTML=`<div style="background:#fff;padding:10px;border-radius:10px;display:inline-block">${qr.createSvgTag({cellSize:5,margin:1})}</div><div style="margin-top:10px;color:var(--mut);font-size:13px">${url}</div>`;
+  $('#modal').classList.remove('hidden');}
 $('#btn-exit').onclick=()=>doAction('screen',{exit_kiosk:true});
 
 /* screen page controls */

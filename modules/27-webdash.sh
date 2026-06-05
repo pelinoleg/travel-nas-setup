@@ -30,11 +30,19 @@ if (
         sudo curl -fsSL "https://cdn.jsdelivr.net/npm/uplot@$UP/dist/uPlot.iife.min.js" -o "$WD_DIR/static/uplot.min.js"
         sudo curl -fsSL "https://cdn.jsdelivr.net/npm/uplot@$UP/dist/uPlot.min.css" -o "$WD_DIR/static/uplot.min.css"
     fi
+    [[ -s "$WD_DIR/static/qrcode.min.js" ]] || \
+        sudo curl -fsSL "https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js" -o "$WD_DIR/static/qrcode.min.js"
 
     # 3) Конфиг + папка истории на /mnt/storage (не на microSD)
     sudo mkdir -p "$CONFIG_DIR"
     [[ -f "$CONFIG_DIR/webdash.conf" ]] || fetch_conf_example "webdash.conf.example" "$CONFIG_DIR/webdash.conf"
     sudo chmod 0644 "$CONFIG_DIR/webdash.conf"
+    # services.conf — список веб-UI (на DSI 19-display его не создаёт: тот блок
+    # для pygame-дашборда). Нужен дашборду (страница Services).
+    if [[ ! -f "$CONFIG_DIR/services.conf" ]]; then
+        fetch_conf_example "services.conf.example" "$CONFIG_DIR/services.conf"
+        sudo chown "$DASH_USER:$DASH_USER" "$CONFIG_DIR/services.conf"; sudo chmod 0644 "$CONFIG_DIR/services.conf"
+    fi
     sudo install -d -o "$DASH_USER" -g "$DASH_USER" "$STORAGE_MOUNT/.travel-nas" 2>/dev/null || true
 
     # 4) sudoers — действия дашборда без пароля (бежит от юзера)

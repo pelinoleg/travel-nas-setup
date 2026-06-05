@@ -12,7 +12,7 @@
 #   /api/action/screen     → яркость/поворот/гашение/выход из kiosk
 # История пишется в SQLite на /mnt/storage (не на microSD).
 # =============================================================================
-import json, os, pwd, sqlite3, subprocess, threading, time, glob
+import json, os, pwd, sqlite3, subprocess, threading, time, glob, shutil
 from pathlib import Path
 from flask import Flask, Response, request, jsonify, send_from_directory
 
@@ -167,15 +167,23 @@ def sample_network():
     ts = sh(["tailscale", "ip", "-4"], timeout=5).splitlines()
     iw = sh(["iw", "dev", "wlan0", "info"])
     mode = "AP" if "type AP" in iw else ("client" if "type managed" in iw else "?")
-    ap_name = ""; comitup_state = ""
-    for line in sh(["comitup-cli", "i"], timeout=4).splitlines():
+    ap_name = comitup_state = ""
+    for line in sh(["/usr/sbin/comitup-cli", "i"], timeout=4).splitlines():
         if line.startswith("Host"):
             ap_name = line.split()[1].replace(".local", "") if len(line.split()) > 1 else ""
         elif "state" in line.lower():
             comitup_state = line.split()[0].strip("'")
+    # AP-имя/пароль из comitup.conf (некомментированные ap_name/ap_password)
+    cfg_name = cfg_pass = ""
+    for line in read("/etc/comitup.conf").splitlines():
+        l = line.strip()
+        if l.startswith("ap_name:"): cfg_name = l.split(":", 1)[1].strip()
+        elif l.startswith("ap_password:"): cfg_pass = l.split(":", 1)[1].strip()
+    ap_ssid = ssid if mode == "AP" else (ap_name or cfg_name or "comitup-XXXX")
     return {"host": sh(["hostname"]) or "nas", "ip": ips[0] if ips else "?",
-            "ssid": ssid, "signal": signal, "mode": mode,
-            "tailscale": ts[0] if ts else "", "ap_name": ap_name, "comitup": comitup_state}
+            "ssid": ssid, "signal": signal, "mode": mode, "tailscale": ts[0] if ts else "",
+            "ap_name": ap_name, "comitup": comitup_state,
+            "ap_ssid": ap_ssid, "ap_pass": cfg_pass or "open (no password)"}
 
 def sample_services():
     raw = sh(["docker", "ps", "-a", "--format",
@@ -313,6 +321,25 @@ def api_services():
             if url.startswith("http"):
                 items.append({"name": name.strip(), "url": url})
     return jsonify(items)
+
+IMPORTS = "/mnt/storage/usb-imports"
+@app.route("/api/imports")
+def api_imports():
+    items = []; total = 0
+    for d in sorted(glob.glob(IMPORTS + "/*"), reverse=True):
+        if os.path.isdir(d):
+            sz = sh(["du", "-sb", d]).split("\t")[0]
+            sz = int(sz) if sz.isdigit() else 0
+            total += sz
+            items.append({"name": os.path.basename(d), "size": sz, "mtime": int(os.path.getmtime(d))})
+    return jsonify({"total": total, "items": items})
+@app.route("/api/imports/delete", methods=["POST"])
+def api_imports_delete():
+    name = (request.json or {}).get("name", "")
+    p = os.path.join(IMPORTS, name)
+    if name and "/" not in name and ".." not in name and os.path.isdir(p):
+        shutil.rmtree(p, ignore_errors=True); return jsonify({"ok": True})
+    return jsonify({"ok": False}), 400
 
 @app.route("/api/update/run", methods=["POST"])
 def update_run():

@@ -359,6 +359,20 @@ def api_yt():
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
+@app.route("/api/configs")
+def api_configs():
+    DESC = {"tg-notify.conf": "Telegram bot token + chat", "nas-backup.conf": "NAS host/user/pass",
+            "services.conf": "Dashboard service URLs", "photo-backup.conf": "USB/SD import settings",
+            "storage-info.conf": "Storage disk UUID", "yt-archiver.conf": "YT-Archiver CPU limit",
+            "webdash.conf": "Dashboard settings", "thermal-guard.conf": "Thermal thresholds",
+            "cpu-boost.conf": "CPU boost minutes", "display.conf": "Screen type"}
+    out = []
+    for p in sorted(glob.glob("/etc/travel-nas/*.conf")):
+        n = os.path.basename(p)
+        out.append({"name": n, "desc": DESC.get(n, ""),
+                    "size": os.path.getsize(p), "mtime": int(os.path.getmtime(p))})
+    return jsonify(out)
+
 @app.route("/api/update/run", methods=["POST"])
 def update_run():
     Path(UPDATE_LOG).parent.mkdir(parents=True, exist_ok=True)

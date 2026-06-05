@@ -28,7 +28,14 @@ setInterval(()=>{const d=new Date();$('#clock').textContent=`${('0'+d.getHours()
 function openPage(id){$$('.page').forEach(p=>p.classList.add('hidden'));$('#'+id).classList.remove('hidden');
   if(id==='page-power')renderPower();else if(id==='page-backup')renderBackupPage();else if(id==='page-logs')loadLogs();
   else if(id==='page-network')renderNetwork();else if(id==='page-services')renderServices();
-  else if(id==='page-thermal')renderThermal();else if(id==='page-yt')renderYT();}
+  else if(id==='page-thermal')renderThermal();else if(id==='page-yt')renderYT();
+  else if(id==='page-configs')renderConfigs();}
+
+/* Configs page (имена/размер, без содержимого — там секреты) */
+async function renderConfigs(){try{const r=await(await fetch('/api/configs')).json();
+  $('#cfg-v').textContent=r.length;
+  $('#configs-body').innerHTML='<div class="svc-list">'+r.map(c=>`<div class="svc-item"><span>${c.name}${c.desc?' — <span style="color:var(--mut)">'+c.desc+'</span>':''}</span><span class="u">${(c.size/1024).toFixed(1)} KB</span></div>`).join('')+'</div><div class="note">Edit configs via Filebrowser / SSH (not shown here — they contain secrets).</div>';
+  }catch(e){$('#configs-body').innerHTML='error';}}
 
 /* YT-Archiver page */
 function renderYT(){const yt=(last.services||{}).yt||{};const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span>${v}</span></div>`;
@@ -108,7 +115,7 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   // disk tile bar + free
   const dbar=$('#disk-bar');if(dbar){dbar.style.width=(st.pct||0)+'%';
     dbar.className=st.pct>=95?'crit':st.pct>=88?'high':st.pct>=75?'warn':'';}
-  $('#disk-sub').textContent=st.size?`USB · ${TB(st.avail)} free`:'';
+  $('#disk-sub').textContent=st.size?`${(st.used/1e12).toFixed(2)} / ${(st.size/1e12).toFixed(2)} TB`:'';
   // power tile color by mode
   const pt=$('#power-tile');if(pt){pt.className='tile';pt.classList.add('pm-'+(s.pmode||'auto'));}
   // wifi tile
@@ -309,3 +316,4 @@ function dragScroll(el){let down=false,sy=0,stp=0,moved=false;
 
 connect();setBrightness(br.value);
 fetch('/api/services').then(r=>r.json()).then(s=>{$('#svc-v').textContent=s.length;}).catch(()=>{});
+fetch('/api/configs').then(r=>r.json()).then(c=>{$('#cfg-v').textContent=c.length;}).catch(()=>{});

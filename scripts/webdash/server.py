@@ -165,6 +165,12 @@ def sample_network():
             p = line.split()
             if len(p) > 3: signal = p[3].rstrip(".")
     ts = sh(["tailscale", "ip", "-4"], timeout=5).splitlines()
+    ts_up = False; ts_peers = 0
+    try:
+        j = json.loads(sh(["tailscale", "status", "--json"], timeout=5) or "{}")
+        ts_up = j.get("BackendState") == "Running"; ts_peers = len(j.get("Peer") or {})
+    except Exception:
+        pass
     iw = sh(["iw", "dev", "wlan0", "info"])
     mode = "AP" if "type AP" in iw else ("client" if "type managed" in iw else "?")
     ap_name = comitup_state = ""
@@ -182,7 +188,7 @@ def sample_network():
     ap_ssid = ssid if mode == "AP" else (ap_name or cfg_name or "comitup-XXXX")
     return {"host": sh(["hostname"]) or "nas", "ip": ips[0] if ips else "?",
             "ssid": ssid, "signal": signal, "mode": mode, "tailscale": ts[0] if ts else "",
-            "ap_name": ap_name, "comitup": comitup_state,
+            "ap_name": ap_name, "comitup": comitup_state, "ts_up": ts_up, "ts_peers": ts_peers,
             "ap_ssid": ap_ssid, "ap_pass": cfg_pass or "open (no password)"}
 
 def sample_services():
@@ -258,6 +264,12 @@ ACTIONS = {
     "nas-stop": ["sudo", "-n", "/usr/bin/systemctl", "stop", "nas-backup-runtime"],
     "cpu-boost": ["sudo", "-n", "/usr/local/bin/cpu-boost.sh", "on"],
     "force-ap": ["sudo", "-n", "/usr/sbin/comitup-cli", "d"],
+    "tailscale-up": ["sudo", "-n", "/usr/bin/tailscale", "up"],
+    "tailscale-down": ["sudo", "-n", "/usr/bin/tailscale", "down"],
+    "wifi-reconnect": ["sudo", "-n", "/usr/bin/nmcli", "device", "reconnect", "wlan0"],
+    "verify-run": ["sudo", "-n", "/usr/bin/systemctl", "start", "--no-block", "nas-verify.service"],
+    "restart-tg": ["sudo", "-n", "/usr/bin/systemctl", "restart", "tg-listener.service"],
+    "restart-dash": ["sudo", "-n", "/usr/bin/systemctl", "--no-block", "restart", "travel-nas-webdash.service"],
 }
 UPDATE_LOG = "/var/run/travel-nas/webdash-update.log"
 def compose_file(project):
@@ -360,6 +372,50 @@ def api_yt():
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
+@app.route("/api/maint")
+def api_maint():
+    nv = ""
+    for line in sh(["systemctl", "list-timers", "nas-verify.timer", "--no-pager"]).splitlines():
+        if "nas-verify" in line:
+            nv = " ".join(line.split()[0:3])
+    return jsonify({"verify_next": nv})
+
+@app.route("/api/today")
+def api_today():
+    return jsonify(read_json("/var/lib/travel-nas/daily-summary.json", {}))
+
+def send_photo(token, chat, path):
+    boundary = "----webdashshot"
+    with open(path, "rb") as f:
+        img = f.read()
+    body = b""
+    for k, v in (("chat_id", chat),):
+        body += ("--%s\r\nContent-Disposition: form-data; name=\"%s\"\r\n\r\n%s\r\n" % (boundary, k, v)).encode()
+    body += ("--%s\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"shot.png\"\r\nContent-Type: image/png\r\n\r\n" % boundary).encode()
+    body += img + ("\r\n--%s--\r\n" % boundary).encode()
+    req = urllib.request.Request("https://api.telegram.org/bot%s/sendPhoto" % token, data=body,
+                                 headers={"Content-Type": "multipart/form-data; boundary=" + boundary})
+    urllib.request.urlopen(req, timeout=20)
+
+@app.route("/api/screenshot", methods=["POST"])
+def api_screenshot():
+    shot = "/tmp/webdash-shot.png"
+    env = dict(os.environ, WAYLAND_DISPLAY="wayland-0", XDG_RUNTIME_DIR="/run/user/1000")
+    try:
+        subprocess.run(["grim", shot], env=env, timeout=10, capture_output=True)
+        if not os.path.exists(shot):
+            return jsonify({"ok": False, "error": "grim failed (no wayland?)"}), 500
+        tok = chat = ""
+        for line in read("/etc/travel-nas/tg-notify.conf").splitlines():
+            if line.startswith("TG_BOT_TOKEN="): tok = line.split("=", 1)[1].strip().strip('"')
+            elif line.startswith("TG_CHAT_ID="): chat = line.split("=", 1)[1].strip().strip('"')
+        if not tok or not chat:
+            return jsonify({"ok": False, "error": "no telegram config"}), 400
+        send_photo(tok, chat, shot)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
 @app.route("/api/configs")
 def api_configs():
     DESC = {"tg-notify.conf": "Telegram bot token + chat", "nas-backup.conf": "NAS host/user/pass",
@@ -373,6 +429,28 @@ def api_configs():
         out.append({"name": n, "desc": DESC.get(n, ""),
                     "size": os.path.getsize(p), "mtime": int(os.path.getmtime(p))})
     return jsonify(out)
+
+def _conf_path(name):
+    if not name or "/" in name or ".." in name or not name.endswith(".conf"):
+        return None
+    return "/etc/travel-nas/" + name
+@app.route("/api/config")
+def api_config_get():
+    p = _conf_path(request.args.get("name", ""))
+    if not p: return jsonify({"error": "bad name"}), 400
+    if not os.path.exists(p): return jsonify({"error": "not found"}), 404
+    return jsonify({"name": os.path.basename(p), "content": read(p)})
+@app.route("/api/config", methods=["POST"])
+def api_config_save():
+    d = request.json or {}
+    p = _conf_path(d.get("name", ""))
+    if not p: return jsonify({"error": "bad name"}), 400
+    try:
+        r = subprocess.run(["sudo", "-n", "tee", p], input=d.get("content", ""),
+                           capture_output=True, text=True, timeout=10)
+        return jsonify({"ok": r.returncode == 0, "err": r.stderr[-200:]})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 @app.route("/api/update/run", methods=["POST"])
 def update_run():
@@ -413,7 +491,7 @@ def api_action(name):
     else:
         cmd = ACTIONS.get(name)
     if not cmd: return jsonify({"error": "unknown"}), 400
-    detach = name in ("reboot", "poweroff", "update", "nas-backup")
+    detach = name in ("reboot", "poweroff", "update", "nas-backup", "restart-dash", "restart-tg", "force-ap")
     try:
         if detach:
             subprocess.Popen(cmd); return jsonify({"ok": True, "detached": True})

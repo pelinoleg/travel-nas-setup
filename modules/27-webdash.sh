@@ -16,6 +16,8 @@ if (
     if ! python3 -c "import flask" 2>/dev/null; then
         wait_for_apt; apt_install python3-flask
     fi
+    # grim — скриншот Wayland для кнопки «Screenshot → Telegram»
+    command -v grim >/dev/null 2>&1 || { wait_for_apt; apt_install grim; }
 
     # 2) Код + статика
     sudo mkdir -p "$WD_DIR/static"
@@ -56,6 +58,12 @@ $DASH_USER ALL=(root) NOPASSWD: /usr/local/bin/cpu-boost.sh on, /usr/local/bin/c
 $DASH_USER ALL=(root) NOPASSWD: /usr/local/bin/power-mode.sh auto, /usr/local/bin/power-mode.sh normal, /usr/local/bin/power-mode.sh saver
 $DASH_USER ALL=(root) NOPASSWD: /usr/local/bin/dsi-rotate.sh 0, /usr/local/bin/dsi-rotate.sh 90, /usr/local/bin/dsi-rotate.sh 180, /usr/local/bin/dsi-rotate.sh 270
 $DASH_USER ALL=(root) NOPASSWD: /usr/sbin/comitup-cli d
+$DASH_USER ALL=(root) NOPASSWD: /usr/bin/tailscale up, /usr/bin/tailscale down
+$DASH_USER ALL=(root) NOPASSWD: /usr/bin/nmcli device reconnect wlan0
+$DASH_USER ALL=(root) NOPASSWD: /usr/bin/systemctl start --no-block nas-verify.service
+$DASH_USER ALL=(root) NOPASSWD: /usr/bin/systemctl restart tg-listener.service
+$DASH_USER ALL=(root) NOPASSWD: /usr/bin/systemctl --no-block restart travel-nas-webdash.service
+$DASH_USER ALL=(root) NOPASSWD: /usr/bin/tee /etc/travel-nas/*.conf
 $DASH_USER ALL=(root) NOPASSWD: /usr/sbin/smartctl
 EOF
     sudo chmod 0440 /etc/sudoers.d/travel-nas-webdash

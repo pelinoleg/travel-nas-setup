@@ -29,12 +29,26 @@ function openPage(id){$$('.page').forEach(p=>p.classList.add('hidden'));$('#'+id
   if(id==='page-power')renderPower();else if(id==='page-backup')renderBackupPage();else if(id==='page-logs')loadLogs();
   else if(id==='page-network')renderNetwork();else if(id==='page-services')renderServices();
   else if(id==='page-thermal')renderThermal();else if(id==='page-yt')renderYT();
-  else if(id==='page-configs')renderConfigs();}
+  else if(id==='page-configs')renderConfigs();else if(id==='page-today')renderToday();}
+
+/* Today (daily summary) */
+async function renderToday(){try{const d=await(await fetch('/api/today')).json();
+  const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span>${typeof v==='object'?JSON.stringify(v):v}</span></div>`;
+  $('#today-body').innerHTML=Object.keys(d).length?Object.entries(d).map(([k,v])=>R(k,v)).join(''):'<div class="note">No summary yet (generated daily at 21:00).</div>';
+  }catch(e){$('#today-body').innerHTML='error';}}
 
 /* Configs page (имена/размер, без содержимого — там секреты) */
 async function renderConfigs(){try{const r=await(await fetch('/api/configs')).json();
-  $('#configs-body').innerHTML='<div class="svc-list">'+r.map(c=>`<div class="svc-item"><span>${c.name}${c.desc?' — <span style="color:var(--mut)">'+c.desc+'</span>':''}</span><span class="u">${(c.size/1024).toFixed(1)} KB</span></div>`).join('')+'</div><div class="note">Edit configs via Filebrowser / SSH (not shown here — they contain secrets).</div>';
+  $('#configs-body').innerHTML='<div class="svc-list">'+r.map(c=>`<div class="svc-item" data-n="${c.name}"><span>${c.name}${c.desc?' — <span style="color:var(--mut)">'+c.desc+'</span>':''}</span><span class="u">edit ✎</span></div>`).join('')+'</div><div class="note">Tap to edit. Note: some configs contain passwords/tokens.</div>';
+  $$('#configs-body .svc-item').forEach(el=>el.onclick=()=>editConfig(el.dataset.n));
   }catch(e){$('#configs-body').innerHTML='error';}}
+async function editConfig(name){try{const r=await(await fetch('/api/config?name='+encodeURIComponent(name))).json();
+  const esc=(r.content||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  $('#configs-body').innerHTML=`<div class="h">${name}</div><textarea id="cfg-edit" class="editor">${esc}</textarea>
+    <div style="display:flex;gap:8px;margin-top:8px"><button id="cfg-save" class="wide">Save</button><button id="cfg-back" class="wide">Back</button></div>`;
+  $('#cfg-save').onclick=async()=>{const x=await(await api('/api/config',{name,content:$('#cfg-edit').value})).json();
+    toast(x.ok?'saved ✓':'error: '+(x.err||x.error||''));};
+  $('#cfg-back').onclick=renderConfigs;}catch(e){toast('error');}}
 
 /* YT-Archiver page */
 function renderYT(){const yt=(last.services||{}).yt||{};const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span>${v}</span></div>`;
@@ -51,8 +65,11 @@ function renderNetwork(){const nw=last.network||{};const R=(k,v)=>`<div class="r
     <div class="k" style="margin-top:8px">Password</div><div style="font-size:18px;font-weight:600">${nw.ap_pass||'open'}</div></div>`;
   $('#net-info').innerHTML=apBig+R('hostname',(nw.host||'nas')+'.local')+R('IP',nw.ip||'—')+R('WiFi SSID',nw.ssid||'—')
     +R('signal',nw.signal?nw.signal+' dB':'—')+R('mode',nw.mode==='AP'?'Hotspot (AP)':'Client')
-    +R('comitup',nw.comitup||'—')+R('Tailscale',nw.tailscale||'—');}
+    +R('comitup',nw.comitup||'—')+R('Tailscale',nw.ts_up?`up · ${nw.ts_peers||0} peers`:'down')+R('TS IP',nw.tailscale||'—');
+  $('#ts-toggle').innerHTML=ic('i-net')+(nw.ts_up?'Disconnect Tailscale':'Connect Tailscale');}
 $('#force-ap').onclick=()=>openModal('Force hotspot',[['Drop WiFi → start AP','force-ap',1]]);
+$('#ts-toggle').onclick=()=>doAction((last.network||{}).ts_up?'tailscale-down':'tailscale-up');
+$('#wifi-reconnect').onclick=()=>doAction('wifi-reconnect');
 
 /* Services page */
 async function renderServices(){$('#services-body').innerHTML='<div class="h">loading…</div>';
@@ -308,7 +325,7 @@ function applyNight(){const f=$('#night-from').value,t=$('#night-to').value;if(!
 
 /* drag-to-scroll пальцем/мышью (нативный тач-скролл в kiosk ненадёжен) */
 function dragScroll(el){let down=false,sy=0,stp=0,moved=false;
-  el.addEventListener('pointerdown',e=>{down=true;sy=e.clientY;stp=el.scrollTop;moved=false;});
+  el.addEventListener('pointerdown',e=>{if(e.target.closest('input,textarea,select'))return;down=true;sy=e.clientY;stp=el.scrollTop;moved=false;});
   el.addEventListener('pointermove',e=>{if(!down)return;const dy=e.clientY-sy;
     if(Math.abs(dy)>6)moved=true;if(moved)el.scrollTop=stp-dy;});
   const end=()=>down=false;
@@ -318,3 +335,14 @@ function dragScroll(el){let down=false,sy=0,stp=0,moved=false;
 
 connect();setBrightness(br.value);
 fetch('/api/services').then(r=>r.json()).then(s=>{$('#svc-v').textContent=s.length;}).catch(()=>{});
+
+/* Settings: verify / restart / screenshot / accent */
+$('#verify-run').onclick=()=>{doAction('verify-run');toast('verify started');};
+$('#restart-tg').onclick=()=>doAction('restart-tg');
+$('#restart-dash').onclick=()=>{toast('restarting…');doAction('restart-dash');};
+$('#screenshot').onclick=async()=>{toast('…');try{const r=await(await api('/api/screenshot')).json();
+  toast(r.ok?'sent to Telegram':('error: '+(r.error||'')));}catch(e){toast('error');}};
+function applyAccent(c){document.documentElement.style.setProperty('--acc',c);}
+if(localStorage.accent)applyAccent(localStorage.accent);
+$$('#accent button').forEach(b=>b.onclick=()=>{applyAccent(b.dataset.c);localStorage.accent=b.dataset.c;});
+fetch('/api/maint').then(r=>r.json()).then(m=>{$('#verify-next').textContent=m.verify_next?'next: '+m.verify_next:'';}).catch(()=>{});

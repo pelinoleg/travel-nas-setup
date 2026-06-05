@@ -27,7 +27,7 @@
 <symbol id="i-camera" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="3.5"/></symbol>
 <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M4 14.5a4 4 0 0 1 .9-7.9 5 5 0 0 1 9.6-1.6A3.5 3.5 0 0 1 19 13.5"/><polyline points="8.5 15 12 11.5 15.5 15"/><line x1="12" y1="11.5" x2="12" y2="21"/></symbol>
 <symbol id="i-back" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></symbol>
-<symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></symbol>
+<symbol id="i-settings" viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2.3"/><line x1="4" y1="12" x2="20" y2="12"/><circle cx="15" cy="12" r="2.3"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="18" r="2.3"/></symbol>
 <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4l1.4-1.4M17 7l1.4-1.4"/></symbol>
 <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></symbol>
 <symbol id="i-activity" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></symbol>
@@ -96,7 +96,23 @@
       <button data-open="page-logs">Open logs</button></div>
     <div class="setrow"><label><svg class="ic"><use href="#i-list"/></svg>Configs</label>
       <button data-open="page-configs">View configs</button></div>
-    <div class="note">Screen &amp; power settings moved to their tiles on Overview.</div>
+    <div class="setrow"><label><svg class="ic"><use href="#i-activity"/></svg>Today</label>
+      <button data-open="page-today">Daily summary</button></div>
+    <div class="setrow"><label><svg class="ic"><use href="#i-disk"/></svg>Integrity scrub</label>
+      <button id="verify-run">Run verify</button><span id="verify-next" class="sub"></span></div>
+    <div class="setrow"><label><svg class="ic"><use href="#i-restart"/></svg>Restart services</label>
+      <button id="restart-tg">Telegram bot</button><button id="restart-dash">Dashboard</button></div>
+    <div class="setrow"><label><svg class="ic"><use href="#i-camera"/></svg>Screenshot</label>
+      <button id="screenshot">Send to Telegram</button></div>
+    <div class="setrow"><label><svg class="ic"><use href="#i-sun"/></svg>Accent color</label>
+      <span class="seg" id="accent">
+        <button data-c="#3b82f6" style="background:#3b82f6">●</button>
+        <button data-c="#3fb950" style="background:#3fb950">●</button>
+        <button data-c="#a371f7" style="background:#a371f7">●</button>
+        <button data-c="#f85149" style="background:#f85149">●</button>
+        <button data-c="#22d3ee" style="background:#22d3ee">●</button>
+        <button data-c="#d29922" style="background:#d29922">●</button></span></div>
+    <div class="note">Screen &amp; power settings are on their tiles on Overview.</div>
   </section>
 </main>
 
@@ -154,6 +170,8 @@
 <div id="page-network" class="page hidden">
   <div class="phead"><button class="bigbtn back"><svg class="ic"><use href="#i-back"/></svg></button><span>Network</span></div>
   <div class="pbody"><div class="sideinfo" id="net-info"></div>
+    <button id="ts-toggle" class="wide"><svg class="ic"><use href="#i-net"/></svg>Tailscale</button>
+    <button id="wifi-reconnect" class="wide"><svg class="ic"><use href="#i-restart"/></svg>Reconnect WiFi</button>
     <button id="force-ap" class="wide"><svg class="ic"><use href="#i-net"/></svg>Force hotspot (Force AP)</button>
     <div class="note">Force AP drops the current WiFi and brings up the comitup hotspot (captive portal on :80).</div></div>
 </div>
@@ -178,6 +196,11 @@
 <div id="page-configs" class="page hidden">
   <div class="phead"><button class="bigbtn back"><svg class="ic"><use href="#i-back"/></svg></button><span>Configs</span></div>
   <div class="pbody" id="configs-body"></div>
+</div>
+
+<div id="page-today" class="page hidden">
+  <div class="phead"><button class="bigbtn back"><svg class="ic"><use href="#i-back"/></svg></button><span>Today</span></div>
+  <div class="pbody"><div class="sideinfo" id="today-body"></div></div>
 </div>
 
 <div id="page-update" class="page hidden">

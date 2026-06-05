@@ -229,11 +229,13 @@ function renderBackups(){const sv=last.services||{},nb=sv.nas_backup||{},pr=sv.p
 function renderBackupPage(){const sv=last.services||{},nb=sv.nas_backup||{},pr=sv.progress||{},ph=sv.photo||{};
   const w=whichBackup(pr);const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span>${v}</span></div>`;
   const bar=p=>`<div class="bar-fill"><i style="width:${p||0}%"></i></div>`;
+  const big=(pct,done,total)=>`<div class="bigstat"><div><div class="n">${pct||0}%</div><div class="l">progress</div></div>`
+    +`<div><div class="n">${done||0}<span style="font-size:22px;color:var(--mut)"> / ${total||'?'}</span></div><div class="l">files</div></div></div>`;
   let html='';
-  if(w==='photo')html+=`<div class="h">Photo import — running</div>${bar(pr.percent)}<div class="sideinfo">${R('card',pr.label||'?')}${R('progress',(pr.percent||0)+'%')}${R('files',(pr.files_done||0)+'/'+(pr.files_total||'?'))}${R('speed',pr.speed||'?')}${R('eta',pr.eta||'?')}${R('to',pr.target||'usb-imports')}</div>`;
-  else html+=`<div class="h">Photo import (SD/USB)</div><div class="sideinfo">${R('last import',ph.last||'—')}${R('mode','automatic on card insert')}</div>`;
-  html+='<div class="h" style="margin-top:14px">NAS backup</div>';
-  if(w==='nas')html+=`${bar(pr.percent)}<div class="sideinfo">${R('progress',(pr.percent||0)+'%')}${R('speed',pr.speed||'?')}${R('eta',pr.eta||'?')}</div><button id="bk-stop" class="wide" style="color:var(--crit)">${ic('i-stop')}Stop backup</button>`;
+  if(w==='photo')html+=`<div class="h">Photo import — running</div>${big(pr.percent,pr.files_done,pr.files_total)}${bar(pr.percent)}<div class="sideinfo">${R('card',pr.label||'?')}${R('speed',pr.speed||'?')}${R('eta',pr.eta||'?')}${R('to',(pr.target||'usb-imports').split('/').pop())}</div>`;
+  else html+=`<div class="h">Photo import (SD/USB)</div><div class="sideinfo">${R('last import',ph.last||'—')}${R('mode','auto on card insert')}</div>`;
+  html+='<div class="h" style="margin-top:16px">NAS backup</div>';
+  if(w==='nas')html+=`${big(pr.percent,pr.files_done,pr.files_total)}${bar(pr.percent)}<div class="sideinfo">${R('speed',pr.speed||'?')}${R('eta',pr.eta||'?')}</div><button id="bk-stop" class="wide" style="color:var(--crit)">${ic('i-stop')}Stop backup</button>`;
   else html+=`<div class="sideinfo">${R('status',nb.last_status||nb.status||'not configured')}${R('last run',nb.last_run||'—')}</div><button id="bk-run" class="wide">${ic('i-cloud')}Run NAS backup</button>`;
   $('#backup-body').innerHTML=html;
   const run=$('#bk-run'),stop=$('#bk-stop');

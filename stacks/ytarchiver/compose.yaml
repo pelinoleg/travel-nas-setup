@@ -2,6 +2,11 @@
 # из .env рядом (его пишет setup.sh из yt-archiver.conf + модели Pi). docker
 # compose подставляет ${VAR} из .env нативно. Backend без published-порта
 # (frontend ходит к нему по сети ytarchiver_net), наружу только frontend :8081.
+#
+# bgutil-provider — Proof-of-Origin token provider: backend's yt-dlp ходит к нему
+# по сети (POT_PROVIDER_URL) и проходит YouTube «Sign in to confirm you're not a
+# bot» без cookies. watchtower авто-обновляет ТОЛЬКО его (label-scoped) — YouTube
+# периодически меняет анти-бот. Cookies (./cookies/youtube.txt) — опц. fallback.
 name: ytarchiver
 services:
   backend:
@@ -18,7 +23,7 @@ services:
     environment:
       BETWEEN_DOWNLOADS_MAX_SECONDS: "15"
       BETWEEN_DOWNLOADS_MIN_SECONDS: "5"
-      CORS_ORIGINS: "[*]"
+      CORS_ORIGINS: "*"
       DATA_DIR: /data
       DB_PATH: /data/ytarchiver.db
       DEFAULT_PLAYBACK_RATE: "1.0"
@@ -39,6 +44,12 @@ services:
       SPONSORBLOCK_REFRESH_DAYS: "7"
       SYNC_INTERVAL_MINUTES: "240"
       SYNC_JITTER_MINUTES: "60"
+      # YouTube bot-detection bypass: POT-токены через bgutil-provider (без cookies).
+      POT_PROVIDER_URL: "http://bgutil-provider:4416"
+      # Опц. fallback: Netscape cookies.txt (mount :ro). Обычно не нужен с POT.
+      COOKIES_FILE: /cookies/youtube.txt
+      # Принудительный yt-dlp player client. Пусто = yt-dlp выбирает сам.
+      YOUTUBE_PLAYER_CLIENT: ""
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/health"]
       interval: 30s
@@ -54,6 +65,10 @@ services:
       - type: bind
         source: /mnt/storage/media/YT-Archiver/video
         target: /downloads
+      - type: bind
+        source: /mnt/storage/media/YT-Archiver/cookies
+        target: /cookies
+        read_only: true
   frontend:
     image: ghcr.io/pelinoleg/ytarchiver-frontend:latest
     container_name: ytarchiver-frontend
@@ -72,6 +87,35 @@ services:
       - ytarchiver_net
     ports:
       - "8081:80"   # короткий синтаксис → Dockge делает порт кликабельным
+
+  # POT-провайдер: backend's yt-dlp ходит к нему по ytarchiver_net
+  # (http://bgutil-provider:4416), чтобы пройти бот-стену YouTube без cookies.
+  # Без published-порта — только внутренняя сеть.
+  bgutil-provider:
+    image: brainicism/bgutil-ytdlp-pot-provider:latest
+    container_name: bgutil-provider
+    hostname: bgutil-provider
+    restart: unless-stopped
+    networks:
+      - ytarchiver_net
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+
+  # Авто-обновляет ТОЛЬКО bgutil-provider (WATCHTOWER_LABEL_ENABLE → по label выше),
+  # чтобы обход бот-стены жил сам. НАШИ образы (backend/frontend) НЕ трогает — они
+  # едут через CI + travel-nas-update --full. containrrr/watchtower заброшен и
+  # ломается на новых Docker API → берём поддерживаемый форк nickfedor.
+  watchtower:
+    image: nickfedor/watchtower:latest
+    container_name: watchtower
+    restart: unless-stopped
+    environment:
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_POLL_INTERVAL: "86400"
+      DOCKER_API_VERSION: "1.44"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
 networks:
   ytarchiver_net:

@@ -2,6 +2,20 @@
 
 Significant changes to travel-nas-setup. Newest first.
 
+## 2026-06-05 — ytarchiver: POT-провайдер (обход YouTube bot-wall)
+
+- Синхронизация стека с upstream `pelinoleg/ytarchiver`. Backend's yt-dlp теперь
+  проходит «Sign in to confirm you're not a bot» без cookies через
+  **bgutil-provider** (`brainicism/bgutil-ytdlp-pot-provider`) — новый сервис на
+  `ytarchiver_net`, backend ходит к нему по `POT_PROVIDER_URL=http://bgutil-provider:4416`.
+- **watchtower** (`nickfedor/watchtower`) — авто-обновляет ТОЛЬКО bgutil (label-scoped),
+  наши backend/frontend не трогает.
+- Backend: + env `POT_PROVIDER_URL`, `COOKIES_FILE`, `YOUTUBE_PLAYER_CLIENT`;
+  `CORS_ORIGINS` `"[*]"` → `"*"`. Новый bind `cookies/` → `/cookies:ro` (опц. fallback
+  `youtube.txt`); `stack_pre` создаёт папку.
+- Наши адаптации сохранены: `name`, `ytarchiver_net`, `cpu_shares`+`deploy.limits`
+  из `.env`, bind в `/mnt/storage/media/YT-Archiver/`, порт **8081**, healthcheck.
+
 ## 2026-06-04 — Выбор экрана: + Waveshare 4.3″ DSI
 
 - **Визард выбора экрана** (`19-display.sh`): MHS35 (SPI) / Waveshare 4.3″ DSI /

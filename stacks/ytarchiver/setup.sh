@@ -5,6 +5,8 @@ stack_pre() {
     local U; U="$(getent passwd 1000 2>/dev/null | cut -d: -f1)"; U="${U:-root}"
     sudo install -d -o "$U" -g "$U" /mnt/storage/media/YT-Archiver/data
     sudo install -d -o "$U" -g "$U" /mnt/storage/media/YT-Archiver/video
+    # cookies/ — опц. fallback (положи youtube.txt). Mount :ro, но папка нужна.
+    sudo install -d -o "$U" -g "$U" /mnt/storage/media/YT-Archiver/cookies
 
     # Дефолт CPU-лимита под модель Pi (Pi5 быстрее → больше ядер).
     local model; model=$(tr -d '\0' < /proc/device-tree/model 2>/dev/null || echo "")

@@ -27,15 +27,44 @@ setInterval(()=>{const d=new Date();$('#clock').textContent=`${('0'+d.getHours()
 /* pages (overlays) */
 function openPage(id){$$('.page').forEach(p=>p.classList.add('hidden'));$('#'+id).classList.remove('hidden');
   if(id==='page-power')renderPower();else if(id==='page-backup')renderBackupPage();else if(id==='page-logs')loadLogs();
-  else if(id==='page-network')renderNetwork();else if(id==='page-services')renderServices();
+  else if(id==='page-network'){renderNetwork();loadTsList();}else if(id==='page-services')renderServices();
   else if(id==='page-thermal')renderThermal();else if(id==='page-yt')renderYT();
-  else if(id==='page-configs')renderConfigs();else if(id==='page-today')renderToday();}
+  else if(id==='page-configs')renderConfigs();else if(id==='page-today')renderToday();
+  else if(id==='page-failed')renderFailed();}
+
+/* Failed units */
+async function renderFailed(){try{const u=await(await fetch('/api/failed')).json();
+  $('#failed-body').innerHTML=u.length?'<div class="svc-list">'+u.map(n=>`<div class="svc-item"><span>${n}</span><button class="rst wide" style="width:auto;height:auto;padding:8px 14px" data-u="${n}">Restart</button></div>`).join('')+'</div>':'<div class="note">No failed units ✓</div>';
+  $$('#failed-body .rst').forEach(b=>b.onclick=()=>{doAction('restart-unit',{unit:b.dataset.u});toast('restart '+b.dataset.u);setTimeout(renderFailed,1500);});}catch(e){$('#failed-body').innerHTML='error';}}
+/* Tailscale device list (ping on tap) */
+async function loadTsList(){try{const d=await(await fetch('/api/tailscale')).json();
+  $('#ts-list').innerHTML=d.peers.map(p=>`<div class="svc-item ${p.online?'online':'offline'}" data-ip="${p.ip}"><span>${p.name} <span style="color:var(--mut);font-size:11px">${p.os}</span></span><span class="u">${p.online?'online':'offline'} · ${p.ip}</span></div>`).join('')||'<div class="note">no peers</div>';
+  $$('#ts-list .svc-item').forEach(el=>el.onclick=async()=>{toast('ping '+el.dataset.ip+'…');const r=await(await api('/api/ts-ping',{ip:el.dataset.ip})).json();toast((r.out||'no reply').split('\n').pop());});}catch(e){}}
+/* WiFi scan + connect */
+async function loadWifi(){$('#wifi-list').innerHTML='<div class="note">scanning…</div>';
+  try{const n=await(await fetch('/api/wifi/scan')).json();
+  $('#wifi-list').innerHTML=n.map(w=>`<div class="svc-item" data-ssid="${w.ssid}" data-sec="${w.sec}"><span>${w.active?'● ':''}${w.ssid}</span><span class="u">${w.signal}%${w.sec&&w.sec!=='--'?' 🔒':''}</span></div>`).join('')||'<div class="note">none</div>';
+  $$('#wifi-list .svc-item').forEach(el=>el.onclick=()=>connectWifi(el.dataset.ssid,el.dataset.sec));}catch(e){$('#wifi-list').innerHTML='error';}}
+function connectWifi(ssid,sec){
+  if(sec&&sec!=='--'&&sec!==''){
+    $('#wifi-list').innerHTML=`<div class="h">${ssid}</div><input id="wifi-pw" class="lfilter" type="password" placeholder="password" style="max-width:100%"><div style="display:flex;gap:8px;margin-top:8px"><button id="wifi-go" class="wide">Connect</button><button id="wifi-cancel" class="wide">Cancel</button></div>`;
+    $('#wifi-go').onclick=()=>{doAction('wifi-connect',{ssid,password:$('#wifi-pw').value});toast('connecting '+ssid);};
+    $('#wifi-cancel').onclick=loadWifi;
+  }else{doAction('wifi-connect',{ssid});toast('connecting '+ssid);}}
+$('#wifi-scan').onclick=loadWifi;
+/* recent files (what's new) */
+async function loadRecent(){try{const d=await(await fetch('/api/recent')).json();
+  $('#recent-list').innerHTML=d.count?d.items.map(i=>`<div class="svc-item"><span>${i.path}</span><span class="u">${(i.size/1e6).toFixed(1)} MB</span></div>`).join(''):'<div class="note">nothing new in 24h</div>';}catch(e){}}
+/* diagnostics zip */
+$('#diag-run').onclick=async()=>{toast('building diag…');try{const r=await(await api('/api/diag')).json();
+  toast(r.ok?(r.sent?'sent to Telegram ✓':'saved: '+r.path):'error: '+(r.error||''));}catch(e){toast('error');}};
 
 /* Today (daily summary) */
 async function renderToday(){try{const d=await(await fetch('/api/today')).json();
   const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span>${typeof v==='object'?JSON.stringify(v):v}</span></div>`;
   $('#today-body').innerHTML=Object.keys(d).length?Object.entries(d).map(([k,v])=>R(k,v)).join(''):'<div class="note">No summary yet (generated daily at 21:00).</div>';
-  }catch(e){$('#today-body').innerHTML='error';}}
+  }catch(e){$('#today-body').innerHTML='error';}
+  loadRecent();}
 
 /* Configs page (имена/размер, без содержимого — там секреты) */
 async function renderConfigs(){try{const r=await(await fetch('/api/configs')).json();
@@ -273,9 +302,17 @@ async function renderCleanup(){try{const r=await(await fetch('/api/imports')).js
 async function delImport(name){await api('/api/imports/delete',{name});toast('deleted');renderCleanup();}
 
 /* Logs */
+let logsRaw='';
 async function loadLogs(){$('#logs-body').textContent='loading…';
-  try{$('#logs-body').textContent=await(await fetch('/api/logs')).text();const b=$('#logs-body');b.scrollTop=b.scrollHeight;}catch(e){$('#logs-body').textContent='error';}}
+  try{logsRaw=await(await fetch('/api/logs')).text();renderLogs();const b=$('#logs-body');b.scrollTop=b.scrollHeight;}
+  catch(e){$('#logs-body').textContent='error';}}
+function renderLogs(){const q=($('#logs-filter').value||'').toLowerCase();
+  const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  $('#logs-body').innerHTML=logsRaw.split('\n').filter(l=>!q||l.toLowerCase().includes(q)).map(l=>{
+    const lc=l.toLowerCase();const c=/(error|fail|critical|\berr\b)/.test(lc)?'log-err':/warn/.test(lc)?'log-warn':'';
+    return c?`<span class="${c}">${esc(l)}</span>`:esc(l);}).join('\n');}
 $('#logs-refresh').onclick=loadLogs;
+$('#logs-filter').oninput=renderLogs;
 
 /* Power page */
 const MODEDESC={auto:'Auto — system picks governor by temp/throttle (saver when hot).',

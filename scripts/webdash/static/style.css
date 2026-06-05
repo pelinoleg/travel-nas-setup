@@ -96,6 +96,10 @@ table#proc-cpu,table#proc-mem{width:100%;border-collapse:collapse;font-size:12px
 .proj .btns .start{color:var(--ok)}.proj .btns .stop{color:var(--crit)}.proj .btns .ic{width:20px;height:20px}
 
 #logs-body{font:11px/1.4 ui-monospace,monospace;color:var(--mut);white-space:pre-wrap}
+.log-err{color:var(--crit)}.log-warn{color:var(--warn)}
+.lfilter{flex:1;max-width:220px;background:var(--panel2);border:1px solid var(--line);color:var(--fg);
+  border-radius:8px;padding:7px 10px;font-size:13px;touch-action:auto;-webkit-user-select:text;user-select:text}
+.svc-item.online .u{color:var(--ok)}.svc-item.offline .u{color:var(--mut)}
 .rbtn{margin-left:auto;background:var(--panel2);border:1px solid var(--line);color:var(--fg);width:44px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center}
 
 .setrow{display:flex;align-items:center;gap:10px;padding:12px 4px;border-bottom:1px solid var(--line);flex-wrap:wrap}

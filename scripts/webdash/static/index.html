@@ -98,6 +98,10 @@
       <button data-open="page-configs">View configs</button></div>
     <div class="setrow"><label><svg class="ic"><use href="#i-activity"/></svg>Today</label>
       <button data-open="page-today">Daily summary</button></div>
+    <div class="setrow"><label><svg class="ic"><use href="#i-restart"/></svg>Failed units</label>
+      <button data-open="page-failed">Show</button></div>
+    <div class="setrow"><label><svg class="ic"><use href="#i-cloud"/></svg>Diagnostics</label>
+      <button id="diag-run">Zip → Telegram</button></div>
     <div class="setrow"><label><svg class="ic"><use href="#i-disk"/></svg>Integrity scrub</label>
       <button id="verify-run">Run verify</button><span id="verify-next" class="sub"></span></div>
     <div class="setrow"><label><svg class="ic"><use href="#i-restart"/></svg>Restart services</label>
@@ -163,8 +167,14 @@
 
 <div id="page-logs" class="page hidden">
   <div class="phead"><button class="bigbtn back"><svg class="ic"><use href="#i-back"/></svg></button><span>Logs</span>
+    <input id="logs-filter" class="lfilter" placeholder="filter…">
     <button id="logs-refresh" class="rbtn"><svg class="ic"><use href="#i-restart"/></svg></button></div>
   <pre id="logs-body">…</pre>
+</div>
+
+<div id="page-failed" class="page hidden">
+  <div class="phead"><button class="bigbtn back"><svg class="ic"><use href="#i-back"/></svg></button><span>Failed units</span></div>
+  <div class="pbody" id="failed-body"></div>
 </div>
 
 <div id="page-network" class="page hidden">
@@ -173,7 +183,11 @@
     <button id="ts-toggle" class="wide"><svg class="ic"><use href="#i-net"/></svg>Tailscale</button>
     <button id="wifi-reconnect" class="wide"><svg class="ic"><use href="#i-restart"/></svg>Reconnect WiFi</button>
     <button id="force-ap" class="wide"><svg class="ic"><use href="#i-net"/></svg>Force hotspot (Force AP)</button>
-    <div class="note">Force AP drops the current WiFi and brings up the comitup hotspot (captive portal on :80).</div></div>
+    <div class="h" style="margin-top:10px">WiFi networks <button id="wifi-scan" class="rbtn" style="float:right"><svg class="ic"><use href="#i-restart"/></svg></button></div>
+    <div id="wifi-list" class="svc-list"></div>
+    <div class="h" style="margin-top:10px">Tailscale devices</div>
+    <div id="ts-list" class="svc-list"></div>
+    <div class="note">Force AP drops current WiFi → comitup hotspot (captive portal on :80).</div></div>
 </div>
 
 <div id="page-services" class="page hidden">
@@ -200,7 +214,8 @@
 
 <div id="page-today" class="page hidden">
   <div class="phead"><button class="bigbtn back"><svg class="ic"><use href="#i-back"/></svg></button><span>Today</span></div>
-  <div class="pbody"><div class="sideinfo" id="today-body"></div></div>
+  <div class="pbody"><div class="sideinfo" id="today-body"></div>
+    <div class="h" style="margin-top:12px">New in last 24h</div><div id="recent-list" class="svc-list"></div></div>
 </div>
 
 <div id="page-update" class="page hidden">

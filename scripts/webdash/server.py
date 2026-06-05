@@ -12,7 +12,7 @@
 #   /api/action/screen     → яркость/поворот/гашение/выход из kiosk
 # История пишется в SQLite на /mnt/storage (не на microSD).
 # =============================================================================
-import json, os, pwd, sqlite3, subprocess, threading, time, glob, shutil, urllib.request
+import json, os, pwd, re, sqlite3, subprocess, threading, time, glob, shutil, urllib.request, zipfile
 from pathlib import Path
 from flask import Flask, Response, request, jsonify, send_from_directory
 
@@ -430,6 +430,96 @@ def api_configs():
                     "size": os.path.getsize(p), "mtime": int(os.path.getmtime(p))})
     return jsonify(out)
 
+def _tg_creds():
+    tok = chat = ""
+    for line in read("/etc/travel-nas/tg-notify.conf").splitlines():
+        if line.startswith("TG_BOT_TOKEN="): tok = line.split("=", 1)[1].strip().strip('"')
+        elif line.startswith("TG_CHAT_ID="): chat = line.split("=", 1)[1].strip().strip('"')
+    return tok, chat
+def send_document(token, chat, path):
+    b = "----webdashdoc"; fn = os.path.basename(path)
+    with open(path, "rb") as f: data = f.read()
+    body = ("--%s\r\nContent-Disposition: form-data; name=\"chat_id\"\r\n\r\n%s\r\n" % (b, chat)).encode()
+    body += ("--%s\r\nContent-Disposition: form-data; name=\"document\"; filename=\"%s\"\r\nContent-Type: application/zip\r\n\r\n" % (b, fn)).encode()
+    body += data + ("\r\n--%s--\r\n" % b).encode()
+    req = urllib.request.Request("https://api.telegram.org/bot%s/sendDocument" % token, data=body,
+                                 headers={"Content-Type": "multipart/form-data; boundary=" + b})
+    urllib.request.urlopen(req, timeout=30)
+
+@app.route("/api/failed")
+def api_failed():
+    units = []
+    for line in sh(["systemctl", "--failed", "--no-legend", "--plain", "--no-pager"]).splitlines():
+        f = line.split()
+        if f and f[0].endswith(".service"): units.append(f[0])
+    return jsonify(units)
+
+@app.route("/api/wifi/scan")
+def api_wifi_scan():
+    out = sh(["nmcli", "-t", "-f", "IN-USE,SSID,SIGNAL,SECURITY", "dev", "wifi", "list", "--rescan", "yes"], timeout=12)
+    nets = []; seen = set()
+    for line in out.splitlines():
+        p = line.split(":")
+        if len(p) < 4 or not p[1] or p[1] in seen: continue
+        seen.add(p[1])
+        nets.append({"ssid": p[1], "signal": int(p[2]) if p[2].isdigit() else 0,
+                     "sec": ":".join(p[3:]), "active": p[0] == "*"})
+    nets.sort(key=lambda n: -n["signal"])
+    return jsonify(nets)
+
+@app.route("/api/tailscale")
+def api_tailscale():
+    try: j = json.loads(sh(["tailscale", "status", "--json"], timeout=6) or "{}")
+    except Exception: j = {}
+    peers = []
+    for _, p in (j.get("Peer") or {}).items():
+        peers.append({"name": (p.get("HostName") or p.get("DNSName", "")).split(".")[0],
+                      "ip": (p.get("TailscaleIPs") or ["?"])[0],
+                      "online": p.get("Online", False), "os": p.get("OS", "")})
+    peers.sort(key=lambda x: (not x["online"], x["name"]))
+    return jsonify({"up": j.get("BackendState") == "Running", "peers": peers})
+
+@app.route("/api/ts-ping", methods=["POST"])
+def api_ts_ping():
+    ip = (request.json or {}).get("ip", "")
+    if not re.match(r"^[\d.:a-fA-F]+$", ip): return jsonify({"error": "bad"}), 400
+    return jsonify({"out": sh(["tailscale", "ping", "-c", "2", ip], timeout=10)[-200:] or "no reply"})
+
+@app.route("/api/recent")
+def api_recent():
+    out = sh(["find", CONF["STORAGE_MOUNT"], "-type", "f", "-mmin", "-1440",
+              "-not", "-path", "*/.*", "-printf", "%T@ %s %p\n"], timeout=15)
+    rows = []
+    for line in out.splitlines():
+        try:
+            t, sz, path = line.split(" ", 2); rows.append((float(t), int(sz), path))
+        except Exception: pass
+    rows.sort(reverse=True)
+    items = [{"path": p.replace(CONF["STORAGE_MOUNT"] + "/", ""), "size": sz} for _, sz, p in rows[:40]]
+    return jsonify({"count": len(rows), "items": items})
+
+@app.route("/api/diag", methods=["POST"])
+def api_diag():
+    ts = time.strftime("%Y%m%d-%H%M%S")
+    zpath = "%s/_logs/diag-%s.zip" % (CONF["STORAGE_MOUNT"], ts)
+    try:
+        os.makedirs(os.path.dirname(zpath), exist_ok=True)
+        with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("journal.log", sh(["journalctl", "-n", "800", "--no-pager", "-o", "short-iso"], timeout=20))
+            z.writestr("kernel.log", sh(["journalctl", "-k", "-n", "300", "--no-pager"], timeout=15))
+            z.writestr("failed.txt", sh(["systemctl", "--failed", "--no-pager"]))
+            z.writestr("snapshot.json", json.dumps(snapshot(), indent=2))
+            for jf in glob.glob("/var/lib/travel-nas/*.json"):
+                try: z.write(jf, "state/" + os.path.basename(jf))
+                except Exception: pass
+        tok, chat = _tg_creds(); sent = False
+        if tok and chat:
+            try: send_document(tok, chat, zpath); sent = True
+            except Exception: pass
+        return jsonify({"ok": True, "path": zpath, "sent": sent})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
 def _conf_path(name):
     if not name or "/" in name or ".." in name or not name.endswith(".conf"):
         return None
@@ -488,6 +578,13 @@ def api_action(name):
     elif name == "cpu-boost":
         mn = str((request.json or {}).get("min", ""))
         cmd = ["sudo", "-n", "/usr/local/bin/cpu-boost.sh", "on"] + ([mn] if mn.isdigit() else [])
+    elif name == "restart-unit":
+        u = (request.json or {}).get("unit", "")
+        cmd = ["sudo", "-n", "/usr/bin/systemctl", "restart", u] if re.match(r"^[\w@.\-]+\.service$", u) else None
+    elif name == "wifi-connect":
+        d = request.json or {}; ssid = d.get("ssid", ""); pw = d.get("password", "")
+        cmd = (["sudo", "-n", "/usr/bin/nmcli", "device", "wifi", "connect", ssid]
+               + (["password", pw] if pw else [])) if ssid else None
     else:
         cmd = ACTIONS.get(name)
     if not cmd: return jsonify({"error": "unknown"}), 400

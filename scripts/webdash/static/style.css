@@ -75,6 +75,15 @@ main{position:relative;height:382px}
 .dstat{flex:1;text-align:center;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 4px}
 .dstat .dn{font-size:19px;font-weight:700;line-height:1.1}.dstat .dl{color:var(--mut);font-size:11px}
 .dim{opacity:.4}
+.lv-ok{color:var(--ok)}
+/* акцентные плитки сервисов */
+.t-docker{border-left:3px solid #3b82f6}.t-docker .th .ic{color:#3b82f6}
+.t-yt{border-left:3px solid #f85149}.t-yt .th .ic{color:#f85149}
+.t-photo{border-left:3px solid #22d3ee}.t-photo .th .ic{color:#22d3ee}
+.t-nas{border-left:3px solid #a371f7}.t-nas .th .ic{color:#a371f7}
+.th{position:relative}
+.tdot{position:absolute;right:0;top:3px;width:9px;height:9px;border-radius:50%;background:var(--mut)}
+.tdot.ok{background:var(--ok)}.tdot.warn{background:var(--warn)}.tdot.crit{background:var(--crit);box-shadow:0 0 7px var(--crit)}
 .pmode-lbl{font-size:13px;font-weight:600;color:var(--mut);text-transform:capitalize;margin-top:1px}
 #freq{transition:color .3s}
 .f-full{color:var(--ok)}.f-mid{color:var(--acc)}.f-low{color:var(--warn)}.f-min{color:#22d3ee}
@@ -132,7 +141,9 @@ table#proc-cpu,table#proc-mem{width:100%;border-collapse:collapse;font-size:12px
 .disk .part{font-size:12px;color:var(--mut)}
 
 .projgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
-.proj{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:9px}
+.proj{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--line);border-radius:12px;padding:9px}
+.proj.p-ok{border-left-color:var(--ok)}.proj.p-warn{border-left-color:var(--warn)}.proj.p-err{border-left-color:var(--crit)}
+.proj .name .ic{width:16px;height:16px;color:#3b82f6;vertical-align:-3px}
 .proj .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
 .proj .name{font-weight:600;font-size:15px}.proj .st{font-size:12px;color:var(--mut);display:flex;align-items:center;gap:5px}
 .proj .st .dot{width:9px;height:9px;border-radius:50%}
@@ -155,6 +166,11 @@ table#proc-cpu,table#proc-mem{width:100%;border-collapse:collapse;font-size:12px
 #net .dl .ic{width:17px;height:17px}#net .ul .ic{width:14px;height:14px}
 #net .dl.on{opacity:1;color:var(--ok)}
 #net .ul.on{opacity:1;color:var(--crit)}
+.schedbanner{display:flex;align-items:center;gap:12px;border-radius:12px;padding:12px 14px;margin:10px 0;border:1px solid var(--line)}
+.schedbanner .ic{width:26px;height:26px;flex:none}
+.schedbanner.on{background:rgba(63,185,80,.14);border-color:var(--ok)}.schedbanner.on .ic{color:var(--ok)}
+.schedbanner.off .ic{color:var(--mut)}
+.schedbanner .sbt{font-weight:700;font-size:15px}.schedbanner .sbs{color:var(--mut);font-size:12px}
 .schedrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px}
 .schedrow select,.schedrow input{padding:7px 9px;background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:8px}
 
@@ -243,5 +259,6 @@ select,input[type=number],input[type=time]{background:var(--panel2);border:1px s
 .pbody:not(.two) .sideinfo .dstats{grid-column:1/-1}
 /* крупная статистика бэкапа */
 .bigstat{display:flex;gap:36px;align-items:baseline;margin:6px 0 14px}
-.bigstat .n{font-size:42px;font-weight:700;line-height:1}
+.bigstat .n{font-size:42px;font-weight:700;line-height:1;color:var(--acc)}
+#photo-body .bigstat .n{color:#22d3ee}
 .bigstat .l{color:var(--mut);font-size:13px;margin-top:4px}

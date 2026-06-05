@@ -83,14 +83,16 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   // docker tile — проекты + контейнеры
   const proj=sv.projects||[],down=proj.filter(p=>p.running<p.total).length;
   const totC=proj.reduce((a,p)=>a+p.total,0),runC=proj.reduce((a,p)=>a+p.running,0);
-  $('#dk').textContent=`${proj.filter(p=>p.running===p.total&&p.total).length}/${proj.length}`;
-  $('#dk').className='tv2'+(down?' lv-crit':'');
-  $('#dk-sub').textContent=down?down+' stopped: '+proj.filter(p=>p.running<p.total).map(p=>p.project).join(', '):`${runC}/${totC} containers up`;
+  $('#dk').innerHTML=`${runC}<span class="u2">/${totC}</span>`;
+  $('#dk').className='tv2 '+(!proj.length?'':(down?'lv-crit':'lv-ok'));
+  $('#dk-sub').innerHTML=`${proj.length} stacks · ${down?'<span style="color:var(--crit)">'+down+' down</span>':'<span style="color:var(--ok)">all up</span>'}`;
+  $('#dk-dot').className='tdot '+(!proj.length?'':(down?'crit':'ok'));
   // yt tile
   const yt=sv.yt||{};
-  if(Object.keys(yt).length){$('#yt-v').textContent=(yt.videos||0)+' vids';
-    $('#yt-sub').textContent=`${TB(yt.total_bytes)}${yt.music?' · '+yt.music+' mus':''}${yt.paused?' · paused':(yt.downloading?' · '+yt.downloading+' dl':'')}`;}
-  else{$('#yt-v').textContent='–';$('#yt-sub').textContent='offline';}
+  if(Object.keys(yt).length){$('#yt-v').innerHTML=`${yt.videos||0}<span class="u2"> vids</span>`;
+    $('#yt-sub').innerHTML=`${TB(yt.total_bytes)}${yt.music?' · '+yt.music+' mus':''}${yt.downloading?' · <span style="color:var(--ok)">'+yt.downloading+' dl</span>':(yt.paused?' · <span style="color:var(--warn)">paused</span>':'')}`;
+    $('#yt-dot').className='tdot '+(yt.paused?'warn':(yt.downloading?'ok':''));}
+  else{$('#yt-v').textContent='–';$('#yt-sub').textContent='offline';$('#yt-dot').className='tdot';}
   // backups tiles (photo/nas раздельно)
   renderBackupTiles(sv);
   // buffers + sparks
@@ -158,8 +160,8 @@ setInterval(()=>{if(!$('#detail').classList.contains('hidden')&&(dMetric==='cpu'
 
 /* Docker (page) */
 function renderProjects(){const pr=(last.services||{}).projects||[];
-  $('#projects').innerHTML=pr.map(p=>{const ok=p.running===p.total&&p.total>0;
-    return `<div class="proj"><div class="top"><span class="name">${p.project}</span><span class="st"><span class="dot ${ok?'ok':p.running?'warn':'err'}"></span>${p.running}/${p.total}</span></div><div class="btns"><button class="start" data-p="${p.project}" data-a="start">${ic('i-play')}</button><button data-p="${p.project}" data-a="restart">${ic('i-restart')}</button><button class="stop" data-p="${p.project}" data-a="stop">${ic('i-stop')}</button></div></div>`;}).join('')||'<div>no projects</div>';
+  $('#projects').innerHTML=pr.map(p=>{const ok=p.running===p.total&&p.total>0,sc=ok?'ok':p.running?'warn':'err';
+    return `<div class="proj p-${sc}"><div class="top"><span class="name">${ic('i-box')} ${p.project}</span><span class="st"><span class="dot ${sc}"></span>${p.running}/${p.total}</span></div><div class="btns"><button class="start" data-p="${p.project}" data-a="start">${ic('i-play')}</button><button data-p="${p.project}" data-a="restart">${ic('i-restart')}</button><button class="stop" data-p="${p.project}" data-a="stop">${ic('i-stop')}</button></div></div>`;}).join('')||'<div class="note">no docker projects</div>';
   $$('#projects button').forEach(b=>b.onclick=async()=>{toast(b.dataset.a+' '+b.dataset.p+'…');await api('/api/docker',{project:b.dataset.p,action:b.dataset.a});
     setTimeout(()=>api('/api/snapshot').then(r=>r.json()).then(d=>{last=d;renderProjects();}),1800);});}
 
@@ -193,7 +195,8 @@ function renderBackupTiles(sv){const nb=sv.nas_backup||{},pr=sv.progress||{},ph=
   $('#nas-v').textContent=w==='nas'?(pr.percent||0)+'%':(nb.last_status||nb.status||'idle');
   const sched=sv.nas_sched&&sv.nas_sched!=='off'?sv.nas_sched:null;
   $('#nas-sub').textContent=w==='nas'?`${pr.speed||''} eta ${pr.eta||'?'}`:(sched?'auto '+sched:(nb.last_run?'last '+nb.last_run:'manual'));
-  nt.setAttribute('style',w==='nas'?bkbg(pr.percent):'');}
+  nt.setAttribute('style',w==='nas'?bkbg(pr.percent):'');
+  $('#nas-dot').className='tdot '+(w==='nas'?'ok':((nb.last_status||'')==='failed'?'crit':(sched?'ok':'')));}
 const bkCard=(icon,title,body)=>`<div class="bkcard">${icon}<div class="bkc"><div class="bkt">${title}</div>${body}</div></div>`;
 const bkProg=pr=>`<div class="bkbar"><i id="bk-bar" style="width:${pr.percent||0}%"></i></div><div class="bks"><b id="bk-pct">${pr.percent||0}%</b> · <span id="bk-files">${pr.files_done||0}/${pr.files_total||'?'}</span> files · <span id="bk-speed">${pr.speed||'…'}</span> · eta <span id="bk-eta">${pr.eta||'?'}</span></div>`;
 /* Photo import — карта SD/USB → /mnt/storage/usb-imports (авто при вставке). С удалением. */
@@ -204,23 +207,23 @@ function renderPhotoPage(){const sv=last.services||{},pr=sv.progress||{},ph=sv.p
   $('#photo-body').innerHTML=bkCard(ic('i-camera'),'Copy photos from card to disk',body)
     +'<div class="h" style="margin-top:6px">Imports on disk <span id="imp-total" class="k"></span></div><div id="bk-cleanup" class="svc-list"></div>';
   loadCleanup();}
+function schedBanner(sched){const on=sched&&sched!=='off';
+  return `<div class="schedbanner ${on?'on':'off'}" id="nas-sched-banner">${ic('i-clock')}<div class="sb"><div class="sbt">Auto-backup ${on?'ON':'OFF'}</div><div class="sbs">${on?sched:'manual only — runs only when you press Run'}</div></div></div>`;}
 /* NAS backup — домашний NAS → /mnt/storage/nas-backup (rsync-модули). Без удаления. */
 function renderNasPage(){const sv=last.services||{},nb=sv.nas_backup||{},pr=sv.progress||{},active=pr.active&&pr.kind==='nas',sched=sv.nas_sched||'off';
   const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span>${v}</span></div>`,cfg=Object.keys(nb).length>0;
   let h=bkCard(ic('i-cloud'),'Pull backup from home NAS',active?bkProg(pr):`<div class="bks">${cfg?'idle':'not configured — set NAS in Settings → Configs → nas-backup.conf'}</div>`);
-  const schOn=sched&&sched!=='off';
-  const schVal=`<span class="dot ${schOn?'ok':'off'}"></span> ${schOn?'ON · '+sched:'OFF (manual only)'}`;
-  h+=`<div class="sideinfo">${R('Schedule',schVal)}${nb.last_run?R('Last run',nb.last_run):''}${nb.last_status?R('Last status',(nb.last_status==='failed'?'<span style="color:var(--crit)">failed</span>':'<span style="color:var(--ok)">'+nb.last_status+'</span>')):''}${nb.host?R('NAS host',nb.host):''}${nb.dest?R('Dest',nb.dest):''}</div>`;
+  if(nb.last_run||nb.last_status||nb.host)
+    h+=`<div class="sideinfo">${nb.last_run?R('Last run',nb.last_run):''}${nb.last_status?R('Last status',(nb.last_status==='failed'?'<span style="color:var(--crit)">failed</span>':'<span style="color:var(--ok)">'+nb.last_status+'</span>')):''}${nb.host?R('NAS host',nb.host):''}${nb.dest?R('Dest',nb.dest):''}</div>`;
   const sm=(sched||'').match(/^(daily|weekly) (\d\d:\d\d)/),stime=sm?sm[2]:'03:00';
-  h+=`<div class="h" style="margin-top:8px">Auto-schedule</div>
-    <div class="schedrow"><select id="sch-freq"><option value="daily">daily</option><option value="weekly">weekly (Sun)</option></select>
+  h+=schedBanner(sched)+`<div class="schedrow"><select id="sch-freq"><option value="daily">daily</option><option value="weekly">weekly (Sun)</option></select>
     <input type="time" id="sch-time" value="${stime}">
-    <button class="minib" id="sch-set">Set</button><button class="minib" id="sch-off">Off</button>
-    <button class="minib" id="nas-viewlog">View log</button></div>`;
+    <button class="minib" id="sch-set">${ic('i-clock')}Set</button><button class="minib" id="sch-off">${ic('i-power')}Off</button>
+    <button class="minib" id="nas-viewlog">${ic('i-list')}Log</button></div>`;
   $('#nas-body').innerHTML=h;
   if(sm)$('#sch-freq').value=sm[1];
-  $('#sch-set').onclick=()=>{doAction('nas-sched-set',{freq:$('#sch-freq').value,time:$('#sch-time').value});toast('schedule set');};
-  $('#sch-off').onclick=()=>{doAction('nas-sched-off');toast('schedule off');};
+  $('#sch-set').onclick=()=>{const fr=$('#sch-freq').value,tm=$('#sch-time').value;doAction('nas-sched-set',{freq:fr,time:tm});$('#nas-sched-banner').outerHTML=schedBanner(fr+' '+tm);toast('auto-backup ON · '+fr+' '+tm);};
+  $('#sch-off').onclick=()=>{doAction('nas-sched-off');$('#nas-sched-banner').outerHTML=schedBanner('off');toast('auto-backup OFF');};
   $('#nas-viewlog').onclick=()=>openLogfile('__nas__','NAS backup run log');
   $('#nas-acts').innerHTML=active?`<button class="rbtn danger" id="bk-stop">${ic('i-stop')}Stop</button>`
     :`<button class="rbtn" id="bk-run">${ic('i-cloud')}Run</button><button class="rbtn" id="bk-dry">${ic('i-list')}Dry</button><button class="rbtn" id="bk-diff">${ic('i-activity')}Diff</button>`;
@@ -261,9 +264,9 @@ async function delImport(name){await api('/api/imports/delete',{name});toast('de
 /* YT page */
 function renderYT(){const yt=(last.services||{}).yt||{};
   if(!Object.keys(yt).length){$('#yt-pills').innerHTML='';$('#yt-info').innerHTML='<div class="note">YT-Archiver offline.</div>';$('#yt-toggle').style.display='none';return;}
-  const pill=(n,l)=>`<div class="pill"><div class="pn">${n}</div><div class="pl">${l}</div></div>`;
-  $('#yt-pills').innerHTML=pill(yt.videos||0,'videos')+pill(TB(yt.total_bytes),'size')+pill(yt.channels||0,'channels')
-    +pill(yt.downloading||0,'downloading')+pill(yt.pending||0,'pending');
+  const pill=(n,l,c)=>`<div class="pill"${c?` style="border-color:${c}66"`:''}><div class="pn"${c?` style="color:${c}"`:''}>${n}</div><div class="pl">${l}</div></div>`;
+  $('#yt-pills').innerHTML=pill(yt.videos||0,'videos','#f85149')+pill(TB(yt.total_bytes),'size','#22d3ee')+pill(yt.channels||0,'channels','#3b82f6')
+    +pill(yt.downloading||0,'downloading',yt.downloading?'#3fb950':null)+pill(yt.pending||0,'pending',yt.pending?'#d29922':null);
   const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span>${v}</span></div>`;
   $('#yt-info').innerHTML=R('state',yt.paused?'paused':'running')+R('errors',yt.error||0)+R('max parallel',yt.max_concurrent||1);
   const t=$('#yt-toggle');t.style.display='';t.innerHTML=yt.paused?ic('i-play')+'Resume all':ic('i-stop')+'Pause all';
@@ -271,7 +274,7 @@ function renderYT(){const yt=(last.services||{}).yt||{};
   // обогащаем напрямую с YT-бэкенда (CORS=*): музыка + недавние
   fetch(`http://${location.hostname}:8081/api/videos`).then(r=>r.json()).then(v=>{
     const music=v.filter(x=>x.is_music||x.is_music_via_playlist).length;
-    $('#yt-pills').insertAdjacentHTML('beforeend',pill(music,'music'));
+    $('#yt-pills').insertAdjacentHTML('beforeend',pill(music,'music','#a371f7'));
     const rec=v.filter(x=>x.downloaded_at).sort((a,b)=>(b.downloaded_at||'').localeCompare(a.downloaded_at||'')).slice(0,8);
     $('#yt-recent').innerHTML=(rec.length?rec:v.slice(0,8)).map(x=>`<div class="svc-item"><span>${ic((x.is_music||x.is_music_via_playlist)?'i-music':'i-video')} ${(x.title||'').slice(0,44)}</span><span class="u">${x.file_size_bytes?TB(x.file_size_bytes):''}</span></div>`).join('')||'<div class="note">empty</div>';
   }).catch(()=>{$('#yt-recent').innerHTML='<div class="note">нет связи с YT-бэкендом</div>';});}

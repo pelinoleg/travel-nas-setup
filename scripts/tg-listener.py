@@ -442,15 +442,25 @@ def cmd_services(token, chat_id, args):
         send(token, chat_id, "_services.conf не найден — запусти travel-nas-setup_")
         return
     host, ip = _resolve_host_ip()
+    def sub(s):
+        return s.replace("{host}", host).replace("{ip}", ip).replace("{user}", SSH_USER)
     lines = ["*Services*", ""]
     try:
         for raw in SERVICES_CONF_PATH.read_text().splitlines():
-            line = raw.strip()
-            if not line or line.startswith("#") or "=" not in line:
+            if not raw.strip() or raw.lstrip().startswith("#"):
                 continue
-            name, url = line.split("=", 1)
-            url = url.strip().replace("{host}", host).replace("{ip}", ip)
-            lines.append(f"• *{name.strip()}* — `{url}`")
+            # Отступ = заметка-продолжение к сервису (формат services.conf).
+            # Детект по отступу, НЕ по "=" — в заметке может быть "=" (напр "= off").
+            if raw[:1] in (" ", "\t"):
+                lines.append(f"  _{sub(raw.strip())}_")
+                continue
+            line = raw.strip()
+            if "=" not in line:
+                continue
+            inline = line.startswith(">")
+            name, url = (line[1:] if inline else line).split("=", 1)
+            name, url = name.strip(), sub(url.strip())
+            lines.append(f"• *{name}*: `{url}`" if inline else f"• *{name}* — `{url}`")
     except Exception as e:
         lines.append(f"(read error: {e})")
     send(token, chat_id, "\n".join(lines))

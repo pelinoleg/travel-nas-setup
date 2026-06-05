@@ -167,9 +167,15 @@ def sample_network():
     ts = sh(["tailscale", "ip", "-4"], timeout=5).splitlines()
     iw = sh(["iw", "dev", "wlan0", "info"])
     mode = "AP" if "type AP" in iw else ("client" if "type managed" in iw else "?")
+    ap_name = ""; comitup_state = ""
+    for line in sh(["comitup-cli", "i"], timeout=4).splitlines():
+        if line.startswith("Host"):
+            ap_name = line.split()[1].replace(".local", "") if len(line.split()) > 1 else ""
+        elif "state" in line.lower():
+            comitup_state = line.split()[0].strip("'")
     return {"host": sh(["hostname"]) or "nas", "ip": ips[0] if ips else "?",
             "ssid": ssid, "signal": signal, "mode": mode,
-            "tailscale": ts[0] if ts else ""}
+            "tailscale": ts[0] if ts else "", "ap_name": ap_name, "comitup": comitup_state}
 
 def sample_services():
     raw = sh(["docker", "ps", "-a", "--format",
@@ -188,9 +194,12 @@ def sample_services():
         dirs = sorted(glob.glob("/mnt/storage/usb-imports/*/"), key=os.path.getmtime, reverse=True)
         if dirs: photo = {"last": time.strftime("%d.%m %H:%M", time.localtime(os.path.getmtime(dirs[0])))}
     except Exception: pass
+    prog = read_json("/var/run/travel-nas/backup-progress.json", {})
+    if prog: prog["active"] = (time.time() - prog.get("updated", 0)) < 30
     return {"projects": projects, "photo": photo,
-            "nas_backup": read_json("/var/lib/travel-nas/nas-backup.status.json", {}),
-            "progress": read_json("/var/run/travel-nas/backup-progress.json", {})}
+            "nas_backup": read_json("/var/lib/travel-nas/nas-backup-status.json", {}),
+            "progress": prog,
+            "thermal": read_json("/var/lib/travel-nas/thermal-guard.state.json", {})}
 
 def sampler_fast():
     while True:
@@ -234,7 +243,9 @@ ACTIONS = {
     "nas-backup": ["sudo", "-n", "/usr/local/bin/nas-backup.sh"],
     "nas-stop": ["sudo", "-n", "/usr/bin/systemctl", "stop", "nas-backup-runtime"],
     "cpu-boost": ["sudo", "-n", "/usr/local/bin/cpu-boost.sh", "on"],
+    "force-ap": ["sudo", "-n", "/usr/sbin/comitup-cli", "d"],
 }
+UPDATE_LOG = "/var/run/travel-nas/webdash-update.log"
 def compose_file(project):
     for c in (f"/opt/stacks/{project}/compose.yaml", "/opt/dockge/compose.yaml"):
         if os.path.exists(c): return c
@@ -286,6 +297,34 @@ def api_logs():
     for u in units: cmd += ["-u", u + ".service"]
     out = sh(cmd, timeout=10) or sh(["journalctl", "-n", "120", "--no-pager"], timeout=10)
     return Response(out, mimetype="text/plain")
+@app.route("/api/services")
+def api_services():
+    nw = snapshot().get("network", {})
+    host, ip = (nw.get("host") or "nas") + ".local", nw.get("ip", "")
+    items = []
+    p = Path("/etc/travel-nas/services.conf")
+    if p.exists():
+        for raw in p.read_text().splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or raw[:1] in (" ", "\t") or "=" not in line:
+                continue
+            name, url = line.lstrip(">").split("=", 1)
+            url = url.strip().replace("{host}", host).replace("{ip}", ip)
+            if url.startswith("http"):
+                items.append({"name": name.strip(), "url": url})
+    return jsonify(items)
+
+@app.route("/api/update/run", methods=["POST"])
+def update_run():
+    Path(UPDATE_LOG).parent.mkdir(parents=True, exist_ok=True)
+    Path(UPDATE_LOG).write_text("Starting update…\n")
+    subprocess.Popen("sudo -n /usr/local/bin/travel-nas-update >> %s 2>&1" % UPDATE_LOG, shell=True)
+    return jsonify({"ok": True})
+
+@app.route("/api/update/log")
+def update_log():
+    return Response(read(UPDATE_LOG, "(no run yet)"), mimetype="text/plain")
+
 @app.route("/api/docker", methods=["POST"])
 def api_docker():
     d = request.json or {}

@@ -47,6 +47,7 @@ $DASH_USER ALL=(root) NOPASSWD: /usr/bin/systemctl stop nas-backup-runtime
 $DASH_USER ALL=(root) NOPASSWD: /usr/local/bin/cpu-boost.sh on, /usr/local/bin/cpu-boost.sh off
 $DASH_USER ALL=(root) NOPASSWD: /usr/local/bin/power-mode.sh auto, /usr/local/bin/power-mode.sh normal, /usr/local/bin/power-mode.sh saver
 $DASH_USER ALL=(root) NOPASSWD: /usr/local/bin/dsi-rotate.sh 0, /usr/local/bin/dsi-rotate.sh 90, /usr/local/bin/dsi-rotate.sh 180, /usr/local/bin/dsi-rotate.sh 270
+$DASH_USER ALL=(root) NOPASSWD: /usr/sbin/comitup-cli d
 $DASH_USER ALL=(root) NOPASSWD: /usr/sbin/smartctl
 EOF
     sudo chmod 0440 /etc/sudoers.d/travel-nas-webdash

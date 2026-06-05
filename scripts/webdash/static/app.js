@@ -26,7 +26,34 @@ setInterval(()=>{const d=new Date();$('#clock').textContent=`${('0'+d.getHours()
 
 /* pages (overlays) */
 function openPage(id){$$('.page').forEach(p=>p.classList.add('hidden'));$('#'+id).classList.remove('hidden');
-  if(id==='page-power')renderPower();else if(id==='page-backup')renderBackupPage();else if(id==='page-logs')loadLogs();}
+  if(id==='page-power')renderPower();else if(id==='page-backup')renderBackupPage();else if(id==='page-logs')loadLogs();
+  else if(id==='page-network')renderNetwork();else if(id==='page-services')renderServices();
+  else if(id==='page-thermal')renderThermal();}
+
+/* Network page */
+function renderNetwork(){const nw=last.network||{};const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span>${v}</span></div>`;
+  $('#net-info').innerHTML=R('hostname',(nw.host||'nas')+'.local')+R('IP',nw.ip||'—')+R('WiFi SSID',nw.ssid||'—')
+    +R('signal',nw.signal?nw.signal+' dB':'—')+R('mode',nw.mode==='AP'?'Hotspot (AP)':'Client')
+    +R('comitup',nw.comitup||'—')+R('AP name',nw.ap_name||'—')+R('Tailscale',nw.tailscale||'—');}
+$('#force-ap').onclick=()=>openModal('Force hotspot',[['Drop WiFi → start AP','force-ap',1]]);
+
+/* Services page */
+async function renderServices(){$('#services-body').innerHTML='<div class="h">loading…</div>';
+  try{const r=await(await fetch('/api/services')).json();
+    $('#services-body').innerHTML='<div class="svc-list">'+r.map(s=>`<div class="svc-item"><span>${s.name}</span><span class="u">${s.url.replace('http://','')}</span></div>`).join('')+'</div>'
+      +'<div class="note">Open these on your phone/laptop in the same network.</div>';
+    $('#svc-v').textContent=r.length;}catch(e){$('#services-body').innerHTML='error';}}
+
+/* Thermal page */
+function renderThermal(){const th=(last.services||{}).thermal||{};const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span>${v}</span></div>`;
+  $('#thermal-info').innerHTML=R('mode',th.MODE||th.mode||'warn')+R('last temp',(th.last_temp||th.temp||'?')+'°C')
+    +R('throttle stage',th.stage||th.level||'none')+R('actions',(th.actions&&th.actions.length)?th.actions.join(', '):'none');}
+
+/* Update page (with live output) */
+let updTimer=null;
+$('#update-run').onclick=async()=>{$('#update-body').textContent='Starting…';await api('/api/update/run');
+  clearInterval(updTimer);updTimer=setInterval(async()=>{try{$('#update-body').textContent=await(await fetch('/api/update/log')).text();
+    const b=$('#update-body');b.scrollTop=b.scrollHeight;}catch(e){}},1500);};
 const closePages=()=>$$('.page').forEach(p=>p.classList.add('hidden'));
 $$('.page .back').forEach(b=>b.onclick=closePages);
 $$('[data-open]').forEach(el=>el.onclick=()=>{const o=el.dataset.open;
@@ -66,8 +93,38 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   const wc=nw.mode==='AP'?'warn':(nw.ip&&nw.ip!=='?'?'ok':'err');
   const wt=nw.mode==='AP'?`Hotspot ${nw.ssid||''}`:`${nw.ssid||'no wifi'} ${nw.signal?nw.signal+'dB':''}`;
   $('#topchips').innerHTML=chip(wc,wt);
+  // disk tile bar + free
+  const dbar=$('#disk-bar');if(dbar){dbar.style.width=(st.pct||0)+'%';
+    dbar.className=st.pct>=95?'crit':st.pct>=88?'high':st.pct>=75?'warn':'';}
+  $('#disk-sub').textContent=st.size?`USB · ${TB(st.avail)} free`:'';
+  // power tile color by mode
+  const pt=$('#power-tile');if(pt){pt.className='tile';pt.classList.add('pm-'+(s.pmode||'auto'));}
+  // wifi tile
+  $('#wifi-v').textContent=nw.mode==='AP'?'Hotspot':(nw.ssid||'—');
+  $('#wifi-sub').textContent=nw.mode==='AP'?(nw.ap_name||''):`${nw.signal?nw.signal+'dB':''}`;
+  // docker tile color
+  const proj=sv.projects||[],down=proj.filter(p=>p.running<p.total).length;
+  const dke=$('#dk');dke.textContent=`${proj.filter(p=>p.running===p.total&&p.total).length}/${proj.length}`;
+  dke.className='tv2';if(down){dke.classList.add('lv-crit');$('#dk-sub').textContent=down+' stopped';}
+  else $('#dk-sub').textContent='all up';
+  // thermal tile
+  const th=sv.thermal||{};$('#thermal-v').textContent=(th.MODE||th.mode||'warn');
+  $('#thermal-sub').textContent=th.last_temp?th.last_temp+'°C':(th.temp?th.temp+'°C':'');
+  renderAlerts(s,st,sv,nw);
   renderBackups();
-  if(!$('#page-power').classList.contains('hidden'))renderPower();}
+  if(!$('#page-power').classList.contains('hidden'))renderPower();
+  if(!$('#page-thermal').classList.contains('hidden'))renderThermal();
+  if(!$('#page-network').classList.contains('hidden'))renderNetwork();}
+
+/* alerts banner */
+function renderAlerts(s,st,sv,nw){const a=[];
+  if(s.throttled_now)a.push(['crit','⚡ Throttled']);
+  if(s.temp>=82)a.push(['crit','🌡 CPU '+s.temp+'°C']);else if(s.temp>=72)a.push(['warn','🌡 '+s.temp+'°C']);
+  if(st.mounted===false)a.push(['crit','💾 Disk not mounted']);
+  else if(st.pct>=95)a.push(['crit','💾 Disk '+st.pct+'%']);else if(st.pct>=88)a.push(['warn','💾 Disk '+st.pct+'%']);
+  if((nw.ip||'?')==='?')a.push(['warn','📡 No network']);
+  const nb=sv.nas_backup||{};if((nb.last_status||'')==='failed')a.push(['crit','☁ Backup failed']);
+  $('#alerts').innerHTML=a.map(([c,t])=>`<span class="alert ${c}">${t}</span>`).join('');}
 
 function connect(){const es=new EventSource('/api/stream');
   es.onmessage=e=>{try{render(JSON.parse(e.data));applyNight();}catch(_){}};
@@ -171,7 +228,6 @@ const closeModal=()=>$('#modal').classList.add('hidden');
 $('#modal-cancel').onclick=closeModal;
 async function doAction(name,body){toast('…');try{const r=await(await api('/api/action/'+name,body||{})).json();toast(r.ok||r.detached?'OK':('Error: '+(r.err||r.error||'')));}catch(e){toast('Network error');}}
 $('#btn-exit').onclick=()=>doAction('screen',{exit_kiosk:true});
-$('#act-update').onclick=()=>doAction('update');
 
 /* screen page controls */
 const LS=localStorage,br=$('#brightness'),bv=$('#brightness-val');
@@ -199,3 +255,4 @@ function applyNight(){const f=$('#night-from').value,t=$('#night-to').value;if(!
   if(!screenOff&&target!==nightApplied){nightApplied=target;api('/api/action/screen',{brightness:target+'%'});}}
 
 connect();setBrightness(br.value);
+fetch('/api/services').then(r=>r.json()).then(s=>{$('#svc-v').textContent=s.length;}).catch(()=>{});

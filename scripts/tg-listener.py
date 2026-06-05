@@ -1005,25 +1005,35 @@ def cmd_screenshot(token, chat_id, args):
     """Запрашивает у dashboard'а скриншот текущего экрана и отправляет в TG.
     Механика: touch SCREENSHOT_REQ → dashboard на следующем тике main loop'а
     (≤ ~1 сек при FPS=30) сохраняет screen в SCREENSHOT_PNG и убирает флаг."""
-    if not SCREENSHOT_REQ.parent.exists():
-        send(token, chat_id, "❌ /var/run/travel-nas/ не существует — дашборд запущен?")
-        return
-    # Чтобы не отдать старый PNG: убираем стейл-файл, затем запрашиваем новый
-    old_mtime = SCREENSHOT_PNG.stat().st_mtime if SCREENSHOT_PNG.exists() else 0
-    SCREENSHOT_REQ.touch()
-    # Ждём до 5 сек пока dashboard перепишет PNG (mtime изменится)
-    deadline = time.time() + 5
-    while time.time() < deadline:
-        if SCREENSHOT_PNG.exists() and SCREENSHOT_PNG.stat().st_mtime > old_mtime:
-            break
-        time.sleep(0.2)
-    else:
-        # Не дождались — флаг убираем чтобы не накапливалось
-        try: SCREENSHOT_REQ.unlink()
-        except Exception: pass
-        send(token, chat_id, "❌ dashboard не ответил за 5 сек — возможно не запущен")
-        return
-    r = send_photo(token, chat_id, SCREENSHOT_PNG)
+    import subprocess, os
+    png = SCREENSHOT_PNG
+    got = False
+    # 1) pygame-дашборд (MHS35): file-IPC — touch req, ждём обновления PNG.
+    if SCREENSHOT_REQ.parent.exists():
+        old_mtime = SCREENSHOT_PNG.stat().st_mtime if SCREENSHOT_PNG.exists() else 0
+        SCREENSHOT_REQ.touch()
+        deadline = time.time() + 2.5
+        while time.time() < deadline:
+            if SCREENSHOT_PNG.exists() and SCREENSHOT_PNG.stat().st_mtime > old_mtime:
+                got = True; break
+            time.sleep(0.2)
+        if not got:
+            try: SCREENSHOT_REQ.unlink()
+            except Exception: pass
+    # 2) Wayland-дашборд (DSI): нет pygame → снимаем экран через grim.
+    if not got:
+        png = Path("/tmp/tg-screenshot.png")
+        env = dict(os.environ, WAYLAND_DISPLAY="wayland-0",
+                   XDG_RUNTIME_DIR="/run/user/%d" % os.getuid())
+        try:
+            subprocess.run(["grim", str(png)], env=env, timeout=10,
+                          stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
+        if not png.exists():
+            send(token, chat_id, "❌ скриншот не получился (дашборд не отвечает, grim недоступен)")
+            return
+    r = send_photo(token, chat_id, png)
     if not r or not r.get("ok"):
         send(token, chat_id, "❌ sendPhoto failed")
 

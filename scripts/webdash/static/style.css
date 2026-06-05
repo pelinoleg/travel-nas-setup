@@ -44,6 +44,8 @@ main{position:relative;height:392px}
 .th .ic{width:15px;height:15px}
 .tv{font-size:30px;font-weight:700;line-height:1.1;margin-top:2px}
 .tv small{font-size:13px;color:var(--mut);font-weight:400}
+.u2{font-weight:300;opacity:.45;font-size:.58em;margin-left:2px}
+.dtemp{font-size:19px;font-weight:600;margin-left:10px;opacity:.85}
 .tv2{font-size:18px;font-weight:600;margin-top:6px;text-transform:capitalize}
 .tile .sub{color:var(--mut);font-size:11px}
 .spark{display:block;width:100%;height:30px;margin-top:4px}
@@ -74,6 +76,9 @@ table#proc-cpu,table#proc-mem{width:100%;border-collapse:collapse;font-size:12px
 .disk .temp{font-size:30px;font-weight:700;line-height:1;text-align:right}.disk .temp small{font-size:13px;color:var(--mut);font-weight:400}
 .disk .badge{font-size:11px;padding:2px 8px;border-radius:12px;background:var(--panel2);color:var(--mut)}
 .disk .badge.usb{color:var(--acc)}.disk .badge.sd{color:var(--warn)}
+.disk .badge.storage{color:var(--acc);border:1px solid var(--acc)}
+.disk .badge.system{color:var(--mut)}
+.disk .badge.removable{color:var(--warn);border:1px solid var(--warn)}
 .bar-fill{height:16px;background:var(--panel2);border-radius:8px;overflow:hidden;margin:7px 0 3px}
 .bar-fill>i{display:block;height:100%;background:var(--ok)}
 .bar-fill>i.warn{background:var(--warn)}.bar-fill>i.high{background:var(--high)}.bar-fill>i.crit{background:var(--crit)}

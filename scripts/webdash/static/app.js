@@ -131,7 +131,8 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   // disk tile bar + free
   const dbar=$('#disk-bar');if(dbar){dbar.style.width=(st.pct||0)+'%';
     dbar.className=st.pct>=95?'crit':st.pct>=88?'high':st.pct>=75?'warn':'';}
-  $('#disk-sub').textContent=st.size?`${(st.used/1e12).toFixed(2)}/${(st.size/1e12).toFixed(2)} TB${st.disk_temp!=null?' · '+st.disk_temp+'°C':''}`:'';
+  $('#disk-sub').textContent=st.size?`${(st.used/1e12).toFixed(2)} / ${(st.size/1e12).toFixed(2)} TB`:'';
+  $('#disk-temp').textContent=st.disk_temp!=null?st.disk_temp+'°':'';
   // power tile color by mode
   const pt=$('#power-tile');if(pt){pt.className='tile';pt.classList.add('pm-'+(s.pmode||'auto'));}
   // wifi tile
@@ -217,8 +218,10 @@ function renderDisks(){const disks=(last.storage||{}).disks||[];
   $('#disks').innerHTML=disks.map(d=>{const parts=d.parts.filter(p=>p.mount).map(p=>{
     const cl=p.pct>=95?'crit':p.pct>=88?'high':p.pct>=75?'warn':'';
     return `<div class="part">${p.mount} · ${p.label||p.fstype||''} — ${TB(p.used)}/${TB(p.total)} (${p.pct??'?'}%)</div><div class="bar-fill"><i class="${cl}" style="width:${p.pct||0}%"></i></div>`;}).join('')||'<div class="part">not mounted</div>';
-    const kc=d.kind==='USB'?'usb':d.kind==='SD'?'sd':'';
-    return `<div class="disk"><div class="top"><div><div class="name">${d.name}</div><div class="meta">${d.model||d.kind} · ${TB(d.size)}${d.health&&d.health!='?'?' · '+d.health:''}</div></div><div style="text-align:right"><span class="badge ${kc}">${d.kind}</span>${d.temp!=null?`<div class="temp">${d.temp}<small>°C</small></div>`:''}</div></div>${parts}</div>`;}).join('')||'<div>no disks</div>';}
+    const mounts=d.parts.map(p=>p.mount);
+    const role=mounts.includes('/')?'system':(mounts.includes('/mnt/storage')?'storage':'removable');
+    const rl={system:'SYSTEM · microSD',storage:'STORAGE · main',removable:'REMOVABLE'}[role];
+    return `<div class="disk"><div class="top"><div><div class="name">${d.name} <span style="color:var(--mut);font-weight:400;font-size:12px">${d.kind}</span></div><div class="meta">${d.model||''} ${TB(d.size)}${d.health&&d.health!='?'?' · '+d.health:''}</div></div><div style="text-align:right"><span class="badge ${role}">${rl}</span>${d.temp!=null?`<div class="temp">${d.temp}<small>°C</small></div>`:''}</div></div>${parts}</div>`;}).join('')||'<div>no disks</div>';}
 
 /* Docker */
 function renderProjects(){const pr=(last.services||{}).projects||[];const ic=n=>`<svg class="ic"><use href="#${n}"/></svg>`;
@@ -261,7 +264,7 @@ function renderBackupPage(){const sv=last.services||{},nb=sv.nas_backup||{},pr=s
   if(stop)stop.onclick=()=>{doAction('nas-stop');toast('stopping');};}
 /* Storage cleanup (usb-imports) */
 async function renderCleanup(){try{const r=await(await fetch('/api/imports')).json();
-  $('#cleanup').innerHTML=`<div class="h" style="margin-top:12px">Photo imports — ${TB(r.total)} total</div><div class="svc-list">`
+  $('#cleanup').innerHTML=`<div class="h" style="margin-top:14px">Photo imports on disk — ${TB(r.total)} (tap Delete to free space)</div><div class="svc-list">`
     +r.items.map(i=>`<div class="svc-item"><span>${i.name} · ${TB(i.size)}</span><button class="del" data-n="${i.name}">${ic('i-stop')}Delete</button></div>`).join('')+'</div>';
   $$('#cleanup .del').forEach(b=>b.onclick=()=>openModal('Delete import?',[['Delete '+b.dataset.n,'__del:'+b.dataset.n,1]]));}catch(e){}}
 async function delImport(name){await api('/api/imports/delete',{name});toast('deleted');renderCleanup();}
@@ -340,8 +343,6 @@ fetch('/api/services').then(r=>r.json()).then(s=>{$('#svc-v').textContent=s.leng
 $('#verify-run').onclick=()=>{doAction('verify-run');toast('verify started');};
 $('#restart-tg').onclick=()=>doAction('restart-tg');
 $('#restart-dash').onclick=()=>{toast('restarting…');doAction('restart-dash');};
-$('#screenshot').onclick=async()=>{toast('…');try{const r=await(await api('/api/screenshot')).json();
-  toast(r.ok?'sent to Telegram':('error: '+(r.error||'')));}catch(e){toast('error');}};
 function applyAccent(c){document.documentElement.style.setProperty('--acc',c);}
 if(localStorage.accent)applyAccent(localStorage.accent);
 $$('#accent button').forEach(b=>b.onclick=()=>{applyAccent(b.dataset.c);localStorage.accent=b.dataset.c;});

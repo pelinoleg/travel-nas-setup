@@ -58,11 +58,11 @@
   <section id="tab-overview" class="tab active">
     <div id="alerts" class="alerts"></div>
     <div class="tiles">
-      <div class="tile" data-open="detail" data-metric="cpu"><div class="th"><svg class="ic"><use href="#i-cpu"/></svg>CPU</div><div class="tv"><b id="cpu">–</b>%</div><canvas class="spark" data-s="cpu"></canvas></div>
-      <div class="tile" data-open="detail" data-metric="temp"><div class="th"><svg class="ic"><use href="#i-thermo"/></svg>Temp</div><div class="tv"><b id="temp">–</b>°</div><canvas class="spark" data-s="temp"></canvas></div>
-      <div class="tile" data-open="detail" data-metric="mem"><div class="th"><svg class="ic"><use href="#i-ram"/></svg>RAM</div><div class="tv"><b id="mem">–</b><small id="mem-tot"></small></div><canvas class="spark" data-s="mem"></canvas></div>
+      <div class="tile" data-open="detail" data-metric="cpu"><div class="th"><svg class="ic"><use href="#i-cpu"/></svg>CPU</div><div class="tv"><b id="cpu">–</b><span class="u2">%</span></div><canvas class="spark" data-s="cpu"></canvas></div>
+      <div class="tile" data-open="detail" data-metric="temp"><div class="th"><svg class="ic"><use href="#i-thermo"/></svg>Temp</div><div class="tv"><b id="temp">–</b><span class="u2">°C</span></div><canvas class="spark" data-s="temp"></canvas></div>
+      <div class="tile" data-open="detail" data-metric="mem"><div class="th"><svg class="ic"><use href="#i-ram"/></svg>RAM</div><div class="tv"><b id="mem">–</b><span class="u2" id="mem-tot"></span></div><canvas class="spark" data-s="mem"></canvas></div>
       <div class="tile" data-open="detail" data-metric="net_rx"><div class="th"><svg class="ic"><use href="#i-net"/></svg>Traffic</div><div class="tv2" id="net">–</div><canvas class="spark" data-s="net_rx"></canvas></div>
-      <div class="tile" data-open="detail" data-metric="disk"><div class="th"><svg class="ic"><use href="#i-disk"/></svg>Disk</div><div class="tv"><b id="disk">–</b>%</div><div class="bar-fill sm"><i id="disk-bar"></i></div><div class="sub" id="disk-sub"></div></div>
+      <div class="tile" data-open="detail" data-metric="disk"><div class="th"><svg class="ic"><use href="#i-disk"/></svg>Disk</div><div class="tv"><b id="disk">–</b><span class="u2">%</span><span id="disk-temp" class="dtemp"></span></div><div class="bar-fill sm"><i id="disk-bar"></i></div><div class="sub" id="disk-sub"></div></div>
       <div class="tile" id="power-tile" data-open="page-power"><div class="th"><svg class="ic"><use href="#i-zap"/></svg>Power</div><div class="tv2" id="power">–</div><div class="sub" id="power-sub"></div></div>
       <div class="tile" data-open="page-screen" id="screen-tile"><div class="th"><svg class="ic"><use href="#i-sun"/></svg>Screen</div>
         <div class="ring"><svg viewBox="0 0 40 40"><circle class="rbg" cx="20" cy="20" r="16"/><circle class="rfg" id="ring" cx="20" cy="20" r="16"/></svg><span id="screen-cd">∞</span></div></div>
@@ -102,8 +102,6 @@
       <button id="verify-run">Run verify</button><span id="verify-next" class="sub"></span></div>
     <div class="setrow"><label><svg class="ic"><use href="#i-restart"/></svg>Restart services</label>
       <button id="restart-tg">Telegram bot</button><button id="restart-dash">Dashboard</button></div>
-    <div class="setrow"><label><svg class="ic"><use href="#i-camera"/></svg>Screenshot</label>
-      <button id="screenshot">Send to Telegram</button></div>
     <div class="setrow"><label><svg class="ic"><use href="#i-sun"/></svg>Accent color</label>
       <span class="seg" id="accent">
         <button data-c="#3b82f6" style="background:#3b82f6">●</button>

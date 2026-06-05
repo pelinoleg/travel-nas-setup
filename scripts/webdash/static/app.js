@@ -213,12 +213,16 @@ async function renderDiskPage(){const st=last.storage||{},pct=st.pct||0,cl=pct>=
     <div id="smart-pills" class="pills" style="margin-top:14px"><div class="note">loading SMART…</div></div>
     <div class="sideinfo" id="smart-info"></div>`;
   try{const s=await(await fetch('/api/smart')).json();const P=[];
-    if(s.temp)P.push(pill(s.temp+'°C','temp'));if(s.health)P.push(pill(s.health,'health'));
-    if(s.power_on_hours)P.push(pill(s.power_on_hours,'power-on h'));if(s.power_cycles)P.push(pill(s.power_cycles,'cycles'));
+    const poh=s.power_on_hours?parseInt(s.power_on_hours.replace(/,/g,'')):0;
+    if(s.health)P.push(pill(s.health,'status'));
+    if(s.temp)P.push(pill(s.temp+'°','temp'));
+    if(poh)P.push(pill(poh>=48?Math.round(poh/24)+' d':poh+' h','powered on'));
+    if(s.power_cycles)P.push(pill(s.power_cycles,'cycles'));
     if(s.wear)P.push(pill(s.wear,'wear used'));if(s.spare)P.push(pill(s.spare,'spare'));if(s.realloc)P.push(pill(s.realloc,'realloc'));
     $('#smart-pills').innerHTML=P.join('')||'<div class="note">SMART n/a (microSD)</div>';
+    const now=new Date(),upd=now.toLocaleDateString('en-US',{month:'long',day:'2-digit',year:'numeric'})+' · '+('0'+now.getHours()).slice(-2)+':'+('0'+now.getMinutes()).slice(-2);
     const R=(k,v)=>v?`<div class="row"><span class="k">${k}</span><span>${v}</span></div>`:'';
-    $('#smart-info').innerHTML=R('Model',s.model)+R('Capacity',s.capacity)+R('Device',s.device);
+    $('#smart-info').innerHTML=R('Model',s.model)+R('Device',s.device)+R('Capacity',s.capacity)+R('Last updated',upd);
   }catch(e){$('#smart-pills').innerHTML='<div class="note">SMART error</div>';}}
 async function loadCleanup(){try{const r=await(await fetch('/api/imports')).json();
   $('#imp-total').textContent='· '+TB(r.total);

@@ -112,9 +112,11 @@ table#proc-cpu,table#proc-mem{width:100%;border-collapse:collapse;font-size:12px
 .diskgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .disk{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:11px}
 .disk .top{display:flex;justify-content:space-between;align-items:flex-start}
-.disk .name{font-weight:600}.disk .meta{color:var(--mut);font-size:12px;margin-top:2px}
+.disk .top>div:first-child{min-width:0}
+.disk .name{font-weight:600}.disk .meta{color:var(--mut);font-size:12px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .disk .temp{font-size:30px;font-weight:700;line-height:1;text-align:right}.disk .temp small{font-size:13px;color:var(--mut);font-weight:400}
-.disk .badge{font-size:11px;padding:2px 8px;border-radius:12px;background:var(--panel2);color:var(--mut)}
+.disk .badge{display:inline-block;white-space:nowrap;font-size:10px;font-weight:600;letter-spacing:.3px;padding:3px 9px;border-radius:12px;background:var(--panel2);color:var(--mut)}
+.disk .top{gap:10px}.disk .top>div:last-child{flex:none}
 .disk .badge.usb{color:var(--acc)}.disk .badge.sd{color:var(--warn)}
 .disk .badge.storage{color:var(--acc);border:1px solid var(--acc)}
 .disk .badge.system{color:var(--mut)}

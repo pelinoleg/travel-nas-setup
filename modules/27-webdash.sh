@@ -74,7 +74,7 @@ EOF
 
     # 6) Chromium kiosk — автозапуск в labwc + ярлык на десктоп
     CHROME=$(command -v chromium-browser || command -v chromium || echo chromium-browser)
-    KIOSK="$CHROME --kiosk --app=http://localhost:$WD_PORT --ozone-platform=wayland --noerrdialogs --disable-infobars --check-for-update-interval=31536000"
+    KIOSK="$CHROME --kiosk --app=http://localhost:$WD_PORT --ozone-platform=wayland --noerrdialogs --disable-infobars --password-store=basic --disable-features=Translate,TranslateUI --lang=ru-RU --check-for-update-interval=31536000"
     LABWC_AUTO="$USER_HOME/.config/labwc/autostart"
     mkdir -p "$(dirname "$LABWC_AUTO")"
     touch "$LABWC_AUTO"

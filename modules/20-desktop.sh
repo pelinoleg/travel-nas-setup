@@ -1,40 +1,38 @@
 [[ -n "${DO_DESKTOP:-}" ]] || return 0
 
 info "=== Desktop shortcuts ==="
-# На MHS35 320×480 пиктограммы LXDE дефолтного размера почти не помещаются
-# в один экран. Кладём только две самых нужных:
-#  - Travel-NAS Dashboard — вернуться в kiosk после Exit to desktop
-#  - Travel-NAS Update    — pull свежих скриптов из GitHub
-# Остальное (NAS backup, logs, files, edit services) доступно через
-# Menu внутри dashboard.
+
+# Набор ярлыков зависит от экрана:
+#  MHS35 — Dashboard + Calibrate Touch (+ Update), мелкие иконки под 320×480.
+#  DSI43 — дашборда и калибровки НЕТ (на DSI они не ставятся: экран другой,
+#          тач ёмкостный driver-free). Вместо них — ярлыки на наши docker-сервисы:
+#          на 800×480 удобно открыть веб-UI прямо в браузере. (+ Update).
+BOOT_CFG=/boot/firmware/config.txt
+[[ -f "$BOOT_CFG" ]] || BOOT_CFG=/boot/config.txt
+SCREEN_TYPE=""
+if grep -qE '^[[:space:]]*dtoverlay=vc4-kms-dsi(-7inch|-waveshare-800x480)' "$BOOT_CFG" 2>/dev/null; then
+    SCREEN_TYPE=dsi43
+elif grep -qE '^[[:space:]]*dtoverlay=mhs35' "$BOOT_CFG" 2>/dev/null; then
+    SCREEN_TYPE=mhs35
+elif [[ -f "$CONFIG_DIR/display.conf" ]]; then
+    source "$CONFIG_DIR/display.conf" 2>/dev/null || true
+fi
+[[ -n "${SCREEN_TYPE:-}" ]] || SCREEN_TYPE=mhs35   # legacy default
+
 if (
     set -e
     USER_HOME="/home/$(whoami)"
     # На свежей системе ~/Desktop может не существовать (xdg-user-dirs-update
-    # ещё не сработал — он триггерится на первом GUI-логине). Раньше модуль
-    # выкидывал ошибку и не создавал ярлыки → пользователь после reinstall'а
-    # не получал кнопок. Создаём папку сами и идём дальше.
+    # ещё не сработал — он триггерится на первом GUI-логине). Создаём сами.
     DESKTOP_DIR="$USER_HOME/Desktop"
     if [[ ! -d "$DESKTOP_DIR" ]]; then
         mkdir -p "$DESKTOP_DIR"
-        # На случай если xdg user-dirs выключен — пишем явно
         if command -v xdg-user-dirs-update &>/dev/null; then
             xdg-user-dirs-update --set DESKTOP "$DESKTOP_DIR" 2>/dev/null || true
         fi
     fi
 
-    cat > "$DESKTOP_DIR/Travel-NAS-Dashboard.desktop" << 'EOF'
-[Desktop Entry]
-Version=1.0
-Type=Application
-Name=Dashboard
-Comment=Re-open the kiosk dashboard
-Exec=/usr/bin/python3 /usr/local/bin/travel-nas-display.py
-Icon=display
-Terminal=false
-Categories=System;
-EOF
-
+    # Update — нужен на любом экране.
     cat > "$DESKTOP_DIR/Travel-NAS-Update.desktop" << 'EOF'
 [Desktop Entry]
 Version=1.0
@@ -47,7 +45,71 @@ Terminal=false
 Categories=System;
 EOF
 
-    cat > "$DESKTOP_DIR/Travel-NAS-Calibrate.desktop" << 'EOF'
+    if [[ "$SCREEN_TYPE" == "dsi43" ]]; then
+        # На DSI дашборда/калибровки нет — чистим их ярлыки (если остались).
+        rm -f "$DESKTOP_DIR/Travel-NAS-Dashboard.desktop" \
+              "$DESKTOP_DIR/Travel-NAS-Calibrate.desktop" \
+              "$DESKTOP_DIR"/Service-*.desktop 2>/dev/null
+
+        # Ярлыки на установленные docker-сервисы. «Установлен» = выбран сейчас
+        # (DO_STACK_<NAME>) ИЛИ есть /opt/stacks/<name> (стоит с прошлого раза).
+        # LABEL/PORT — из meta.conf в репо. Открываем localhost:PORT в браузере.
+        STACKS_SRC="${SETUP_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/stacks"
+        if [[ -f "$STACKS_SRC/index.txt" ]]; then
+            while read -r sname; do
+                sname="${sname%%#*}"; sname="$(echo "$sname" | xargs)"
+                [[ -n "$sname" ]] || continue
+                flag="DO_STACK_$(echo "$sname" | tr '[:lower:]-' '[:upper:]_')"
+                [[ -n "${!flag:-}" || -d "/opt/stacks/$sname" ]] || continue
+                LABEL="$sname"; PORT=""
+                # shellcheck source=/dev/null
+                source "$STACKS_SRC/$sname/meta.conf" 2>/dev/null || true
+                [[ -n "$PORT" ]] || continue
+                disp="${LABEL%% —*}"   # короткое имя до « —»
+                cat > "$DESKTOP_DIR/Service-$sname.desktop" << EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=$disp
+Comment=$LABEL
+Exec=xdg-open http://localhost:$PORT
+Icon=web-browser
+Terminal=false
+Categories=Network;
+EOF
+            done < "$STACKS_SRC/index.txt"
+        fi
+        # Dockge — менеджер стеков (если установлен).
+        if [[ -d /opt/dockge ]]; then
+            cat > "$DESKTOP_DIR/Service-dockge.desktop" << 'EOF'
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Dockge
+Comment=Docker stacks manager
+Exec=xdg-open http://localhost:5001
+Icon=web-browser
+Terminal=false
+Categories=Network;
+EOF
+        fi
+    else
+        # MHS35: дашборд + калибровка (как было). Сервис-ярлыки убираем.
+        rm -f "$DESKTOP_DIR"/Service-*.desktop 2>/dev/null
+
+        cat > "$DESKTOP_DIR/Travel-NAS-Dashboard.desktop" << 'EOF'
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Dashboard
+Comment=Re-open the kiosk dashboard
+Exec=/usr/bin/python3 /usr/local/bin/travel-nas-display.py
+Icon=display
+Terminal=false
+Categories=System;
+EOF
+
+        cat > "$DESKTOP_DIR/Travel-NAS-Calibrate.desktop" << 'EOF'
 [Desktop Entry]
 Version=1.0
 Type=Application
@@ -59,20 +121,11 @@ Terminal=false
 Categories=System;
 EOF
 
-    chmod +x "$DESKTOP_DIR"/*.desktop
-    # Удаляем устаревшие ярлыки (если остались с прошлых установок)
-    rm -f "$DESKTOP_DIR/NAS-Backup.desktop" \
-          "$DESKTOP_DIR/View-Logs.desktop" \
-          "$DESKTOP_DIR/Travel-NAS-Logs.desktop" \
-          "$DESKTOP_DIR/Travel-NAS-Setup.desktop" \
-          "$DESKTOP_DIR/T7-Files.desktop" \
-          "$DESKTOP_DIR/Edit-Services.desktop" 2>/dev/null
-
-    # Уменьшаем размер иконок в pcmanfm-desktop (320×480 → дефолтные ~80px не лезут)
-    DCFG="$USER_HOME/.config/pcmanfm/LXDE-pi/desktop-items-0.conf"
-    mkdir -p "$(dirname "$DCFG")"
-    if [[ ! -f "$DCFG" ]]; then
-        cat > "$DCFG" << 'EOF'
+        # Уменьшаем иконки в pcmanfm-desktop (320×480 → дефолтные ~80px не лезут).
+        DCFG="$USER_HOME/.config/pcmanfm/LXDE-pi/desktop-items-0.conf"
+        mkdir -p "$(dirname "$DCFG")"
+        if [[ ! -f "$DCFG" ]]; then
+            cat > "$DCFG" << 'EOF'
 [*]
 wallpaper_mode=color
 desktop_bg=#000000
@@ -84,19 +137,32 @@ show_trash=0
 show_mounts=0
 desktop_icon_size=36
 EOF
-    elif grep -q '^desktop_icon_size=' "$DCFG"; then
-        sed -i 's/^desktop_icon_size=.*/desktop_icon_size=36/' "$DCFG"
-    else
-        echo "desktop_icon_size=36" >> "$DCFG"
+        elif grep -q '^desktop_icon_size=' "$DCFG"; then
+            sed -i 's/^desktop_icon_size=.*/desktop_icon_size=36/' "$DCFG"
+        else
+            echo "desktop_icon_size=36" >> "$DCFG"
+        fi
     fi
 
+    chmod +x "$DESKTOP_DIR"/*.desktop 2>/dev/null || true
+    # Удаляем устаревшие ярлыки (с прошлых установок).
+    rm -f "$DESKTOP_DIR/NAS-Backup.desktop" \
+          "$DESKTOP_DIR/View-Logs.desktop" \
+          "$DESKTOP_DIR/Travel-NAS-Logs.desktop" \
+          "$DESKTOP_DIR/Travel-NAS-Setup.desktop" \
+          "$DESKTOP_DIR/T7-Files.desktop" \
+          "$DESKTOP_DIR/Edit-Services.desktop" 2>/dev/null
+
     # Пинаем pcmanfm-desktop чтобы подхватил новые .desktop без релогина.
-    # Без этого ярлыки появятся только после следующего входа в LXDE.
     if pgrep -x pcmanfm >/dev/null 2>&1; then
         pcmanfm --reconfigure 2>/dev/null || true
     fi
 ); then
-    mark_ok "DESKTOP" "2 ярлыка, icon size 36"
+    if [[ "$SCREEN_TYPE" == "dsi43" ]]; then
+        mark_ok "DESKTOP" "DSI: ярлыки на docker-сервисы + Update (без дашборда/калибровки)"
+    else
+        mark_ok "DESKTOP" "MHS35: dashboard + calibrate + update, icon size 36"
+    fi
 else
     mark_fail "DESKTOP" "Desktop folder не найден (не Desktop PiOS?)"
 fi

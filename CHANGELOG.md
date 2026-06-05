@@ -2,6 +2,17 @@
 
 Significant changes to travel-nas-setup. Newest first.
 
+## 2026-06-05 — desktop: на DSI ярлыки на docker-сервисы вместо дашборда
+
+- `20-desktop.sh` теперь screen-aware. На **DSI** (где дашборда нет) больше не
+  создаёт ярлыки Dashboard и Calibrate Touch (тач ёмкостный, калибровка не нужна).
+  Вместо них — ярлыки на установленные docker-сервисы (`xdg-open http://localhost:PORT`
+  в браузере; на 800×480 удобно открывать прямо там). Источник: `stacks/index.txt`
+  + `meta.conf` (PORT/LABEL), фильтр по `DO_STACK_*` / наличию `/opt/stacks/<name>`;
+  + Dockge (:5001). Ярлык Update остаётся на любом экране.
+- На **MHS35** поведение прежнее (Dashboard + Calibrate + Update, icon size 36).
+  Мелкие иконки/чёрный фон (desktop-items-0.conf) теперь только для MHS35.
+
 ## 2026-06-05 — ytarchiver: VPN exit-pool (folder-driven WireGuard)
 
 - Поддержка нового VPN-механизма upstream: backend через docker.sock поднимает по

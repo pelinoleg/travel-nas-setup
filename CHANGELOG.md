@@ -2,6 +2,15 @@
 
 Significant changes to travel-nas-setup. Newest first.
 
+## 2026-06-05 — DESKTOP_AUTH: + passwordless reboot/poweroff в терминале
+
+- К polkit-правилу добавлен sudoers (`/etc/sudoers.d/travel-nas-poweroff`):
+  группа `sudo` запускает `reboot`/`poweroff`/`halt`/`shutdown` (+ `systemctl
+  reboot/poweroff`) в терминале без пароля. polkit покрывает только GUI; `sudo
+  reboot` в консоли раньше всё равно спрашивал пароль. Файл валидируется
+  `visudo -c` перед применением (битый sudoers не сломает sudo). Откат: удалить
+  оба файла (polkit .rules + sudoers).
+
 ## 2026-06-05 — opt-in: polkit без пароля (DESKTOP_AUTH)
 
 - Новый **opt-in** компонент `DESKTOP_AUTH` (`26-desktop-auth.sh`): кладёт

@@ -91,6 +91,7 @@ def sample_fast():
             "mem_used": round(mt - ma, 2), "mem_total": round(mt, 2),
             "throttled": thr, "throttled_now": thr not in ("", "0x0"),
             "governor": read("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor", "?"),
+            "pmode": read("/var/lib/travel-nas/power-mode-pref", "auto"),
             "freq_mhz": round(int(freq) / 1000) if freq.isdigit() else 0,
             "uptime": int(float(read("/proc/uptime").split()[0] or 0)),
             "load": read("/proc/loadavg").split()[:3], "net_rx": rrx, "net_tx": rtx}

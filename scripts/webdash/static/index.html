@@ -10,7 +10,6 @@
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<!-- icon sprite (Lucide-style, stroke=currentColor) -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
 <symbol id="i-server" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><line x1="6" y1="7" x2="6.01" y2="7"/><line x1="6" y1="17" x2="6.01" y2="17"/></symbol>
 <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></symbol>
@@ -40,60 +39,84 @@
   <div class="bar">
     <svg class="ic head"><use href="#i-server"/></svg>
     <div class="addr"><span id="host">…</span><span id="ip" class="ip"></span></div>
+    <span id="uptime" class="up"></span>
     <div class="chips" id="topchips"></div>
     <span id="clock"></span>
-    <button id="btn-power" class="bigbtn" title="Power"><svg class="ic"><use href="#i-power"/></svg></button>
-    <button id="btn-exit" class="bigbtn" title="To desktop"><svg class="ic"><use href="#i-exit"/></svg></button>
+    <button id="btn-power" class="bigbtn"><svg class="ic"><use href="#i-power"/></svg></button>
+    <button id="btn-exit" class="bigbtn"><svg class="ic"><use href="#i-exit"/></svg></button>
   </div>
   <nav id="tabs">
     <button data-tab="overview" class="active"><svg class="ic"><use href="#i-activity"/></svg>Overview</button>
     <button data-tab="system"><svg class="ic"><use href="#i-cpu"/></svg>System</button>
     <button data-tab="storage"><svg class="ic"><use href="#i-disk"/></svg>Disks</button>
     <button data-tab="docker"><svg class="ic"><use href="#i-box"/></svg>Docker</button>
-    <button data-tab="logs"><svg class="ic"><use href="#i-list"/></svg>Logs</button>
     <button data-tab="settings"><svg class="ic"><use href="#i-settings"/></svg></button>
   </nav>
 </header>
 
 <main>
-  <!-- OVERVIEW -->
   <section id="tab-overview" class="tab active">
     <div class="tiles">
-      <div class="tile" data-metric="cpu"><div class="th"><svg class="ic"><use href="#i-cpu"/></svg>CPU</div><div class="tv"><b id="cpu">–</b>%</div><canvas class="spark" data-s="cpu"></canvas></div>
-      <div class="tile" data-metric="temp"><div class="th"><svg class="ic"><use href="#i-thermo"/></svg>Temp</div><div class="tv"><b id="temp">–</b>°</div><canvas class="spark" data-s="temp"></canvas></div>
-      <div class="tile" data-metric="mem"><div class="th"><svg class="ic"><use href="#i-ram"/></svg>RAM</div><div class="tv"><b id="mem">–</b></div><canvas class="spark" data-s="mem"></canvas></div>
-      <div class="tile" data-metric="net_rx"><div class="th"><svg class="ic"><use href="#i-net"/></svg>Network</div><div class="tv2" id="net">–</div><canvas class="spark" data-s="net_rx"></canvas></div>
-      <div class="tile" data-metric="disk"><div class="th"><svg class="ic"><use href="#i-disk"/></svg>Disk</div><div class="tv"><b id="disk">–</b>%</div><canvas class="spark" data-s="disk"></canvas></div>
-      <div class="tile static"><div class="th"><svg class="ic"><use href="#i-clock"/></svg>Uptime</div><div class="tv2" id="uptime">–</div></div>
-      <div class="tile static"><div class="th"><svg class="ic"><use href="#i-zap"/></svg>Power</div><div class="tv2" id="power">–</div><div class="sub" id="power-sub"></div></div>
-      <div class="tile static" id="screen-tile"><div class="th"><svg class="ic"><use href="#i-sun"/></svg>Screen</div>
+      <div class="tile" data-open="detail" data-metric="cpu"><div class="th"><svg class="ic"><use href="#i-cpu"/></svg>CPU</div><div class="tv"><b id="cpu">–</b>%</div><canvas class="spark" data-s="cpu"></canvas></div>
+      <div class="tile" data-open="detail" data-metric="temp"><div class="th"><svg class="ic"><use href="#i-thermo"/></svg>Temp</div><div class="tv"><b id="temp">–</b>°</div><canvas class="spark" data-s="temp"></canvas></div>
+      <div class="tile" data-open="detail" data-metric="mem"><div class="th"><svg class="ic"><use href="#i-ram"/></svg>RAM</div><div class="tv"><b id="mem">–</b><small id="mem-tot"></small></div><canvas class="spark" data-s="mem"></canvas></div>
+      <div class="tile" data-open="detail" data-metric="net_rx"><div class="th"><svg class="ic"><use href="#i-net"/></svg>Network</div><div class="tv2" id="net">–</div><canvas class="spark" data-s="net_rx"></canvas></div>
+      <div class="tile" data-open="detail" data-metric="disk"><div class="th"><svg class="ic"><use href="#i-disk"/></svg>Disk</div><div class="tv"><b id="disk">–</b>%</div><canvas class="spark" data-s="disk"></canvas></div>
+      <div class="tile" data-open="docker-tab"><div class="th"><svg class="ic"><use href="#i-box"/></svg>Docker</div><div class="tv2" id="dk">–</div><div class="sub">projects up</div></div>
+      <div class="tile" data-open="page-power"><div class="th"><svg class="ic"><use href="#i-zap"/></svg>Power</div><div class="tv2" id="power">–</div><div class="sub" id="power-sub"></div></div>
+      <div class="tile" data-open="page-screen" id="screen-tile"><div class="th"><svg class="ic"><use href="#i-sun"/></svg>Screen</div>
         <div class="ring"><svg viewBox="0 0 40 40"><circle class="rbg" cx="20" cy="20" r="16"/><circle class="rfg" id="ring" cx="20" cy="20" r="16"/></svg><span id="screen-cd">∞</span></div></div>
     </div>
     <div class="backups" id="backups"></div>
   </section>
 
-  <!-- SYSTEM -->
   <section id="tab-system" class="tab">
     <div class="cols">
       <div><div class="h">Top processes</div><table id="proc"></table></div>
-      <div><div class="h">Graphs (1h)</div>
-        <div class="minigraphs">
-          <div><span class="gl">CPU %</span><div id="g-cpu" class="mg"></div></div>
-          <div><span class="gl">Temp °C</span><div id="g-temp" class="mg"></div></div>
-          <div><span class="gl">RAM GB</span><div id="g-mem" class="mg"></div></div>
-        </div></div>
+      <div><div class="h">Graphs (1h)</div><div class="minigraphs">
+        <div><span class="gl">CPU %</span><div id="g-cpu" class="mg"></div></div>
+        <div><span class="gl">Temp °C</span><div id="g-temp" class="mg"></div></div>
+        <div><span class="gl">RAM GB</span><div id="g-mem" class="mg"></div></div></div></div>
     </div>
   </section>
 
   <section id="tab-storage" class="tab"><div id="disks" class="diskgrid"></div></section>
   <section id="tab-docker" class="tab"><div id="projects" class="projgrid"></div></section>
-  <section id="tab-logs" class="tab"><div class="logbar"><button id="logs-refresh"><svg class="ic"><use href="#i-restart"/></svg>Refresh</button></div><pre id="logs-body">…</pre></section>
 
-  <!-- SETTINGS -->
   <section id="tab-settings" class="tab">
+    <div class="setrow"><label><svg class="ic"><use href="#i-cloud"/></svg>Maintenance</label>
+      <button id="act-update">Update scripts</button></div>
+    <div class="setrow"><label><svg class="ic"><use href="#i-list"/></svg>Logs</label>
+      <button data-open="page-logs">Open logs</button></div>
+    <div class="note">Screen &amp; power settings moved to their tiles on Overview.</div>
+  </section>
+</main>
+
+<!-- pages (overlays) -->
+<div id="detail" class="page hidden">
+  <div class="phead"><button class="bigbtn back"><svg class="ic"><use href="#i-back"/></svg></button>
+    <span id="detail-title"></span>
+    <span class="ranges" id="detail-ranges"><button data-range="5m">5m</button>
+      <button data-range="1h" class="active">1h</button><button data-range="24h">24h</button><button data-range="7d">7d</button></span></div>
+  <div class="pbody two"><div id="dchart" class="chartbox"></div><div id="detail-info" class="sideinfo"></div></div>
+</div>
+
+<div id="page-power" class="page hidden">
+  <div class="phead"><button class="bigbtn back"><svg class="ic"><use href="#i-back"/></svg></button><span>Power</span></div>
+  <div class="pbody">
+    <div class="seg big" id="powermode"><button data-mode="auto">Auto</button><button data-mode="normal">Normal</button><button data-mode="saver">Saver</button></div>
+    <div class="modedesc" id="mode-desc"></div>
+    <div class="sideinfo" id="power-info"></div>
+    <button id="act-boost" class="wide"><svg class="ic"><use href="#i-zap"/></svg>CPU Boost (5 min)</button>
+  </div>
+</div>
+
+<div id="page-screen" class="page hidden">
+  <div class="phead"><button class="bigbtn back"><svg class="ic"><use href="#i-back"/></svg></button><span>Screen</span></div>
+  <div class="pbody">
     <div class="setrow"><label><svg class="ic"><use href="#i-sun"/></svg>Brightness</label>
       <input type="range" id="brightness" min="5" max="100" value="80"><span id="brightness-val">80%</span></div>
-    <div class="setrow"><label><svg class="ic"><use href="#i-power"/></svg>Screen off after</label>
+    <div class="setrow"><label><svg class="ic"><use href="#i-power"/></svg>Turn off after</label>
       <select id="screen-timeout"><option value="0">never</option><option value="60">1 min</option>
         <option value="300">5 min</option><option value="600">10 min</option><option value="1800">30 min</option></select></div>
     <div class="setrow"><label><svg class="ic"><use href="#i-moon"/></svg>Night dim</label>
@@ -102,23 +125,19 @@
     <div class="setrow"><label><svg class="ic"><use href="#i-restart"/></svg>Rotate (reboot)</label>
       <select id="rotate"><option value="">—</option><option>0</option><option>90</option><option>180</option><option>270</option></select>
       <button id="rotate-apply">Apply</button></div>
-    <div class="setrow"><label><svg class="ic"><use href="#i-zap"/></svg>Power profile</label>
-      <span class="seg" id="powermode"><button data-mode="auto">Auto</button><button data-mode="normal">Normal</button><button data-mode="saver">Saver</button></span></div>
-    <div class="setrow"><label><svg class="ic"><use href="#i-cloud"/></svg>Maintenance</label>
-      <button id="act-update">Update scripts</button><button id="act-boost">CPU boost 5m</button></div>
-    <div class="note">No auto-brightness (panel has no light sensor) — night schedule above is used instead.</div>
-  </section>
-</main>
+    <div class="note">No light sensor → no auto-brightness; night schedule above is used.</div>
+  </div>
+</div>
 
-<!-- detail overlay (graph on card tap) -->
-<div id="detail" class="detail hidden">
-  <div class="dhead"><button id="detail-back" class="bigbtn"><svg class="ic"><use href="#i-back"/></svg></button>
-    <span id="detail-title"></span>
-    <span class="ranges" id="detail-ranges">
-      <button data-range="5m">5m</button><button data-range="1h" class="active">1h</button>
-      <button data-range="24h">24h</button><button data-range="7d">7d</button></span></div>
-  <div id="dchart"></div>
-  <div class="dstats" id="detail-stats"></div>
+<div id="page-backup" class="page hidden">
+  <div class="phead"><button class="bigbtn back"><svg class="ic"><use href="#i-back"/></svg></button><span>Backups</span></div>
+  <div class="pbody" id="backup-body"></div>
+</div>
+
+<div id="page-logs" class="page hidden">
+  <div class="phead"><button class="bigbtn back"><svg class="ic"><use href="#i-back"/></svg></button><span>Logs</span>
+    <button id="logs-refresh" class="rbtn"><svg class="ic"><use href="#i-restart"/></svg></button></div>
+  <pre id="logs-body">…</pre>
 </div>
 
 <div id="modal" class="modal hidden"><div class="modalbox">

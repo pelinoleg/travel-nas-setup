@@ -132,7 +132,9 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   const dbar=$('#disk-bar');if(dbar){dbar.style.width=(st.pct||0)+'%';
     dbar.className=st.pct>=95?'crit':st.pct>=88?'high':st.pct>=75?'warn':'';}
   $('#disk-sub').textContent=st.size?`${(st.used/1e12).toFixed(2)} / ${(st.size/1e12).toFixed(2)} TB`:'';
-  $('#disk-temp').textContent=st.disk_temp!=null?st.disk_temp+'°':'';
+  const dtemp=$('#disk-temp'),dt=st.disk_temp;
+  if(dt!=null){dtemp.textContent=dt+'°';dtemp.className='dtemp '+(dt>=58?'crit':dt>=52?'high':dt>=45?'warn':'');}
+  else dtemp.textContent='';
   // power tile color by mode
   const pt=$('#power-tile');if(pt){pt.className='tile';pt.classList.add('pm-'+(s.pmode||'auto'));}
   // wifi tile

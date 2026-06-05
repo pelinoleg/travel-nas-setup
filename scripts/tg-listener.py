@@ -1009,17 +1009,22 @@ def cmd_screenshot(token, chat_id, args):
     png = SCREENSHOT_PNG
     got = False
     # 1) pygame-дашборд (MHS35): file-IPC — touch req, ждём обновления PNG.
-    if SCREENSHOT_REQ.parent.exists():
-        old_mtime = SCREENSHOT_PNG.stat().st_mtime if SCREENSHOT_PNG.exists() else 0
-        SCREENSHOT_REQ.touch()
-        deadline = time.time() + 2.5
-        while time.time() < deadline:
-            if SCREENSHOT_PNG.exists() and SCREENSHOT_PNG.stat().st_mtime > old_mtime:
-                got = True; break
-            time.sleep(0.2)
-        if not got:
-            try: SCREENSHOT_REQ.unlink()
-            except Exception: pass
+    #    Best-effort: stale root-owned флаг может дать PermissionError — тогда
+    #    просто падаем в grim (DSI всё равно отвечает им).
+    try:
+        if SCREENSHOT_REQ.parent.exists():
+            old_mtime = SCREENSHOT_PNG.stat().st_mtime if SCREENSHOT_PNG.exists() else 0
+            SCREENSHOT_REQ.touch()
+            deadline = time.time() + 2.5
+            while time.time() < deadline:
+                if SCREENSHOT_PNG.exists() and SCREENSHOT_PNG.stat().st_mtime > old_mtime:
+                    got = True; break
+                time.sleep(0.2)
+            if not got:
+                try: SCREENSHOT_REQ.unlink()
+                except Exception: pass
+    except Exception:
+        got = False
     # 2) Wayland-дашборд (DSI): нет pygame → снимаем экран через grim.
     if not got:
         png = Path("/tmp/tg-screenshot.png")

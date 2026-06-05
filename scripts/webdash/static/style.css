@@ -38,14 +38,15 @@ main{position:relative;height:392px}
 .tab.active{display:block}
 
 .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-.tile{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:7px 9px;min-height:96px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:7px 9px;min-height:96px;position:relative}
 .tile[data-open]:active{border-color:var(--acc)}
 .th{display:flex;align-items:center;gap:6px;color:var(--mut);font-size:12px}
 .th .ic{width:15px;height:15px}
 .tv{font-size:30px;font-weight:700;line-height:1.1;margin-top:2px}
 .tv small{font-size:13px;color:var(--mut);font-weight:400}
-.u2{font-weight:300;opacity:.45;font-size:.58em;margin-left:2px}
-.dtemp{font-size:19px;font-weight:600;margin-left:10px;opacity:.85}
+.u2{font-weight:400;opacity:.6;font-size:.68em;margin-left:2px}
+.dtemp{position:absolute;top:6px;right:9px;font-size:18px;font-weight:700;color:var(--ok)}
+.dtemp.warn{color:var(--warn)}.dtemp.high{color:var(--high)}.dtemp.crit{color:var(--crit)}
 .tv2{font-size:18px;font-weight:600;margin-top:6px;text-transform:capitalize}
 .tile .sub{color:var(--mut);font-size:11px}
 .spark{display:block;width:100%;height:30px;margin-top:4px}

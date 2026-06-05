@@ -36,11 +36,17 @@ if [[ "$EUID" -eq 0 ]]; then
     exit 1
 fi
 
-if ! grep -q "Raspberry Pi 5" /proc/cpuinfo 2>/dev/null; then
-    _warn "Не похоже на Raspberry Pi 5. Продолжить? (y/N)"
-    read -r ans
-    [[ "$ans" != "y" && "$ans" != "Y" ]] && exit 0
-fi
+PI_MODEL=$(tr -d '\0' < /proc/device-tree/model 2>/dev/null || echo "")
+case "$PI_MODEL" in
+    *"Pi 5"*|*"Pi 4"*)
+        _info "Обнаружен: $PI_MODEL"   # оба поддерживаются (Pi 4 ~2× дольше от powerbank)
+        ;;
+    *)
+        _warn "Не Raspberry Pi 4/5${PI_MODEL:+ (определено: $PI_MODEL)} — скрипт тестировался на них. Продолжить? (y/N)"
+        read -r ans
+        [[ "$ans" != "y" && "$ans" != "Y" ]] && exit 0
+        ;;
+esac
 
 # whiptail нужен для меню (если ещё нет — ставим)
 if ! command -v whiptail &>/dev/null; then

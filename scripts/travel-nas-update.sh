@@ -100,6 +100,10 @@ declare -A SCRIPTS=(
     [screen-rotate.sh]=/usr/local/bin/screen-rotate.sh
     [dsi-backlight.sh]=/usr/local/bin/dsi-backlight.sh
     [dsi-rotate.sh]=/usr/local/bin/dsi-rotate.sh
+    [webdash/server.py]=/opt/travel-nas-dashboard/server.py
+    [webdash/static/index.html]=/opt/travel-nas-dashboard/static/index.html
+    [webdash/static/app.js]=/opt/travel-nas-dashboard/static/app.js
+    [webdash/static/style.css]=/opt/travel-nas-dashboard/static/style.css
     [cpu-boost.sh]=/usr/local/bin/cpu-boost.sh
     [fix-conf-perms.sh]=/usr/local/bin/fix-conf-perms.sh
     [fast-shutdown.sh]=/usr/local/bin/fast-shutdown.sh
@@ -136,7 +140,7 @@ echo "Fetched: $OK ok, $FAIL failed"
 RESTARTED=()
 echo ""
 echo "→ Restarting active services..."
-for svc in tg-listener.service; do
+for svc in tg-listener.service travel-nas-webdash.service; do
     if systemctl is-active --quiet "$svc"; then
         if systemctl restart "$svc"; then
             RESTARTED+=("$svc")

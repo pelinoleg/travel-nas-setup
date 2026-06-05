@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=800, initial-scale=1, user-scalable=no">
+<title>Travel-NAS</title>
+<link rel="stylesheet" href="/static/uplot.min.css">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <div class="brand">Travel-NAS <span id="clock"></span></div>
+  <nav id="tabs">
+    <button data-tab="overview" class="active">Overview</button>
+    <button data-tab="storage">Storage</button>
+    <button data-tab="docker">Docker</button>
+    <button data-tab="logs">Logs</button>
+    <button data-tab="settings">⚙</button>
+  </nav>
+  <div class="topbtns">
+    <span id="net-dot" class="dot" title="сеть"></span>
+    <button id="btn-power" title="Питание">⏻</button>
+    <button id="btn-exit" title="Выход на десктоп">⤓</button>
+  </div>
+</header>
+
+<main>
+  <!-- OVERVIEW -->
+  <section id="tab-overview" class="tab active">
+    <div class="cards">
+      <div class="card" data-metric="cpu"><div class="k">CPU</div><div class="v"><span id="cpu">–</span>%</div><div class="sub" id="cpu-sub"></div></div>
+      <div class="card" data-metric="temp"><div class="k">TEMP</div><div class="v"><span id="temp">–</span>°</div><div class="sub" id="temp-sub"></div></div>
+      <div class="card" data-metric="disk"><div class="k">DISK</div><div class="v"><span id="disk">–</span>%</div><div class="sub" id="disk-sub"></div></div>
+      <div class="card" data-metric="mem"><div class="k">RAM</div><div class="v"><span id="mem">–</span></div><div class="sub" id="mem-sub">GB</div></div>
+    </div>
+    <div class="graphpanel">
+      <div class="graphhead">
+        <span id="graph-title">Температура · CPU</span>
+        <span class="ranges">
+          <button data-range="1h">1ч</button>
+          <button data-range="24h" class="active">24ч</button>
+          <button data-range="7d">7д</button>
+        </span>
+      </div>
+      <div id="chart"></div>
+    </div>
+    <div class="strip">
+      <div id="svc-dots" class="svc-dots"></div>
+      <div id="backup-line"></div>
+      <div class="actions" id="quick-actions"></div>
+    </div>
+  </section>
+
+  <!-- STORAGE -->
+  <section id="tab-storage" class="tab"><div id="storage-body" class="kv"></div></section>
+  <!-- DOCKER -->
+  <section id="tab-docker" class="tab"><div id="docker-body" class="svc-grid"></div></section>
+  <!-- LOGS -->
+  <section id="tab-logs" class="tab"><pre id="logs-body">—</pre></section>
+
+  <!-- SETTINGS -->
+  <section id="tab-settings" class="tab">
+    <div class="setrow"><label>Яркость экрана</label>
+      <input type="range" id="brightness" min="10" max="255" value="200">
+      <span id="brightness-val"></span></div>
+    <div class="setrow"><label>Гасить экран через</label>
+      <select id="screen-timeout">
+        <option value="0">никогда</option><option value="60">1 мин</option>
+        <option value="300">5 мин</option><option value="600">10 мин</option>
+        <option value="1800">30 мин</option></select></div>
+    <div class="setrow"><label>Ночное затемнение</label>
+      <input type="time" id="night-from" value="23:00"> – <input type="time" id="night-to" value="07:00">
+      <span>до</span> <input type="number" id="night-level" min="5" max="100" value="20">%</div>
+    <div class="setrow"><label>Поворот экрана (reboot)</label>
+      <select id="rotate"><option value="">—</option><option>0</option><option>90</option>
+        <option>180</option><option>270</option></select>
+      <button id="rotate-apply">Применить</button></div>
+    <div class="setrow"><label>Power-профиль</label>
+      <span class="seg" id="powermode">
+        <button data-mode="auto">Auto</button><button data-mode="normal">Normal</button>
+        <button data-mode="saver">Saver</button></span></div>
+    <div class="setrow"><button id="act-update">Обновить (update)</button>
+      <button id="act-boost">CPU Boost</button></div>
+    <div class="note">Авто-яркости нет (на панели нет датчика света) — используется ночное расписание.</div>
+  </section>
+</main>
+
+<!-- модалка питания -->
+<div id="modal" class="modal hidden"><div class="modalbox">
+  <h3 id="modal-title">Питание</h3>
+  <div id="modal-body" class="modalbtns"></div>
+  <button id="modal-cancel" class="cancel">Отмена</button>
+</div></div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="/static/uplot.min.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

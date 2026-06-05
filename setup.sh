@@ -89,6 +89,7 @@ MODULES=(
     24-pi-tweaks
     25-conf-perms
     26-desktop-auth
+    27-webdash
 )
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
@@ -206,6 +207,7 @@ ${STACK_HELP}  DISPLAY        Python dashboard (X11 kiosk) + выбор экра
   PI_TWEAKS      HW watchdog + EEPROM auto-update + WiFi powersave OFF + sysctl
   CONF_PERMS     Авто-восстановление owner/mode у /etc/travel-nas/*.conf (path-unit)
   DESKTOP_AUTH   Polkit без пароля для группы sudo (opt-in, не входит в --all)
+  WEBDASH        Веб-дашборд для DSI (Flask+SSE+uPlot, Chromium kiosk :8090, opt-in)
 EOF
     exit 0
 else
@@ -239,6 +241,7 @@ else
         "PI_TWEAKS"    "HW watchdog + EEPROM + WiFi-no-powersave + sysctl" ON
         "CONF_PERMS"   "Авто-fix прав /etc/travel-nas/ при правке через веб" ON
         "DESKTOP_AUTH" "Polkit без пароля для твоего юзера (меньше запросов)" OFF
+        "WEBDASH"      "Веб-дашборд для DSI-экрана (Flask + Chromium kiosk)"  OFF
     )
     # Размеры под терминал. Ширина 80 была мала — длинные теги STACK_* + описания
     # делали внутренний список шире рамки → он вылезал за диалог (визуальный баг).

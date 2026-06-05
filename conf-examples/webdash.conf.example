@@ -1,0 +1,7 @@
+# /etc/travel-nas/webdash.conf — настройки веб-дашборда (DSI).
+# Применяется при рестарте travel-nas-webdash.service.
+PORT=8090
+STREAM_SEC=2
+SAMPLE_SEC=30
+HISTORY_DB=/mnt/storage/.travel-nas/metrics.db
+STORAGE_MOUNT=/mnt/storage

@@ -145,6 +145,30 @@ EOF
     fi
 
     chmod +x "$DESKTOP_DIR"/*.desktop 2>/dev/null || true
+
+    # PCManFM на свежих PiOS не доверяет .desktop по одному +x: показывает ИМЯ
+    # ФАЙЛА (Service-…) без иконки и спрашивает подтверждение при клике. Чиним:
+    #  - gio metadata::trusted → файл-менеджер рисует Name/Icon и не ругается;
+    #  - quick_exec=1 в libfm.conf → запуск ярлыка без диалога «это исполняемый».
+    if command -v gio >/dev/null 2>&1; then
+        for f in "$DESKTOP_DIR"/*.desktop; do
+            [[ -e "$f" ]] && gio set "$f" metadata::trusted true 2>/dev/null || true
+        done
+    fi
+    LIBFM="$USER_HOME/.config/libfm/libfm.conf"
+    mkdir -p "$(dirname "$LIBFM")"
+    if [[ ! -f "$LIBFM" ]]; then
+        printf '[config]\nquick_exec=1\n' > "$LIBFM"
+    elif ! grep -q '^quick_exec=1' "$LIBFM"; then
+        if grep -q '^quick_exec=' "$LIBFM"; then
+            sed -i 's/^quick_exec=.*/quick_exec=1/' "$LIBFM"
+        elif grep -q '^\[config\]' "$LIBFM"; then
+            sed -i '/^\[config\]/a quick_exec=1' "$LIBFM"
+        else
+            printf '\n[config]\nquick_exec=1\n' >> "$LIBFM"
+        fi
+    fi
+
     # Удаляем устаревшие ярлыки (с прошлых установок).
     rm -f "$DESKTOP_DIR/NAS-Backup.desktop" \
           "$DESKTOP_DIR/View-Logs.desktop" \

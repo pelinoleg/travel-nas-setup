@@ -33,7 +33,6 @@ function openPage(id){$$('.page').forEach(p=>p.classList.add('hidden'));$('#'+id
 
 /* Configs page (имена/размер, без содержимого — там секреты) */
 async function renderConfigs(){try{const r=await(await fetch('/api/configs')).json();
-  $('#cfg-v').textContent=r.length;
   $('#configs-body').innerHTML='<div class="svc-list">'+r.map(c=>`<div class="svc-item"><span>${c.name}${c.desc?' — <span style="color:var(--mut)">'+c.desc+'</span>':''}</span><span class="u">${(c.size/1024).toFixed(1)} KB</span></div>`).join('')+'</div><div class="note">Edit configs via Filebrowser / SSH (not shown here — they contain secrets).</div>';
   }catch(e){$('#configs-body').innerHTML='error';}}
 
@@ -316,4 +315,3 @@ function dragScroll(el){let down=false,sy=0,stp=0,moved=false;
 
 connect();setBrightness(br.value);
 fetch('/api/services').then(r=>r.json()).then(s=>{$('#svc-v').textContent=s.length;}).catch(()=>{});
-fetch('/api/configs').then(r=>r.json()).then(c=>{$('#cfg-v').textContent=c.length;}).catch(()=>{});

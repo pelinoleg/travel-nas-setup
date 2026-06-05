@@ -297,5 +297,15 @@ function applyNight(){const f=$('#night-from').value,t=$('#night-to').value;if(!
   const inWin=f<t?(cur>=f&&cur<t):(cur>=f||cur<t),target=inWin?+$('#night-level').value:+br.value;
   if(!screenOff&&target!==nightApplied){nightApplied=target;api('/api/action/screen',{brightness:target+'%'});}}
 
+/* drag-to-scroll пальцем/мышью (нативный тач-скролл в kiosk ненадёжен) */
+function dragScroll(el){let down=false,sy=0,stp=0,moved=false;
+  el.addEventListener('pointerdown',e=>{down=true;sy=e.clientY;stp=el.scrollTop;moved=false;});
+  el.addEventListener('pointermove',e=>{if(!down)return;const dy=e.clientY-sy;
+    if(Math.abs(dy)>6)moved=true;if(moved)el.scrollTop=stp-dy;});
+  const end=()=>down=false;
+  ['pointerup','pointercancel','pointerleave'].forEach(ev=>el.addEventListener(ev,end));
+  el.addEventListener('click',e=>{if(moved){e.stopPropagation();e.preventDefault();}},true);}
+['.tab','.pbody','#logs-body','#update-body','.sideinfo'].forEach(sel=>$$(sel).forEach(dragScroll));
+
 connect();setBrightness(br.value);
 fetch('/api/services').then(r=>r.json()).then(s=>{$('#svc-v').textContent=s.length;}).catch(()=>{});

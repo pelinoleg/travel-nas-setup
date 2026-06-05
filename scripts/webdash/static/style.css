@@ -157,3 +157,6 @@ select,input[type=number],input[type=time]{background:var(--panel2);border:1px s
 /* detail chart fills page height */
 #dchart{height:100%}
 .pbody.two{height:100%}
+
+/* JS drag-scroll владеет жестом (нативный тач в kiosk-Chromium ненадёжен) */
+.tab,.pbody,#logs-body,#update-body,.sideinfo{touch-action:none}

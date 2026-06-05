@@ -63,7 +63,7 @@
       <div class="tile" data-open="detail" data-metric="temp"><div class="th"><svg class="ic"><use href="#i-thermo"/></svg>Temp</div><div class="tv"><b id="temp">–</b><span class="u2">°C</span></div><canvas class="spark" data-s="temp"></canvas></div>
       <div class="tile" data-open="detail" data-metric="mem"><div class="th"><svg class="ic"><use href="#i-ram"/></svg>RAM</div><div class="tv"><b id="mem">–</b><span class="u2" id="mem-tot"></span></div><canvas class="spark" data-s="mem"></canvas></div>
       <div class="tile" data-open="detail" data-metric="net_rx"><div class="th"><svg class="ic"><use href="#i-net"/></svg>Traffic</div><div class="tv2" id="net">–</div><canvas class="spark" data-s="net_rx"></canvas></div>
-      <div class="tile" data-open="page-disk"><span id="disk-temp" class="dtemp"></span><div class="th"><svg class="ic"><use href="#i-disk"/></svg>Disk</div><div class="tv"><b id="disk">–</b><span class="u2">%</span></div><div class="bar-fill sm"><i id="disk-bar"></i></div><div class="sub" id="disk-sub"></div></div>
+      <div class="tile" data-open="page-disk"><span id="disk-temp" class="dtemp"></span><div class="th"><svg class="ic"><use href="#i-disk"/></svg>Disk</div><div class="tv"><b id="disk">–</b><span class="u2">%</span></div><div class="bar-fill sm"><i id="disk-bar"></i></div><div class="sub" id="disk-sub"></div><canvas class="spark" data-s="dtemp"></canvas></div>
       <div class="tile" id="power-tile" data-open="page-power"><div class="th"><svg class="ic"><use href="#i-zap"/></svg>Power</div><div class="pmode-lbl" id="power">–</div><div class="tv"><b id="freq">–</b><span class="u2">MHz</span></div><div class="sub" id="power-sub"></div></div>
       <div class="tile" data-open="page-screen" id="screen-tile"><div class="th"><svg class="ic"><use href="#i-sun"/></svg>Screen</div>
         <div class="ring"><svg viewBox="0 0 40 40"><circle class="rbg" cx="20" cy="20" r="16"/><circle class="rfg" id="ring" cx="20" cy="20" r="16"/></svg><span id="screen-cd">∞</span></div>
@@ -164,12 +164,11 @@
 </div>
 
 <div id="page-network" class="page hidden">
-  <div class="phead"><button class="bigbtn back"><svg class="ic"><use href="#i-back"/></svg></button><span>Network</span></div>
+  <div class="phead"><button class="bigbtn back"><svg class="ic"><use href="#i-back"/></svg></button><span>Network</span>
+    <span class="pacts"><button id="ts-toggle" class="rbtn" title="Tailscale">TS</button>
+      <button id="wifi-reconnect" class="rbtn" title="Reconnect WiFi"><svg class="ic"><use href="#i-restart"/></svg></button>
+      <button id="force-ap" class="rbtn" title="Force hotspot"><svg class="ic"><use href="#i-net"/></svg></button></span></div>
   <div class="pbody"><div class="sideinfo" id="net-info"></div>
-    <div style="display:flex;gap:8px;margin-top:8px">
-      <button id="ts-toggle" class="wide" style="margin:0">Tailscale</button>
-      <button id="wifi-reconnect" class="wide" style="margin:0"><svg class="ic"><use href="#i-restart"/></svg>Reconnect</button>
-      <button id="force-ap" class="wide" style="margin:0">Force AP</button></div>
     <div class="h" style="margin-top:10px">WiFi networks <button id="wifi-scan" class="rbtn" style="float:right"><svg class="ic"><use href="#i-restart"/></svg></button></div>
     <div id="wifi-list" class="svc-list"></div>
     <div class="h" style="margin-top:10px">Tailscale devices</div>
@@ -192,14 +191,13 @@
 </div>
 
 <div id="page-nas" class="page hidden">
-  <div class="phead"><button class="bigbtn back"><svg class="ic"><use href="#i-back"/></svg></button><span>NAS backup (home NAS → here)</span></div>
+  <div class="phead"><button class="bigbtn back"><svg class="ic"><use href="#i-back"/></svg></button><span>NAS backup (home NAS → here)</span><span class="pacts" id="nas-acts"></span></div>
   <div class="pbody" id="nas-body"></div>
 </div>
 
 <div id="page-yt" class="page hidden">
-  <div class="phead"><button class="bigbtn back"><svg class="ic"><use href="#i-back"/></svg></button><span>YT-Archiver</span></div>
+  <div class="phead"><button class="bigbtn back"><svg class="ic"><use href="#i-back"/></svg></button><span>YT-Archiver</span><span class="pacts"><button id="yt-toggle" class="rbtn"></button></span></div>
   <div class="pbody"><div id="yt-pills" class="pills"></div><div class="sideinfo" id="yt-info"></div>
-    <button id="yt-toggle" class="wide"></button>
     <div class="h" style="margin-top:12px">Recent</div><div id="yt-recent" class="svc-list"></div></div>
 </div>
 

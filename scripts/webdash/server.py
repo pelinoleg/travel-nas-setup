@@ -74,7 +74,7 @@ def net_rate():
             dt = now - _prev_net[2]
             if dt > 0: rrx, rtx = (rx - _prev_net[0]) / dt, (tx - _prev_net[1]) / dt
         _prev_net = (rx, tx, now)
-        return round(rrx / 1e6, 2), round(rtx / 1e6, 2)
+        return round(rrx / 1e3, 1), round(rtx / 1e3, 1)   # KB/s (фронт авто KB↔MB)
     except Exception: return 0, 0
 def sample_fast():
     t = read("/sys/class/thermal/thermal_zone0/temp")
@@ -228,6 +228,7 @@ def sample_services():
         pass
     return {"projects": projects, "photo": photo, "yt": yt,
             "nas_backup": read_json("/var/lib/travel-nas/nas-backup-status.json", {}),
+            "nas_sched": sh(["/usr/local/bin/nas-schedule.sh", "status"]) or "off",
             "progress": prog,
             "thermal": read_json("/var/lib/travel-nas/thermal-guard.state.json", {})}
 
@@ -270,7 +271,9 @@ ACTIONS = {
     "reboot": ["sudo", "-n", "/usr/sbin/reboot"],
     "poweroff": ["sudo", "-n", "/usr/sbin/poweroff"],
     "update": ["sudo", "-n", "/usr/local/bin/travel-nas-update"],
-    "nas-backup": ["sudo", "-n", "/usr/local/bin/nas-backup.sh"],
+    "nas-backup": ["sudo", "-n", "/usr/local/bin/nas-backup.sh", "--run"],
+    "nas-dry": ["sudo", "-n", "/usr/local/bin/nas-backup.sh", "--dry-run"],
+    "nas-diff": ["sudo", "-n", "/usr/local/bin/nas-backup.sh", "--diff"],
     "nas-stop": ["sudo", "-n", "/usr/bin/systemctl", "stop", "nas-backup-runtime"],
     "cpu-boost": ["sudo", "-n", "/usr/local/bin/cpu-boost.sh", "on"],
     "force-ap": ["sudo", "-n", "/usr/sbin/comitup-cli", "d"],
@@ -659,7 +662,7 @@ def api_action(name):
     else:
         cmd = ACTIONS.get(name)
     if not cmd: return jsonify({"error": "unknown"}), 400
-    detach = name in ("reboot", "poweroff", "update", "nas-backup", "restart-dash", "restart-tg", "force-ap")
+    detach = name in ("reboot", "poweroff", "update", "nas-backup", "nas-dry", "nas-diff", "restart-dash", "restart-tg", "force-ap")
     try:
         if detach:
             subprocess.Popen(cmd); return jsonify({"ok": True, "detached": True})

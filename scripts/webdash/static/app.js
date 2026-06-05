@@ -10,8 +10,10 @@ const ic=n=>`<svg class="ic"><use href="#${n}"/></svg>`;
 const MET={cpu:{label:'CPU %',col:'#3b82f6',max:100,th:[70,85,95]},
   temp:{label:'Temperature °C',col:'#f85149',max:100,th:[60,72,82]},
   mem:{label:'RAM GB',col:'#a371f7',max:null,th:null},
-  net_rx:{label:'Download MB/s',col:'#3fb950',max:null,th:null},
-  disk:{label:'Disk %',col:'#22d3ee',max:100,th:[75,88,95]}};
+  net_rx:{label:'Download',col:'#3fb950',max:null,th:null},
+  disk:{label:'Disk %',col:'#22d3ee',max:100,th:[75,88,95]},
+  dtemp:{label:'Disk temp °C',col:'#fb923c',max:70,th:[45,52,58]}};
+const fmtNet=k=>{k=k||0;return k>=1000?(k/1000).toFixed(1)+' MB/s':Math.round(k)+' KB/s';};
 let memTotal=8, last={}, activeTab='overview';
 const lvl=(m,v)=>{const t=MET[m]&&MET[m].th;if(!t||v==null)return'';return v>=t[2]?'lv-crit':v>=t[1]?'lv-high':v>=t[0]?'lv-warn':'';};
 const colorVal=(id,m,v)=>{const e=$('#'+id);if(!e)return;e.classList.remove('lv-warn','lv-high','lv-crit');const c=lvl(m,v);if(c)e.classList.add(c);};
@@ -34,7 +36,7 @@ $$('[data-open]').forEach(el=>el.onclick=()=>{const o=el.dataset.open;
   if(o==='detail')openDetail(el.dataset.metric);else openPage(o);});
 
 /* sparklines */
-const TBUF=[],SPARK={cpu:[],temp:[],mem:[],net_rx:[],disk:[]};
+const TBUF=[],SPARK={cpu:[],temp:[],mem:[],net_rx:[],disk:[],dtemp:[]};
 const sparkMax=(m,arr)=>MET[m].max||(m==='mem'?memTotal:Math.max(1,...arr,0.1));
 const sparkWin=m=>+(localStorage['spark_'+m]||300);  /* сек, настраивается в Settings */
 function winStart(m){const w=sparkWin(m),now=TBUF.length?TBUF[TBUF.length-1]:0;let i=0;while(i<TBUF.length&&TBUF[i]<now-w)i++;return i;}
@@ -61,7 +63,7 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   $('#cpu').textContent=s.cpu!=null?Math.round(s.cpu):'–';colorVal('cpu','cpu',s.cpu);
   $('#temp').textContent=s.temp!=null?Math.round(s.temp):'–';colorVal('temp','temp',s.temp);
   $('#mem').textContent=s.mem_total?(+s.mem_used).toFixed(1):'–';$('#mem-tot').textContent=s.mem_total?'/'+Math.round(s.mem_total):'';colorVal('mem','disk',memPct);
-  {const ne=$('#net');ne.textContent=`↑${s.net_tx??0}  ↓${s.net_rx??0}`;ne.classList.toggle('dim',(s.net_rx||0)===0&&(s.net_tx||0)===0);}
+  {const ne=$('#net');ne.innerHTML=`↑ ${fmtNet(s.net_tx)}<br>↓ ${fmtNet(s.net_rx)}`;ne.classList.toggle('dim',(s.net_rx||0)===0&&(s.net_tx||0)===0);}
   $('#disk').textContent=st.pct??'–';colorVal('disk','disk',st.pct);
   const dbar=$('#disk-bar');if(dbar){dbar.style.width=(st.pct||0)+'%';dbar.className=st.pct>=95?'crit':st.pct>=88?'high':st.pct>=75?'warn':'';}
   $('#disk-sub').textContent=st.size?`${(st.used/1e12).toFixed(2)} / ${(st.size/1e12).toFixed(2)} TB`:'';
@@ -87,7 +89,7 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   renderBackupTiles(sv);
   // buffers + sparks
   TBUF.push(Date.now()/1000|0);
-  [['cpu',s.cpu],['temp',s.temp],['mem',s.mem_used],['net_rx',s.net_rx],['disk',st.pct]].forEach(([k,v])=>SPARK[k].push(v==null?0:v));
+  [['cpu',s.cpu],['temp',s.temp],['mem',s.mem_used],['net_rx',s.net_rx],['disk',st.pct],['dtemp',st.disk_temp]].forEach(([k,v])=>SPARK[k].push(v==null?0:v));
   if(TBUF.length>460){TBUF.shift();for(const k in SPARK)SPARK[k].shift();}
   updateSparks();
   if(!$('#detail').classList.contains('hidden'))liveDetail();
@@ -139,13 +141,13 @@ function setDetail(t,v){if(dchart)dchart.setData([t,v]);const vv=v.filter(x=>x!=
   if(dMetric==='cpu')extra=R('Load avg (1/5/15m)',(s.load||[]).join(' / '))+R('Frequency',(s.freq_mhz||0)+' MHz')+R('Governor',s.governor||'?');
   else if(dMetric==='temp')extra=R('Throttled',s.throttled_now?'YES':'no')+R('Disk temp',st.disk_temp!=null?st.disk_temp+'°C':'—');
   else if(dMetric==='mem')extra=R('Used',(+s.mem_used).toFixed(1)+' GB')+R('Total',Math.round(s.mem_total)+' GB');
-  else if(dMetric==='net_rx')extra=R('Download',s.net_rx+' MB/s')+R('Upload',s.net_tx+' MB/s')+R('IP',nw.ip||'?');
+  else if(dMetric==='net_rx')extra=R('Download',fmtNet(s.net_rx))+R('Upload',fmtNet(s.net_tx))+R('IP',nw.ip||'?');
   else if(dMetric==='disk')extra=R('Used',TB(st.used))+R('Free',TB(st.avail))+R('Temp',(st.disk_temp||'?')+'°C');
   const stat=(n,l)=>`<div class="dstat"><div class="dn">${n}</div><div class="dl">${l}</div></div>`;
   $('#detail-info').innerHTML=`<div class="dstats">${stat(cur,'now')}${stat(mn,'min')}${stat(av,'avg')}${stat(mx,'max')}</div>${extra}`;}
-async function loadDetailProc(m){try{const r=await(await fetch('/api/processes')).json();const rows=(m==='mem'?r.mem:r.cpu)||[];
-  $('#detail-proc').innerHTML='<tr><td colspan="3" class="k" style="padding-top:8px">Top by '+(m==='mem'?'RAM':'CPU')+'</td></tr>'
-    +rows.map(p=>`<tr><td>${p.cmd}</td><td>${p.cpu}%</td><td>${p.mem}%</td></tr>`).join('');}catch(e){}}
+async function loadDetailProc(m){try{const r=await(await fetch('/api/processes')).json();const isMem=m==='mem',rows=(isMem?r.mem:r.cpu)||[];
+  $('#detail-proc').innerHTML=`<tr><th>Top processes</th><th>${isMem?'RAM':'CPU'}</th></tr>`
+    +rows.map(p=>`<tr><td>${p.cmd}</td><td>${isMem?p.mem:p.cpu}%</td></tr>`).join('');}catch(e){}}
 setInterval(()=>{if(!$('#detail').classList.contains('hidden')&&(dMetric==='cpu'||dMetric==='mem'))loadDetailProc(dMetric);},5000);
 
 /* Docker (page) */
@@ -194,15 +196,15 @@ function renderPhotoPage(){const sv=last.services||{},pr=sv.progress||{},ph=sv.p
     +'<div class="h" style="margin-top:6px">Imports on disk <span id="imp-total" class="k"></span></div><div id="bk-cleanup" class="svc-list"></div>';
   loadCleanup();}
 /* NAS backup — домашний NAS → /mnt/storage/nas-backup (rsync-модули). Без удаления. */
-function renderNasPage(){const sv=last.services||{},nb=sv.nas_backup||{},pr=sv.progress||{},active=pr.active&&pr.kind==='nas';
-  let body,btn;
-  if(active){body=bkProg(pr);btn=`<button id="bk-stop" class="wide" style="color:var(--crit)">${ic('i-stop')}Stop backup</button>`;}
-  else{const cfg=Object.keys(nb).length>0;body=`<div class="bks">${cfg?'configured'+(nb.last_run?' · last run '+nb.last_run:''):'not configured — set NAS in Settings → Configs → nas-backup.conf'}</div>`;
-    btn=`<button id="bk-run" class="wide">${ic('i-cloud')}Run NAS backup</button>`;}
-  $('#nas-body').innerHTML=bkCard(ic('i-cloud'),'Pull backup from home NAS',body)+btn;
-  const run=$('#bk-run'),stop=$('#bk-stop');
-  if(run)run.onclick=()=>{doAction('nas-backup');toast('backup started');};
-  if(stop)stop.onclick=()=>{doAction('nas-stop');toast('stopping');};}
+function renderNasPage(){const sv=last.services||{},nb=sv.nas_backup||{},pr=sv.progress||{},active=pr.active&&pr.kind==='nas',sched=sv.nas_sched||'off';
+  const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span>${v}</span></div>`,cfg=Object.keys(nb).length>0;
+  let h=bkCard(ic('i-cloud'),'Pull backup from home NAS',active?bkProg(pr):`<div class="bks">${cfg?'idle':'not configured — set NAS in Settings → Configs → nas-backup.conf'}</div>`);
+  h+=`<div class="sideinfo">${R('Schedule',sched==='off'?'manual (off)':sched)}${nb.last_run?R('Last run',nb.last_run):''}${nb.last_status?R('Last status',nb.last_status):''}${nb.host?R('NAS host',nb.host):''}${nb.dest?R('Dest',nb.dest):''}</div>`;
+  $('#nas-body').innerHTML=h;
+  $('#nas-acts').innerHTML=active?`<button class="rbtn danger" id="bk-stop" title="Stop">${ic('i-stop')}</button>`
+    :`<button class="rbtn" id="bk-run" title="Run backup">${ic('i-cloud')}</button><button class="rbtn" id="bk-dry" title="Dry-run (preview)">${ic('i-list')}</button><button class="rbtn" id="bk-diff" title="Diff">${ic('i-activity')}</button>`;
+  const b=(id,act,msg)=>{const e=$('#'+id);if(e)e.onclick=()=>{doAction(act);toast(msg);};};
+  b('bk-run','nas-backup','backup started');b('bk-dry','nas-dry','dry-run → logs');b('bk-diff','nas-diff','diff → logs');b('bk-stop','nas-stop','stopping');}
 function updateBackupLive(){const pr=(last.services||{}).progress||{};
   const open=!$('#page-photo').classList.contains('hidden')?'photo':(!$('#page-nas').classList.contains('hidden')?'nas':null);
   if(!open)return;const wantActive=!!(pr.active&&pr.kind===open);

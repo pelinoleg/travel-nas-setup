@@ -28,7 +28,15 @@ setInterval(()=>{const d=new Date();$('#clock').textContent=`${('0'+d.getHours()
 function openPage(id){$$('.page').forEach(p=>p.classList.add('hidden'));$('#'+id).classList.remove('hidden');
   if(id==='page-power')renderPower();else if(id==='page-backup')renderBackupPage();else if(id==='page-logs')loadLogs();
   else if(id==='page-network')renderNetwork();else if(id==='page-services')renderServices();
-  else if(id==='page-thermal')renderThermal();}
+  else if(id==='page-thermal')renderThermal();else if(id==='page-yt')renderYT();}
+
+/* YT-Archiver page */
+function renderYT(){const yt=(last.services||{}).yt||{};const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span>${v}</span></div>`;
+  $('#yt-info').innerHTML=Object.keys(yt).length?
+    R('state',yt.paused?'paused':'running')+R('downloading',yt.downloading||0)+R('pending',yt.pending||0)+R('errors',yt.error||0)+R('max parallel',yt.max_concurrent||1)
+    :'<div class="note">YT-Archiver offline (start the stack in Docker).</div>';}
+$('#yt-pause').onclick=async()=>{await api('/api/yt',{action:'pause'});toast('paused');setTimeout(renderYT,800);};
+$('#yt-resume').onclick=async()=>{await api('/api/yt',{action:'resume'});toast('resumed');setTimeout(renderYT,800);};
 
 /* Network page */
 function renderNetwork(){const nw=last.network||{};const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span>${v}</span></div>`;
@@ -114,11 +122,18 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   // thermal tile
   const th=sv.thermal||{};$('#thermal-v').textContent=(th.MODE||th.mode||'warn');
   $('#thermal-sub').textContent=th.last_temp?th.last_temp+'°C':(th.temp?th.temp+'°C':'');
+  // YT tile
+  const yt=sv.yt||{};const ytv=$('#yt-v');
+  if(Object.keys(yt).length){ytv.textContent=yt.paused?'paused':`${yt.downloading||0}↓ ${yt.pending||0}⏳`;
+    ytv.className='tv2'+(yt.paused?' lv-warn':'');
+    $('#yt-sub').textContent=yt.error?yt.error+' errors':(yt.paused?'paused':'queue');}
+  else{ytv.textContent='–';$('#yt-sub').textContent='offline';}
   renderAlerts(s,st,sv,nw);
   renderBackups();
   if(!$('#page-power').classList.contains('hidden'))renderPower();
   if(!$('#page-thermal').classList.contains('hidden'))renderThermal();
-  if(!$('#page-network').classList.contains('hidden'))renderNetwork();}
+  if(!$('#page-network').classList.contains('hidden'))renderNetwork();
+  if(!$('#page-yt').classList.contains('hidden'))renderYT();}
 
 /* alerts banner */
 function renderAlerts(s,st,sv,nw){const a=[];

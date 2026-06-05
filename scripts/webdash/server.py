@@ -12,7 +12,7 @@
 #   /api/action/screen     → яркость/поворот/гашение/выход из kiosk
 # История пишется в SQLite на /mnt/storage (не на microSD).
 # =============================================================================
-import json, os, pwd, sqlite3, subprocess, threading, time, glob, shutil
+import json, os, pwd, sqlite3, subprocess, threading, time, glob, shutil, urllib.request
 from pathlib import Path
 from flask import Flask, Response, request, jsonify, send_from_directory
 
@@ -204,7 +204,13 @@ def sample_services():
     except Exception: pass
     prog = read_json("/var/run/travel-nas/backup-progress.json", {})
     if prog: prog["active"] = (time.time() - prog.get("updated", 0)) < 30
-    return {"projects": projects, "photo": photo,
+    yt = {}
+    try:
+        with urllib.request.urlopen("http://localhost:8081/api/queue/status", timeout=3) as r:
+            yt = json.loads(r.read())
+    except Exception:
+        pass
+    return {"projects": projects, "photo": photo, "yt": yt,
             "nas_backup": read_json("/var/lib/travel-nas/nas-backup-status.json", {}),
             "progress": prog,
             "thermal": read_json("/var/lib/travel-nas/thermal-guard.state.json", {})}
@@ -340,6 +346,18 @@ def api_imports_delete():
     if name and "/" not in name and ".." not in name and os.path.isdir(p):
         shutil.rmtree(p, ignore_errors=True); return jsonify({"ok": True})
     return jsonify({"ok": False}), 400
+
+@app.route("/api/yt", methods=["POST"])
+def api_yt():
+    act = (request.json or {}).get("action")
+    if act not in ("pause", "resume"):
+        return jsonify({"error": "bad"}), 400
+    try:
+        urllib.request.urlopen(urllib.request.Request(
+            "http://localhost:8081/api/queue/" + act, method="POST"), timeout=5)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 @app.route("/api/update/run", methods=["POST"])
 def update_run():

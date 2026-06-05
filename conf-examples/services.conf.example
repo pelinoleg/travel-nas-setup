@@ -33,8 +33,8 @@ Photoview=http://{host}:8000
 
 YT-Archiver=http://{host}:8081
     Self-hosted YouTube archive
-    VPN: WireGuard *.conf → /mnt/storage/media/YT-Archiver/wireguard/ (пусто = off)
-    Cookies (опц.): youtube.txt → /mnt/storage/media/YT-Archiver/cookies/
+    VPN: .conf → wireguard/ (пусто=off)
+    Cookies (опц): youtube.txt → cookies/
 
 Syncthing=http://{host}:8384
     P2P-синхронизация → /mnt/storage/sync

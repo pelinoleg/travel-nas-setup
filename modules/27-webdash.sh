@@ -1,5 +1,17 @@
 [[ -n "${DO_WEBDASH:-}" ]] || return 0
 
+# Только для DSI: на MHS35 — pygame-дашборд, веб тут не нужен и kiosk-автозапуск
+# мешал бы. Определяем экран как остальные модули (config.txt → display.conf).
+WD_BOOT_CFG=/boot/firmware/config.txt; [[ -f "$WD_BOOT_CFG" ]] || WD_BOOT_CFG=/boot/config.txt
+if grep -qE '^[[:space:]]*dtoverlay=vc4-kms-dsi' "$WD_BOOT_CFG" 2>/dev/null; then
+    :
+elif [[ -f "$CONFIG_DIR/display.conf" ]] && grep -q 'SCREEN_TYPE=dsi43' "$CONFIG_DIR/display.conf" 2>/dev/null; then
+    :
+else
+    info "WEBDASH: пропуск — веб-дашборд ставится только для Waveshare DSI-экрана."
+    return 0
+fi
+
 info "=== Web dashboard (DSI, Flask + Chromium kiosk) ==="
 
 # Веб-дашборд под DSI 800×480. Старый pygame-дашборд — для MHS35, его не трогаем.

@@ -167,7 +167,7 @@ fi
 
 ALL_COMPONENTS="UPDATE UTILS STORAGE_MOUNT TG_NOTIFY SAMBA PI_BACKUP \
 PHOTO_BACKUP NAS_BACKUP WATCHDOG SYS_MONITOR POWER_MODE TG_LISTENER DAILY_SUM \
-LOG2RAM ZRAM COMITUP DOCKER DOCKGE${STACK_TAGS} DISPLAY DESKTOP TAILSCALE VERIFY THERMAL_GUARD PI_TWEAKS CONF_PERMS"
+LOG2RAM ZRAM COMITUP DOCKER DOCKGE${STACK_TAGS} DISPLAY DESKTOP WEBDASH TAILSCALE VERIFY THERMAL_GUARD PI_TWEAKS CONF_PERMS"
 
 if [[ "${1:-}" == "--all" ]]; then
     SELECTED="$ALL_COMPONENTS"
@@ -207,7 +207,7 @@ ${STACK_HELP}  DISPLAY        Python dashboard (X11 kiosk) + выбор экра
   PI_TWEAKS      HW watchdog + EEPROM auto-update + WiFi powersave OFF + sysctl
   CONF_PERMS     Авто-восстановление owner/mode у /etc/travel-nas/*.conf (path-unit)
   DESKTOP_AUTH   Polkit без пароля для группы sudo (opt-in, не входит в --all)
-  WEBDASH        Веб-дашборд для DSI (Flask+SSE+uPlot, Chromium kiosk :8090, opt-in)
+  WEBDASH        Веб-дашборд для DSI (Flask+SSE+uPlot, Chromium kiosk :8090; сам пропускается не на DSI)
 EOF
     exit 0
 else
@@ -241,7 +241,7 @@ else
         "PI_TWEAKS"    "HW watchdog + EEPROM + WiFi-no-powersave + sysctl" ON
         "CONF_PERMS"   "Авто-fix прав /etc/travel-nas/ при правке через веб" ON
         "DESKTOP_AUTH" "Polkit без пароля для твоего юзера (меньше запросов)" OFF
-        "WEBDASH"      "Веб-дашборд для DSI-экрана (Flask + Chromium kiosk)"  OFF
+        "WEBDASH"      "Веб-дашборд для DSI-экрана (Flask + Chromium kiosk)"  ON
     )
     # Размеры под терминал. Ширина 80 была мала — длинные теги STACK_* + описания
     # делали внутренний список шире рамки → он вылезал за диалог (визуальный баг).

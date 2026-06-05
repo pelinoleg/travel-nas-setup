@@ -60,7 +60,7 @@
     <div id="alerts" class="alerts"></div>
     <div class="tiles">
       <div class="tile" data-open="detail" data-metric="cpu"><div class="th"><svg class="ic"><use href="#i-cpu"/></svg>CPU</div><div class="tv"><b id="cpu">–</b><span class="u2">%</span></div><canvas class="spark" data-s="cpu"></canvas></div>
-      <div class="tile" data-open="detail" data-metric="temp"><div class="th"><svg class="ic"><use href="#i-thermo"/></svg>Temp</div><div class="tv"><b id="temp">–</b><span class="u2">°C</span></div><canvas class="spark" data-s="temp"></canvas></div>
+      <div class="tile" data-open="detail" data-metric="temp"><div class="th"><svg class="ic"><use href="#i-thermo"/></svg>CPU Temp</div><div class="tv"><b id="temp">–</b><span class="u2">°C</span></div><canvas class="spark" data-s="temp"></canvas></div>
       <div class="tile" data-open="detail" data-metric="mem"><div class="th"><svg class="ic"><use href="#i-ram"/></svg>RAM</div><div class="tv"><b id="mem">–</b><span class="u2" id="mem-tot"></span></div><canvas class="spark" data-s="mem"></canvas></div>
       <div class="tile" data-open="detail" data-metric="net_rx"><div class="th"><svg class="ic"><use href="#i-net"/></svg>Traffic</div><div class="tv2" id="net">–</div><canvas class="spark" data-s="net_rx"></canvas></div>
       <div class="tile" data-open="page-disk"><span id="disk-temp" class="dtemp"></span><div class="th"><svg class="ic"><use href="#i-disk"/></svg>Disk</div><div class="tv"><b id="disk">–</b><span class="u2">%</span></div><div class="bar-fill sm"><i id="disk-bar"></i></div><div class="sub" id="disk-sub"></div><canvas class="spark" data-s="dtemp"></canvas></div>
@@ -100,6 +100,10 @@
       <button data-open="page-failed">Show</button></div>
     <div class="setrow"><label><svg class="ic"><use href="#i-cloud"/></svg>Diagnostics</label>
       <button id="diag-run">Zip → Telegram</button></div>
+    <div class="setrow"><label><svg class="ic"><use href="#i-list"/></svg>Log files</label>
+      <button id="logfiles-btn">Browse logs</button></div>
+    <div class="setrow"><label><svg class="ic"><use href="#i-box"/></svg>Pi config backup</label>
+      <span id="pibk-info" class="sub"></span><button id="pibk-run">Backup now</button></div>
     <div class="setrow"><label><svg class="ic"><use href="#i-sun"/></svg>Accent color</label>
       <span class="seg" id="accent">
         <button data-c="#3b82f6" style="background:#3b82f6">●</button>
@@ -165,9 +169,9 @@
 
 <div id="page-network" class="page hidden">
   <div class="phead"><button class="bigbtn back"><svg class="ic"><use href="#i-back"/></svg></button><span>Network</span>
-    <span class="pacts"><button id="ts-toggle" class="rbtn" title="Tailscale">TS</button>
-      <button id="wifi-reconnect" class="rbtn" title="Reconnect WiFi"><svg class="ic"><use href="#i-restart"/></svg></button>
-      <button id="force-ap" class="rbtn" title="Force hotspot"><svg class="ic"><use href="#i-net"/></svg></button></span></div>
+    <span class="pacts"><button id="ts-toggle" class="rbtn">TS</button>
+      <button id="wifi-reconnect" class="rbtn"><svg class="ic"><use href="#i-restart"/></svg>Recon</button>
+      <button id="force-ap" class="rbtn"><svg class="ic"><use href="#i-net"/></svg>AP</button></span></div>
   <div class="pbody"><div class="sideinfo" id="net-info"></div>
     <div class="h" style="margin-top:10px">WiFi networks <button id="wifi-scan" class="rbtn" style="float:right"><svg class="ic"><use href="#i-restart"/></svg></button></div>
     <div id="wifi-list" class="svc-list"></div>
@@ -206,6 +210,11 @@
   <div class="pbody"><div class="sideinfo" id="today-body"></div>
     <div class="h" style="margin-top:12px">Events today</div><div id="today-events" class="svc-list"></div>
     <div class="h" style="margin-top:12px">New files (24h)</div><div id="recent-list" class="svc-list"></div></div>
+</div>
+
+<div id="page-logfiles" class="page hidden">
+  <div class="phead"><button class="bigbtn back"><svg class="ic"><use href="#i-back"/></svg></button><span>Log files</span></div>
+  <div class="pbody" id="lf-body"></div>
 </div>
 
 <div id="page-failed" class="page hidden">

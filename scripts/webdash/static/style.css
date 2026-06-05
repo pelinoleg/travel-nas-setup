@@ -150,6 +150,11 @@ table#proc-cpu,table#proc-mem{width:100%;border-collapse:collapse;font-size:12px
 .pacts{display:flex;gap:6px;align-items:center;margin-left:auto}
 .pacts .rbtn{margin-left:0;width:auto;min-width:40px;padding:0 12px;gap:6px;font-size:13px;font-weight:600}
 .rbtn.danger{color:var(--crit);border-color:var(--crit)}
+#net .ul,#net .dl{opacity:.45;font-weight:600}
+#net .ul.on{opacity:1;color:var(--crit)}
+#net .dl.on{opacity:1;color:var(--ok)}
+.schedrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px}
+.schedrow select,.schedrow input{padding:7px 9px;background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:8px}
 
 .setrow{display:flex;align-items:center;gap:10px;padding:12px 4px;border-bottom:1px solid var(--line);flex-wrap:wrap}
 .setrow label{width:190px;color:var(--mut);display:flex;align-items:center;gap:8px}

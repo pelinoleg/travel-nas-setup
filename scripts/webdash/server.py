@@ -208,7 +208,17 @@ def sample_services():
     photo = {}
     try:
         dirs = sorted(glob.glob("/mnt/storage/usb-imports/*/"), key=os.path.getmtime, reverse=True)
-        if dirs: photo = {"last": time.strftime("%d.%m %H:%M", time.localtime(os.path.getmtime(dirs[0])))}
+        if dirs:
+            d = dirs[0]
+            photo = {"last": time.strftime("%d.%m %H:%M", time.localtime(os.path.getmtime(d))),
+                     "name": os.path.basename(d.rstrip("/"))}
+            try: photo["bytes"] = int(sh(["du", "-sb", d]).split()[0])
+            except Exception: pass
+            try:
+                n = 0
+                for _, _, fs in os.walk(d): n += len(fs)
+                photo["files"] = n
+            except Exception: pass
     except Exception: pass
     prog = read_json("/var/run/travel-nas/backup-progress.json", {})
     # kind — авторитетно: source-поле писателя (photo|nas) + проверка transient-unit
@@ -224,6 +234,9 @@ def sample_services():
             yt = json.loads(r.read())
         with urllib.request.urlopen("http://localhost:8081/api/stats", timeout=3) as r:
             yt.update(json.loads(r.read()))   # videos, total_bytes, channels
+        with urllib.request.urlopen("http://localhost:8081/api/videos", timeout=4) as r:
+            vids = json.loads(r.read())
+            yt["music"] = sum(1 for v in vids if v.get("is_music") or v.get("is_music_via_playlist"))
     except Exception:
         pass
     return {"projects": projects, "photo": photo, "yt": yt,
@@ -275,6 +288,8 @@ ACTIONS = {
     "nas-dry": ["sudo", "-n", "/usr/local/bin/nas-backup.sh", "--dry-run"],
     "nas-diff": ["sudo", "-n", "/usr/local/bin/nas-backup.sh", "--diff"],
     "nas-stop": ["sudo", "-n", "/usr/bin/systemctl", "stop", "nas-backup-runtime"],
+    "nas-sched-off": ["sudo", "-n", "/usr/local/bin/nas-schedule.sh", "off"],
+    "pi-backup": ["sudo", "-n", "/usr/local/bin/pi-config-backup.sh"],
     "cpu-boost": ["sudo", "-n", "/usr/local/bin/cpu-boost.sh", "on"],
     "force-ap": ["sudo", "-n", "/usr/sbin/comitup-cli", "d"],
     "tailscale-up": ["sudo", "-n", "/usr/bin/tailscale", "up"],
@@ -520,6 +535,34 @@ def api_smart():
         "realloc": g(r'Reallocated_Sector_Ct.*?(\d+)\s*$'),
         "spare": g(r'Available Spare:\s*(\d+%)')})
 
+LOGDIR = "/mnt/storage/_logs"
+@app.route("/api/logfiles")
+def api_logfiles():
+    out = []
+    for p in sorted(glob.glob(LOGDIR + "/*.log")):
+        try: out.append({"name": os.path.basename(p), "size": os.path.getsize(p)})
+        except Exception: pass
+    return jsonify(out)
+@app.route("/api/logfile")
+def api_logfile():
+    name = request.args.get("name", "")
+    if not re.match(r"^[\w.\-]+\.log$", name): return ("bad name", 400)
+    p = os.path.join(LOGDIR, name)
+    if not os.path.isfile(p): return ("not found", 404)
+    return Response(sh(["tail", "-n", "400", p]), mimetype="text/plain")
+@app.route("/api/naslog")
+def api_naslog():
+    return Response(sh(["journalctl", "-u", "nas-backup-runtime", "-n", "300", "--no-pager", "-o", "cat"], timeout=10),
+                    mimetype="text/plain")
+@app.route("/api/pibackup")
+def api_pibackup():
+    files = sorted(glob.glob("/mnt/storage/pi-config-backups/*"), key=lambda p: os.path.getmtime(p), reverse=True)
+    if not files: return jsonify({"count": 0})
+    f = files[0]
+    return jsonify({"count": len(files), "last": os.path.basename(f),
+                    "when": time.strftime("%d.%m %H:%M", time.localtime(os.path.getmtime(f))),
+                    "bytes": os.path.getsize(f)})
+
 @app.route("/api/failed")
 def api_failed():
     units = []
@@ -659,10 +702,14 @@ def api_action(name):
         d = request.json or {}; ssid = d.get("ssid", ""); pw = d.get("password", "")
         cmd = (["sudo", "-n", "/usr/bin/nmcli", "device", "wifi", "connect", ssid]
                + (["password", pw] if pw else [])) if ssid else None
+    elif name == "nas-sched-set":
+        d = request.json or {}; freq = d.get("freq", ""); tm = d.get("time", "")
+        cmd = ["sudo", "-n", "/usr/local/bin/nas-schedule.sh", "set", freq, tm] \
+            if freq in ("daily", "weekly") and re.match(r"^([01]\d|2[0-3]):[0-5]\d$", tm) else None
     else:
         cmd = ACTIONS.get(name)
     if not cmd: return jsonify({"error": "unknown"}), 400
-    detach = name in ("reboot", "poweroff", "update", "nas-backup", "nas-dry", "nas-diff", "restart-dash", "restart-tg", "force-ap")
+    detach = name in ("reboot", "poweroff", "update", "nas-backup", "nas-dry", "nas-diff", "pi-backup", "restart-dash", "restart-tg", "force-ap")
     try:
         if detach:
             subprocess.Popen(cmd); return jsonify({"ok": True, "detached": True})

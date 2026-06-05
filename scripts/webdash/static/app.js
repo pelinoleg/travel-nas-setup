@@ -21,7 +21,7 @@ const colorVal=(id,m,v)=>{const e=$('#'+id);if(!e)return;e.classList.remove('lv-
 /* tabs */
 function switchTab(t){$$('#tabs button').forEach(x=>x.classList.toggle('active',x.dataset.tab===t));
   $$('.tab').forEach(x=>x.classList.toggle('active',x.id==='tab-'+t));activeTab=t;
-  if(t==='storage')renderDisks();else if(t==='apps')renderApps();}
+  if(t==='storage')renderDisks();else if(t==='apps')renderApps();else if(t==='settings')loadPiBackup();}
 $$('#tabs button').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
 setInterval(()=>{const d=new Date();$('#clock').textContent=`${('0'+d.getHours()).slice(-2)}:${('0'+d.getMinutes()).slice(-2)}`;},1000);
 
@@ -48,10 +48,12 @@ const SPARKHIST={};  /* metric -> {t,v} для длинных окон (>15м) �
 const histRange=w=>w<=3600?'1h':w<=86400?'24h':'7d';
 async function fetchSparkHist(m){if(sparkWin(m)<=900)return;
   try{const r=await(await fetch(`/api/history?m=${m}&range=${histRange(sparkWin(m))}`)).json();SPARKHIST[m]={t:r.t||[],v:r.v||[]};updateSparks();}catch(e){}}
+function heatColor(k,v){const t=MET[k].th;if(!t)return MET[k].col;return v>=t[2]?'#f85149':v>=t[1]?'#f0883e':v>=t[0]?'#d29922':'#3fb950';}
 function updateSparks(){$$('.spark').forEach(cv=>{const k=cv.dataset.s;if(!SPARK[k])return;const w=sparkWin(k);let arr;
   if(w<=900)arr=SPARK[k].slice(winStart(k));
   else{const h=SPARKHIST[k];if(h&&h.t.length){const now=h.t[h.t.length-1];let i=0;while(i<h.t.length&&h.t[i]<now-w)i++;arr=h.v.slice(i).filter(x=>x!=null);}else arr=SPARK[k].slice(winStart(k));}
-  drawSpark(cv,arr,MET[k].col,sparkMax(k,arr));});}
+  const col=(k==='temp'||k==='dtemp')?heatColor(k,arr.length?arr[arr.length-1]:0):MET[k].col;
+  drawSpark(cv,arr,col,sparkMax(k,arr));});}
 setInterval(()=>['cpu','temp','mem','net_rx','disk'].forEach(m=>{if(sparkWin(m)>900)fetchSparkHist(m);}),60000);
 
 /* render */
@@ -63,7 +65,8 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   $('#cpu').textContent=s.cpu!=null?Math.round(s.cpu):'–';colorVal('cpu','cpu',s.cpu);
   $('#temp').textContent=s.temp!=null?Math.round(s.temp):'–';colorVal('temp','temp',s.temp);
   $('#mem').textContent=s.mem_total?(+s.mem_used).toFixed(1):'–';$('#mem-tot').textContent=s.mem_total?'/'+Math.round(s.mem_total):'';colorVal('mem','disk',memPct);
-  {const ne=$('#net');ne.innerHTML=`↑ ${fmtNet(s.net_tx)}<br>↓ ${fmtNet(s.net_rx)}`;ne.classList.toggle('dim',(s.net_rx||0)===0&&(s.net_tx||0)===0);}
+  {const tx=s.net_tx||0,rx=s.net_rx||0;
+   $('#net').innerHTML=`<span class="ul ${tx>=1?'on':''}">↑ ${fmtNet(tx)}</span><br><span class="dl ${rx>=1?'on':''}">↓ ${fmtNet(rx)}</span>`;}
   $('#disk').textContent=st.pct??'–';colorVal('disk','disk',st.pct);
   const dbar=$('#disk-bar');if(dbar){dbar.style.width=(st.pct||0)+'%';dbar.className=st.pct>=95?'crit':st.pct>=88?'high':st.pct>=75?'warn':'';}
   $('#disk-sub').textContent=st.size?`${(st.used/1e12).toFixed(2)} / ${(st.size/1e12).toFixed(2)} TB`:'';
@@ -74,16 +77,19 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   {const fr=$('#freq');if(fr){fr.textContent=s.freq_mhz||'–';const frac=(s.freq_mhz||0)/(s.freq_max||1800);
     fr.className=frac>=.9?'f-full':frac>=.6?'f-mid':frac>=.35?'f-low':'f-min';}}
   $('#uptime').textContent='up '+fmtUp(s.uptime||0);
-  $('#wifi-v').textContent=nw.mode==='AP'?'Hotspot':(nw.ssid||'—');
-  $('#wifi-sub').textContent=nw.mode==='AP'?(nw.ap_name||''):(nw.signal?nw.signal+'dB':'');
-  // docker tile
+  {const ap=nw.mode==='AP',sig=nw.signal,q=sig!=null?Math.max(0,Math.min(100,2*(sig+100))):null;  // dBm→~%
+   $('#wifi-v').textContent=ap?'Hotspot':(nw.ssid||'—');
+   $('#wifi-sub').innerHTML=ap?(nw.ap_ssid||nw.ap_name||''):`${q!=null?'📶 '+q+'%':''} ${nw.ip&&nw.ip!=='?'?'· '+nw.ip:'(no ip)'}`+(nw.ts_up?' · TS':'');}
+  // docker tile — проекты + контейнеры
   const proj=sv.projects||[],down=proj.filter(p=>p.running<p.total).length;
+  const totC=proj.reduce((a,p)=>a+p.total,0),runC=proj.reduce((a,p)=>a+p.running,0);
   $('#dk').textContent=`${proj.filter(p=>p.running===p.total&&p.total).length}/${proj.length}`;
-  $('#dk').className='tv2'+(down?' lv-crit':'');$('#dk-sub').textContent=down?down+' stopped':'all up';
+  $('#dk').className='tv2'+(down?' lv-crit':'');
+  $('#dk-sub').textContent=down?down+' stopped: '+proj.filter(p=>p.running<p.total).map(p=>p.project).join(', '):`${runC}/${totC} containers up`;
   // yt tile
   const yt=sv.yt||{};
   if(Object.keys(yt).length){$('#yt-v').textContent=(yt.videos||0)+' vids';
-    $('#yt-sub').textContent=`${TB(yt.total_bytes)}${yt.paused?' · paused':(yt.downloading?' · '+yt.downloading+'↓':'')}`;}
+    $('#yt-sub').textContent=`${TB(yt.total_bytes)}${yt.music?' · '+yt.music+'♪':''}${yt.paused?' · paused':(yt.downloading?' · '+yt.downloading+'↓':'')}`;}
   else{$('#yt-v').textContent='–';$('#yt-sub').textContent='offline';}
   // backups tiles (photo/nas раздельно)
   renderBackupTiles(sv);
@@ -191,7 +197,9 @@ const bkCard=(icon,title,body)=>`<div class="bkcard">${icon}<div class="bkc"><di
 const bkProg=pr=>`<div class="bkbar"><i id="bk-bar" style="width:${pr.percent||0}%"></i></div><div class="bks"><b id="bk-pct">${pr.percent||0}%</b> · <span id="bk-files">${pr.files_done||0}/${pr.files_total||'?'}</span> files · <span id="bk-speed">${pr.speed||'…'}</span> · eta <span id="bk-eta">${pr.eta||'?'}</span></div>`;
 /* Photo import — карта SD/USB → /mnt/storage/usb-imports (авто при вставке). С удалением. */
 function renderPhotoPage(){const sv=last.services||{},pr=sv.progress||{},ph=sv.photo||{},active=pr.active&&pr.kind==='photo';
-  const body=active?bkProg(pr)+`<div class="bks">card: ${pr.label||'?'}</div>`:`<div class="bks">${ph.last?'last import '+ph.last:'idle'} · auto on card insert</div>`;
+  const big=`<div class="bigstat"><div><div class="n">${ph.files||0}</div><div class="l">files</div></div><div><div class="n">${ph.bytes?TB(ph.bytes):'—'}</div><div class="l">size</div></div></div>`;
+  const body=active?bkProg(pr)+`<div class="bks">card: ${pr.label||'?'}</div>`
+    :big+`<div class="bks">${ph.last?'last import '+ph.last+(ph.name?' · '+ph.name:''):'no imports yet'} · auto on card insert</div>`;
   $('#photo-body').innerHTML=bkCard(ic('i-camera'),'Copy photos from card to disk',body)
     +'<div class="h" style="margin-top:6px">Imports on disk <span id="imp-total" class="k"></span></div><div id="bk-cleanup" class="svc-list"></div>';
   loadCleanup();}
@@ -200,11 +208,21 @@ function renderNasPage(){const sv=last.services||{},nb=sv.nas_backup||{},pr=sv.p
   const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span>${v}</span></div>`,cfg=Object.keys(nb).length>0;
   let h=bkCard(ic('i-cloud'),'Pull backup from home NAS',active?bkProg(pr):`<div class="bks">${cfg?'idle':'not configured — set NAS in Settings → Configs → nas-backup.conf'}</div>`);
   h+=`<div class="sideinfo">${R('Schedule',sched==='off'?'manual (off)':sched)}${nb.last_run?R('Last run',nb.last_run):''}${nb.last_status?R('Last status',nb.last_status):''}${nb.host?R('NAS host',nb.host):''}${nb.dest?R('Dest',nb.dest):''}</div>`;
+  const sm=(sched||'').match(/^(daily|weekly) (\d\d:\d\d)/),stime=sm?sm[2]:'03:00';
+  h+=`<div class="h" style="margin-top:8px">Auto-schedule</div>
+    <div class="schedrow"><select id="sch-freq"><option value="daily">daily</option><option value="weekly">weekly (Sun)</option></select>
+    <input type="time" id="sch-time" value="${stime}">
+    <button class="minib" id="sch-set">Set</button><button class="minib" id="sch-off">Off</button>
+    <button class="minib" id="nas-viewlog">View log</button></div>`;
   $('#nas-body').innerHTML=h;
-  $('#nas-acts').innerHTML=active?`<button class="rbtn danger" id="bk-stop" title="Stop">${ic('i-stop')}</button>`
-    :`<button class="rbtn" id="bk-run" title="Run backup">${ic('i-cloud')}</button><button class="rbtn" id="bk-dry" title="Dry-run (preview)">${ic('i-list')}</button><button class="rbtn" id="bk-diff" title="Diff">${ic('i-activity')}</button>`;
+  if(sm)$('#sch-freq').value=sm[1];
+  $('#sch-set').onclick=()=>{doAction('nas-sched-set',{freq:$('#sch-freq').value,time:$('#sch-time').value});toast('schedule set');};
+  $('#sch-off').onclick=()=>{doAction('nas-sched-off');toast('schedule off');};
+  $('#nas-viewlog').onclick=()=>openLogfile('__nas__','NAS backup run log');
+  $('#nas-acts').innerHTML=active?`<button class="rbtn danger" id="bk-stop">${ic('i-stop')}Stop</button>`
+    :`<button class="rbtn" id="bk-run">${ic('i-cloud')}Run</button><button class="rbtn" id="bk-dry">${ic('i-list')}Dry</button><button class="rbtn" id="bk-diff">${ic('i-activity')}Diff</button>`;
   const b=(id,act,msg)=>{const e=$('#'+id);if(e)e.onclick=()=>{doAction(act);toast(msg);};};
-  b('bk-run','nas-backup','backup started');b('bk-dry','nas-dry','dry-run → logs');b('bk-diff','nas-diff','diff → logs');b('bk-stop','nas-stop','stopping');}
+  b('bk-run','nas-backup','backup started');b('bk-dry','nas-dry','dry-run → log');b('bk-diff','nas-diff','diff → log');b('bk-stop','nas-stop','stopping');}
 function updateBackupLive(){const pr=(last.services||{}).progress||{};
   const open=!$('#page-photo').classList.contains('hidden')?'photo':(!$('#page-nas').classList.contains('hidden')?'nas':null);
   if(!open)return;const wantActive=!!(pr.active&&pr.kind===open);
@@ -341,6 +359,19 @@ async function doAction(name,body){if(name.startsWith('__del:'))return delImport
   toast('…');try{const r=await(await api('/api/action/'+name,body||{})).json();toast(r.ok||r.detached?'OK':('Error: '+(r.err||r.error||'')));}catch(e){toast('Network error');}}
 $('#btn-exit').onclick=()=>doAction('screen',{exit_kiosk:true});
 $('#diag-run').onclick=async()=>{toast('building diag…');try{const r=await(await api('/api/diag',{})).json();toast(r.ok?(r.sent?'sent to Telegram ✓':'saved: '+r.path):'error: '+(r.error||''));}catch(e){toast('error');}};
+/* log files viewer (#3) + nas-run log (#4) */
+async function renderLogfiles(){try{const r=await(await fetch('/api/logfiles')).json();
+  $('#lf-body').innerHTML='<div class="svc-list">'+r.map(f=>`<div class="svc-item" data-n="${f.name}"><span>${f.name}</span><span class="u">${(f.size/1024).toFixed(0)} KB</span></div>`).join('')+'</div>'+(r.length?'':'<div class="note">no log files</div>');
+  $$('#lf-body .svc-item').forEach(el=>el.onclick=()=>openLogfile(el.dataset.n,el.dataset.n));}catch(e){$('#lf-body').innerHTML='error';}}
+async function openLogfile(name,title){openPage('page-logfiles');
+  $('#lf-body').innerHTML=`<button class="minib" id="lf-back">← files</button><div class="h" style="margin-top:6px">${title}</div><pre class="scrollbox" id="lf-view" style="font:11px/1.4 ui-monospace,monospace;color:var(--mut);white-space:pre-wrap;max-height:300px">loading…</pre>`;
+  $('#lf-back').onclick=renderLogfiles;dragScroll($('#lf-view'));
+  try{const url=name==='__nas__'?'/api/naslog':'/api/logfile?name='+encodeURIComponent(name);const t=await(await fetch(url)).text();$('#lf-view').textContent=t||'(empty)';const v=$('#lf-view');v.scrollTop=v.scrollHeight;}catch(e){$('#lf-view').textContent='error';}}
+$('#logfiles-btn').onclick=()=>{openPage('page-logfiles');renderLogfiles();};
+/* Pi config backup (#1) */
+async function loadPiBackup(){try{const d=await(await fetch('/api/pibackup')).json();
+  $('#pibk-info').textContent=d.count?`${d.count} · last ${d.when}`:'none yet';}catch(e){}}
+$('#pibk-run').onclick=()=>{doAction('pi-backup');toast('pi config backup started');setTimeout(loadPiBackup,4000);};
 
 /* screen */
 const LS=localStorage,br=$('#brightness'),bv=$('#brightness-val');

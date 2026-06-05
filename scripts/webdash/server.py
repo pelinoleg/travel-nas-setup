@@ -18,7 +18,7 @@ from flask import Flask, Response, request, jsonify, send_from_directory
 
 BASE = Path(__file__).resolve().parent
 STATIC = BASE / "static"
-CONF = {"PORT": 8090, "STREAM_SEC": 2, "SAMPLE_SEC": 30,
+CONF = {"PORT": 8090, "STREAM_SEC": 2, "SAMPLE_SEC": 30, "BIND": "127.0.0.1",
         "HISTORY_DB": "/mnt/storage/.travel-nas/metrics.db", "STORAGE_MOUNT": "/mnt/storage"}
 def load_conf():
     p = Path("/etc/travel-nas/webdash.conf")
@@ -510,4 +510,4 @@ if __name__ == "__main__":
     for fn in (sampler_fast, sampler_slow, sampler_history):
         threading.Thread(target=fn, daemon=True).start()
     time.sleep(0.5)
-    app.run(host="127.0.0.1", port=CONF["PORT"], threaded=True)
+    app.run(host=CONF["BIND"], port=CONF["PORT"], threaded=True)

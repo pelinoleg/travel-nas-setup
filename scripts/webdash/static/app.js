@@ -128,6 +128,7 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   const wc=nw.mode==='AP'?'warn':(nw.ip&&nw.ip!=='?'?'ok':'err');
   const wt=nw.mode==='AP'?`Hotspot ${nw.ssid||''}`:`${nw.ssid||'no wifi'} ${nw.signal?nw.signal+'dB':''}`;
   $('#topchips').innerHTML=chip(wc,wt);
+  if($('#net-url'))$('#net-url').textContent=`http://${(nw.host||'nas')}.local:8090  ·  http://${nw.ip||'?'}:8090`;
   // disk tile bar + free
   const dbar=$('#disk-bar');if(dbar){dbar.style.width=(st.pct||0)+'%';
     dbar.className=st.pct>=95?'crit':st.pct>=88?'high':st.pct>=75?'warn':'';}

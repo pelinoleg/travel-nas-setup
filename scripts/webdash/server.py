@@ -86,6 +86,7 @@ def sample_fast():
     mt, ma = mem.get("MemTotal", 0) / 1e6, mem.get("MemAvailable", 0) / 1e6
     thr = sh(["vcgencmd", "get_throttled"]).replace("throttled=", "")
     freq = read("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq")
+    fmax = read("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq")
     rrx, rtx = net_rate()
     return {"cpu": cpu_percent(), "temp": temp,
             "mem_used": round(mt - ma, 2), "mem_total": round(mt, 2),
@@ -93,6 +94,7 @@ def sample_fast():
             "governor": read("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor", "?"),
             "pmode": read("/var/lib/travel-nas/power-mode-pref", "auto"),
             "freq_mhz": round(int(freq) / 1000) if freq.isdigit() else 0,
+            "freq_max": round(int(fmax) / 1000) if fmax.isdigit() else 0,
             "uptime": int(float(read("/proc/uptime").split()[0] or 0)),
             "load": read("/proc/loadavg").split()[:3], "net_rx": rrx, "net_tx": rtx}
 
@@ -209,7 +211,13 @@ def sample_services():
         if dirs: photo = {"last": time.strftime("%d.%m %H:%M", time.localtime(os.path.getmtime(dirs[0])))}
     except Exception: pass
     prog = read_json("/var/run/travel-nas/backup-progress.json", {})
-    if prog: prog["active"] = (time.time() - prog.get("updated", 0)) < 30
+    # kind — авторитетно: source-поле писателя (photo|nas) + проверка transient-unit
+    # nas-backup-runtime (как в старом дашборде). НЕ угадываем по подстроке пути.
+    nas_run = sh(["systemctl", "is-active", "nas-backup-runtime"]) == "active"
+    if prog:
+        prog["active"] = (time.time() - prog.get("updated", 0)) < 30
+        src = prog.get("source", "")
+        prog["kind"] = "nas" if (src == "nas" or nas_run) else "photo"
     yt = {}
     try:
         with urllib.request.urlopen("http://localhost:8081/api/queue/status", timeout=3) as r:

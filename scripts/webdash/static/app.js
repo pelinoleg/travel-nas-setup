@@ -25,7 +25,7 @@ setInterval(()=>{const d=new Date();$('#clock').textContent=`${('0'+d.getHours()
 
 /* pages */
 function openPage(id){$$('.page').forEach(p=>p.classList.add('hidden'));$('#'+id).classList.remove('hidden');
-  ({'page-power':renderPower,'page-backup':renderBackupPage,'page-logs':loadLogs,'page-network':()=>{renderNetwork();loadTsList();},
+  ({'page-power':renderPower,'page-photo':renderPhotoPage,'page-nas':renderNasPage,'page-logs':loadLogs,'page-network':()=>{renderNetwork();loadTsList();},
     'page-services':renderServices,'page-yt':renderYT,'page-configs':renderConfigs,'page-today':renderToday,
     'page-failed':renderFailed,'page-docker':renderProjects,'page-disk':renderDiskPage}[id]||(()=>{}))();}
 const closePages=()=>$$('.page').forEach(p=>p.classList.add('hidden'));
@@ -54,7 +54,7 @@ setInterval(()=>['cpu','temp','mem','net_rx','disk'].forEach(m=>{if(sparkWin(m)>
 
 /* render */
 const chip=(cls,txt)=>`<span class="chip"><span class="dot ${cls}"></span>${txt}</span>`;
-function whichBackup(pr){if(!pr||!pr.active)return null;return ((pr.target||'')+(pr.source||'')).includes('usb-imports')||pr.device?'photo':'nas';}
+function whichBackup(pr){if(!pr||!pr.active)return null;return pr.kind||'photo';}
 function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{},sv=d.services||{};
   if(s.mem_total)memTotal=s.mem_total;
   const memPct=s.mem_total?Math.round(s.mem_used/s.mem_total*100):null;
@@ -68,7 +68,9 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   const dtemp=$('#disk-temp'),dt=st.disk_temp;
   if(dt!=null){dtemp.textContent=dt+'°';dtemp.className='dtemp '+(dt>=58?'crit':dt>=52?'high':dt>=45?'warn':'');}else dtemp.textContent='';
   const pt=$('#power-tile');if(pt){pt.className='tile';pt.classList.add('pm-'+(s.pmode||'auto'));}
-  $('#power').textContent=s.pmode||'auto';$('#power-sub').textContent=`${s.governor||'?'} · ${s.freq_mhz||0}MHz`;
+  $('#power').textContent=s.pmode||'auto';$('#power-sub').textContent=s.governor||'?';
+  {const fr=$('#freq');if(fr){fr.textContent=s.freq_mhz||'–';const frac=(s.freq_mhz||0)/(s.freq_max||1800);
+    fr.className=frac>=.9?'f-full':frac>=.6?'f-mid':frac>=.35?'f-low':'f-min';}}
   $('#uptime').textContent='up '+fmtUp(s.uptime||0);
   $('#wifi-v').textContent=nw.mode==='AP'?'Hotspot':(nw.ssid||'—');
   $('#wifi-sub').textContent=nw.mode==='AP'?(nw.ap_name||''):(nw.signal?nw.signal+'dB':'');
@@ -100,7 +102,7 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   renderAlerts(s,st,sv,nw);
   // live-обновление только лёгких частей открытой страницы (без полного rebuild → нет дёрганья)
   if(!$('#page-power').classList.contains('hidden'))renderPower();
-  if(!$('#page-backup').classList.contains('hidden'))updateBackupLive();}
+  updateBackupLive();}
 
 function renderAlerts(s,st,sv,nw){const a=[];
   if(s.throttled_now)a.push(['crit','⚡ Throttled']);
@@ -183,27 +185,30 @@ function renderBackupTiles(sv){const nb=sv.nas_backup||{},pr=sv.progress||{},ph=
   $('#nas-v').textContent=w==='nas'?(pr.percent||0)+'%':(nb.last_status||nb.status||'idle');
   $('#nas-sub').textContent=w==='nas'?`${pr.speed||''} eta ${pr.eta||'?'}`:(nb.last_run?'last '+nb.last_run:'');
   nt.setAttribute('style',w==='nas'?bkbg(pr.percent):'');}
-let bkOpenW='__init';
-function renderBackupPage(){const sv=last.services||{},nb=sv.nas_backup||{},pr=sv.progress||{},ph=sv.photo||{},w=whichBackup(pr);bkOpenW=w;
-  const prog=()=>`<div class="bkbar"><i id="bk-bar" style="width:${pr.percent||0}%"></i></div><div class="bks"><b id="bk-pct">${pr.percent||0}%</b> · <span id="bk-files">${pr.files_done||0}/${pr.files_total||'?'}</span> files · <span id="bk-speed">${pr.speed||'…'}</span> · eta <span id="bk-eta">${pr.eta||'?'}</span></div>`;
-  const card=(icon,title,body)=>`<div class="bkcard">${icon}<div class="bkc"><div class="bkt">${title}</div>${body}</div></div>`;
-  const photoBody=w==='photo'?prog():`<div class="bks">${ph.last?'last import '+ph.last:'idle'} · auto on card insert</div>`;
-  let nasBody,nasBtn;
-  if(w==='nas'){nasBody=prog();nasBtn=`<button id="bk-stop" class="wide" style="color:var(--crit)">${ic('i-stop')}Stop backup</button>`;}
-  else{const cfg=Object.keys(nb).length>0;nasBody=`<div class="bks">${cfg?'configured'+(nb.last_run?' · last '+nb.last_run:''):'not configured — set NAS in Settings → Configs → nas-backup.conf'}</div>`;
-    nasBtn=`<button id="bk-run" class="wide">${ic('i-cloud')}Run NAS backup</button>`;}
-  $('#backup-body').innerHTML=card(ic('i-camera'),'Photo import (SD/USB → this disk)',photoBody)
-    +'<div class="h" style="margin-top:4px">Imports on disk <span id="imp-total" class="k"></span></div><div id="bk-cleanup" class="svc-list"></div>'
-    +card(ic('i-cloud'),'NAS backup (home NAS → here)',nasBody)+nasBtn;
+const bkCard=(icon,title,body)=>`<div class="bkcard">${icon}<div class="bkc"><div class="bkt">${title}</div>${body}</div></div>`;
+const bkProg=pr=>`<div class="bkbar"><i id="bk-bar" style="width:${pr.percent||0}%"></i></div><div class="bks"><b id="bk-pct">${pr.percent||0}%</b> · <span id="bk-files">${pr.files_done||0}/${pr.files_total||'?'}</span> files · <span id="bk-speed">${pr.speed||'…'}</span> · eta <span id="bk-eta">${pr.eta||'?'}</span></div>`;
+/* Photo import — карта SD/USB → /mnt/storage/usb-imports (авто при вставке). С удалением. */
+function renderPhotoPage(){const sv=last.services||{},pr=sv.progress||{},ph=sv.photo||{},active=pr.active&&pr.kind==='photo';
+  const body=active?bkProg(pr)+`<div class="bks">card: ${pr.label||'?'}</div>`:`<div class="bks">${ph.last?'last import '+ph.last:'idle'} · auto on card insert</div>`;
+  $('#photo-body').innerHTML=bkCard(ic('i-camera'),'Copy photos from card to disk',body)
+    +'<div class="h" style="margin-top:6px">Imports on disk <span id="imp-total" class="k"></span></div><div id="bk-cleanup" class="svc-list"></div>';
+  loadCleanup();}
+/* NAS backup — домашний NAS → /mnt/storage/nas-backup (rsync-модули). Без удаления. */
+function renderNasPage(){const sv=last.services||{},nb=sv.nas_backup||{},pr=sv.progress||{},active=pr.active&&pr.kind==='nas';
+  let body,btn;
+  if(active){body=bkProg(pr);btn=`<button id="bk-stop" class="wide" style="color:var(--crit)">${ic('i-stop')}Stop backup</button>`;}
+  else{const cfg=Object.keys(nb).length>0;body=`<div class="bks">${cfg?'configured'+(nb.last_run?' · last run '+nb.last_run:''):'not configured — set NAS in Settings → Configs → nas-backup.conf'}</div>`;
+    btn=`<button id="bk-run" class="wide">${ic('i-cloud')}Run NAS backup</button>`;}
+  $('#nas-body').innerHTML=bkCard(ic('i-cloud'),'Pull backup from home NAS',body)+btn;
   const run=$('#bk-run'),stop=$('#bk-stop');
   if(run)run.onclick=()=>{doAction('nas-backup');toast('backup started');};
-  if(stop)stop.onclick=()=>{doAction('nas-stop');toast('stopping');};
-  loadCleanup();}
-function updateBackupLive(){const pr=(last.services||{}).progress||{},w=whichBackup(pr);
-  if(w!==bkOpenW){renderBackupPage();return;}
-  if(!w)return;const set=(id,v)=>{const e=$('#'+id);if(e)e.textContent=v;};
-  const bar=$('#bk-bar');if(bar)bar.style.width=(pr.percent||0)+'%';
-  set('bk-pct',(pr.percent||0)+'%');set('bk-files',(pr.files_done||0)+'/'+(pr.files_total||'?'));set('bk-speed',pr.speed||'…');set('bk-eta',pr.eta||'?');}
+  if(stop)stop.onclick=()=>{doAction('nas-stop');toast('stopping');};}
+function updateBackupLive(){const pr=(last.services||{}).progress||{};
+  const open=!$('#page-photo').classList.contains('hidden')?'photo':(!$('#page-nas').classList.contains('hidden')?'nas':null);
+  if(!open)return;const wantActive=!!(pr.active&&pr.kind===open);
+  if(wantActive!==!!$('#bk-bar')){open==='photo'?renderPhotoPage():renderNasPage();return;}  // структура сменилась
+  if(wantActive){const set=(id,v)=>{const e=$('#'+id);if(e)e.textContent=v;};const bar=$('#bk-bar');if(bar)bar.style.width=(pr.percent||0)+'%';
+    set('bk-pct',(pr.percent||0)+'%');set('bk-files',(pr.files_done||0)+'/'+(pr.files_total||'?'));set('bk-speed',pr.speed||'…');set('bk-eta',pr.eta||'?');}}
 
 /* Disk page — SMART + ёмкость (вместо бесполезного графика заполненности) */
 async function renderDiskPage(){const st=last.storage||{},pct=st.pct||0,cl=pct>=95?'crit':pct>=88?'high':pct>=75?'warn':'';

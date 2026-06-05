@@ -75,6 +75,9 @@ main{position:relative;height:382px}
 .dstat{flex:1;text-align:center;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 4px}
 .dstat .dn{font-size:19px;font-weight:700;line-height:1.1}.dstat .dl{color:var(--mut);font-size:11px}
 .dim{opacity:.4}
+.pmode-lbl{font-size:13px;font-weight:600;color:var(--mut);text-transform:capitalize;margin-top:1px}
+#freq{transition:color .3s}
+.f-full{color:var(--ok)}.f-mid{color:var(--acc)}.f-low{color:var(--warn)}.f-min{color:#22d3ee}
 #screen-sub{display:flex;justify-content:space-between;width:100%;gap:6px;font-size:11px}
 /* delete / mini buttons */
 .del{display:inline-flex;align-items:center;gap:5px;background:var(--panel2);border:1px solid var(--crit);color:var(--crit);border-radius:8px;padding:7px 13px;font-size:13px}

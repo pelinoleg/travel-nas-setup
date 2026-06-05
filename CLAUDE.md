@@ -13,7 +13,7 @@ Travel-NAS на Raspberry Pi 5 (или Pi 4) + Samsung T7 Shield 4TB SSD. Дел
 | [docs/TAILSCALE.md](docs/TAILSCALE.md) | VPN setup + flow |
 | [docs/UPDATE.md](docs/UPDATE.md) | `travel-nas-update` fast vs `--full` |
 | [docs/VERIFY.md](docs/VERIFY.md) | Bit-rot scrub design |
-| [docs/V2-WEB-DASHBOARD.md](docs/V2-WEB-DASHBOARD.md) | План перехода на web+Chromium kiosk (DSI 800×480) — отложено до приезда нового экрана |
+| [docs/V2-WEB-DASHBOARD.md](docs/V2-WEB-DASHBOARD.md) | Web-дашборд для DSI (Flask+SSE+uPlot, kiosk :8090) — **реализован** (компонент `WEBDASH`, `scripts/webdash/`); внутри статус + backlog фич |
 | [docs/V2-WEB-UI-LAYOUT.md](docs/V2-WEB-UI-LAYOUT.md) | Визуальный язык V2 — layout patterns, page mockups, design tokens, ambient mode |
 | [docs/THERMAL-GUARD.md](docs/THERMAL-GUARD.md) | Staged docker throttle/pause/stop при sustained temp |
 | [docs/PI-TWEAKS.md](docs/PI-TWEAKS.md) | HW watchdog, EEPROM, WiFi/sysctl tunes |

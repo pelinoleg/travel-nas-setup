@@ -2,6 +2,29 @@
 
 Significant changes to travel-nas-setup. Newest first.
 
+## 2026-06-05 — Web-дашборд для DSI (компонент WEBDASH)
+
+Новый веб-дашборд под Waveshare 4.3″ DSI (800×480) — замена pygame для этого
+экрана (pygame остаётся для MHS35). Реализация V2-плана (docs/V2-WEB-DASHBOARD.md).
+
+- Стек без сборки: **Flask** (apt python3-flask) на :8090, vanilla JS + **uPlot**,
+  SSE-пуш (без refresh), история метрик в SQLite на /mnt/storage. Код в
+  `scripts/webdash/`, ставится модулем `27-webdash.sh`.
+- Авто после визарда: `WEBDASH` ON по умолчанию, но **сам пропускается не на DSI**.
+  systemd-сервис + Chromium `--kiosk` автозапуск (labwc) + ярлык Dashboard.
+  `BIND=0.0.0.0` по умолчанию → открыт по сети `http://<host>.local:8090`.
+- Экраны: Overview (12 плиток + sparkline + alerts), детальный график по тапу
+  (5m/1h/24h/7d, фикс-шкала), System (топ CPU/RAM + графики), Disks (роли
+  SYSTEM/STORAGE/REMOVABLE, темпа цветом, чистка usb-imports), Docker по проектам
+  (start/stop/restart), Power (auto/normal/saver + boost 5/10/20/30), Screen
+  (яркость/таймаут+круговой отсчёт/ночь/поворот), Network (AP info/Force AP/
+  Tailscale/reconnect), Backups (photo/nas real-time + auto-open), Logs, Settings
+  (Today/verify/restart/конфиги view+edit/accent/QR сервисов).
+- Действия через sudo NOPASSWD (отдельный sudoers, visudo-проверка).
+- Telegram `/screenshot` теперь снимает Wayland-экран через grim (fallback, когда
+  нет pygame-дашборда) — раньше работал только со старым дашбордом.
+- `20-desktop` на DSI: ярлыки docker-сервисов с фавиконками + Storage; без pygame.
+
 ## 2026-06-05 — DESKTOP_AUTH: + passwordless reboot/poweroff в терминале
 
 - К polkit-правилу добавлен sudoers (`/etc/sudoers.d/travel-nas-poweroff`):

@@ -2,6 +2,28 @@
 
 Документ-парковка идей под новый экран **Waveshare 4.3″ DSI 800×480 IPS capacitive** который поставится в Pi 4 (отдельный travel-NAS, второй девайс — не заменяет существующий с MHS35).
 
+---
+
+## ✅ СТАТУС: база реализована (июнь 2026, компонент `WEBDASH`)
+
+Web-дашборд построен и работает на Pi 4 + DSI. **Стек отличается от изначально задуманного** (проще, без сборки):
+
+| План в этом доке | Что вышло в реальности |
+|---|---|
+| FastAPI + HTMX/Alpine + Tailwind | **Flask** + vanilla JS + **uPlot**, **без сборки** (apt `python3-flask`) |
+| `chromium-kiosk` LXDE autostart :5000 | Chromium `--kiosk` в **labwc autostart**, порт **:8090**, флаги `--password-store=basic --disable-features=Translate,TranslateUI --ozone-platform=wayland` |
+| `dashboard-mode.sh web/pygame` свитч | **Не делали** — вместо свитча модули гейтятся по типу экрана: DSI → webdash (модуль `27-webdash` сам пропускается не на DSI), MHS35 → pygame. Проще. |
+| SSE live | ✅ SSE, без refresh |
+| Стейт `/var/lib`,`/var/run` | ✅ + история метрик в SQLite на `/mnt/storage` |
+
+**Развёртывание (само, после визарда с выбором Waveshare DSI):** компонент `WEBDASH` (ON по умолчанию, на не-DSI пропускается) ставит flask+grim, код в `/opt/travel-nas-dashboard/`, systemd-сервис `travel-nas-webdash`, kiosk-автозапуск, sudoers, ярлык Dashboard. По умолчанию `BIND=0.0.0.0` → открыт по сети `http://<host>.local:8090`.
+
+**Реализованные экраны/фичи:** Overview (12 плиток: CPU/Temp/RAM/Traffic/Disk/Power/Screen/WiFi/Docker/Thermal/Services/YT + строка бэкапов), sparkline на плитках, цветовые пороги, alerts-баннер; детальный график по тапу (5m/1h/24h/7d, фикс-шкала 0–max); System (топ процессов CPU+RAM, мини-графики); Disks (по устройствам: SYSTEM·microSD / STORAGE·main / REMOVABLE, заполнение, темпа в углу с цветом, чистка usb-imports); Docker по проектам (start/stop/restart); Power (auto/normal/saver + CPU-boost 5/10/20/30); Screen (яркость 0–100, таймаут+круговой отсчёт, ночное затемнение, поворот); Network (AP info, Force AP, Tailscale toggle+peers, reconnect WiFi); Backups (photo/nas real-time прогресс фоном + авто-переход, Run/Stop); Logs; Settings (Today, verify scrub, restart сервисов, конфиги view+edit, accent color, сетевой URL). Telegram `/screenshot` через grim.
+
+Ниже — исходный пул идей; **отмечено что уже сделано**.
+
+---
+
 ## Решение архитектуры
 
 | Что | Решение |
@@ -36,12 +58,12 @@ sudo dashboard-mode.sh status   # что сейчас активно
 
 ### Уже точно нужно (из текущего разговора)
 
-- [ ] **Графики** — CPU temp 24ч, T7 used бар во времени, throughput backups, throttle events
-- [ ] **File browser** `/mnt/storage/` с thumbnail'ами (libvips/sharp для preview), delete/move/rename
-- [ ] **Backup folder picker** — tree-view выбор папок NAS-модулей, чекбоксы. Заменяет ручное редактирование `nas-backup.conf`.
-- [ ] **Логи с фильтром/поиском** — все `/mnt/storage/_logs/*.log` в одном UI, regex search, follow tail, syntax highlight для ERROR/WARN
-- [ ] **Тестовый ввод** — токены TG, NAS-password, services-conf редактор прямо в UI (сейчас pygame не умеет input)
-- [ ] **Удалить файлы** — корзина с move-to-trash (как `_deleted/`)
+- [x] **Графики** — CPU/temp/RAM/disk/traffic, 5m/1h/24h/7d, история в SQLite. (бар T7 used и throttle-events можно добавить)
+- [ ] **File browser** `/mnt/storage/` с thumbnail'ами — пока через стек Filebrowser (:8082), нативного в дашборде нет
+- [ ] **Backup folder picker** — пока правка `nas-backup.conf` через редактор конфигов (Settings → Configs)
+- [~] **Логи** — есть (journalctl наших юнитов), но **без фильтра/поиска/подсветки** — TODO
+- [x] **Тестовый ввод / редактор конфигов** — Settings → Configs (view + edit + save через sudo tee)
+- [~] **Удалить файлы** — есть чистка `usb-imports/` (Disks), полноценной корзины `_deleted/` нет
 
 ### NAS-расширения
 
@@ -49,7 +71,7 @@ sudo dashboard-mode.sh status   # что сейчас активно
 - [ ] **Duplicate finder** (jdupes wrap) — найти и почистить дубли в `usb-imports/`
 - [ ] **Smart trash browser** — что в `_deleted/` от nas-backup, восстановить файл одной кнопкой
 - [ ] **Backup timeline** — календарь когда что бэкапилось, размер дельта, длительность
-- [ ] **«Что нового сегодня»** — список файлов добавленных за последние 24ч
+- [~] **«Today» / сводка дня** — Settings → Today (из daily-summary.json); списка именно файлов за 24ч пока нет
 - [ ] **Folder bookmarks** — quick-access к Music/Photos-Other/...
 
 ### Photography-specific (твой кейс)
@@ -65,10 +87,10 @@ sudo dashboard-mode.sh status   # что сейчас активно
 
 - [ ] **Battery widget** — если поставишь INA219/UPS HAT, текущее напряжение/ток/процент
 - [ ] **Power consumption graph** — ваты во времени, видно сколько кушает на powerbank'е
-- [ ] **WiFi сканер + connect** — заменяет comitup web-portal, видно networks с уровнем сигнала, тапнул → SSID + password
-- [ ] **QR-коды для share** — кнопка «Сгенерировать QR для Samba URL» / Photoview / SSH — на телефоне сканируешь и open. Удобно когда показываешь кому-то фото.
-- [ ] **Speed test** — `iperf3` к домашнему NAS или speedtest-cli, видно реальную скорость WiFi в текущей точке
-- [ ] **Tailscale device list** — кто online, latency, кнопка ping
+- [~] **WiFi сканер + connect** — есть reconnect + Force AP (Network); скана сетей со списком/паролем нет — TODO
+- [x] **QR-коды для share** — Services → тап по сервису → QR для открытия на телефоне
+- [ ] **Speed test** — `iperf3`/speedtest — не делали
+- [~] **Tailscale** — есть статус (up/peers) + connect/disconnect (Network); списка устройств с latency/ping нет
 - [ ] **Captive portal helper** — детектит «WiFi есть но нет интернета», открывает portal-URL в этом же Chromium
 - [ ] **Map с текущим местоположением** — если поставишь GPS dongle (или просто IP geo)
 - [ ] **«Trip log»** — когда устройство было on, где (по GPS / WiFi BSSID), время непрерывной работы
@@ -82,10 +104,10 @@ sudo dashboard-mode.sh status   # что сейчас активно
 
 ### Maintenance / diagnostics
 
-- [ ] **«Diagnostics report» one-tap** — журнал + dmesg + status JSONы + verify результат в zip → положить на T7 + послать в TG. Полезно когда что-то идёт не так в дороге.
-- [ ] **Failed units panel** — список `systemctl --failed` с restart-кнопкой
-- [ ] **SMART history** — графики атрибутов SSD во времени (Power_On_Hours, Wear_Level)
-- [ ] **«Force scrub now»** — кнопка запуска `nas-verify` с прогресс-баром
+- [ ] **«Diagnostics report» one-tap** — журнал + dmesg + status JSONы + verify в zip → на T7 + в TG
+- [ ] **Failed units panel** — список `systemctl --failed` с restart-кнопкой (есть restart tg/dashboard в Settings, общего списка нет)
+- [ ] **SMART history** — графики атрибутов SSD во времени (сейчас только текущая темпа/health)
+- [x] **«Force scrub now»** — Settings → Run verify (+ дата следующего); прогресс-бара пока нет
 - [ ] **Container restart history** — graph «когда что упало»
 
 ### Security / privacy

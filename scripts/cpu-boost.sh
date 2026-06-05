@@ -75,7 +75,7 @@ cmd_status() {
 }
 
 case "${1:-status}" in
-    on|start) cmd_on "$@" ;;
+    on|start) [[ "${2:-}" =~ ^[0-9]+$ ]] && BOOST_MINUTES="$2"; cmd_on ;;
     off|stop) cmd_off "$@" ;;
     status)   cmd_status ;;
     *) echo "Usage: $0 {on|off|status}" >&2; exit 1 ;;

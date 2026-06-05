@@ -77,7 +77,8 @@
 
   <section id="tab-system" class="tab">
     <div class="cols">
-      <div><div class="h">Top processes</div><table id="proc"></table></div>
+      <div><div class="h">Top CPU</div><table id="proc-cpu"></table>
+        <div class="h" style="margin-top:12px">Top RAM</div><table id="proc-mem"></table></div>
       <div><div class="h">Graphs (1h)</div><div class="minigraphs">
         <div><span class="gl">CPU %</span><div id="g-cpu" class="mg"></div></div>
         <div><span class="gl">Temp °C</span><div id="g-temp" class="mg"></div></div>
@@ -114,7 +115,10 @@
     <div class="seg big" id="powermode"><button data-mode="auto">Auto</button><button data-mode="normal">Normal</button><button data-mode="saver">Saver</button></div>
     <div class="modedesc" id="mode-desc"></div>
     <div class="sideinfo" id="power-info"></div>
-    <button id="act-boost" class="wide"><svg class="ic"><use href="#i-zap"/></svg>CPU Boost (5 min)</button>
+    <div class="h" style="margin-top:10px">CPU Boost — lift Docker limits for…</div>
+    <div class="seg big" id="boost-seg">
+      <button data-min="5">5 min</button><button data-min="10">10 min</button>
+      <button data-min="20">20 min</button><button data-min="30">30 min</button></div>
   </div>
 </div>
 

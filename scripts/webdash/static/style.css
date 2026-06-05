@@ -62,10 +62,10 @@ main{position:relative;height:392px}
 
 .cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .h{color:var(--mut);font-size:12px;margin:2px 0 4px}
-table#proc{width:100%;border-collapse:collapse;font-size:12px}
-table#proc td{padding:4px;border-bottom:1px solid var(--line)}
-table#proc td:nth-child(3),table#proc td:nth-child(4){text-align:right;color:var(--mut)}
-.minigraphs>div{margin-bottom:6px}.gl{font-size:11px;color:var(--mut)}.mg{height:78px}
+table#proc-cpu,table#proc-mem{width:100%;border-collapse:collapse;font-size:12px}
+#proc-cpu td,#proc-mem td{padding:3px 4px;border-bottom:1px solid var(--line)}
+#proc-cpu td:nth-child(2),#proc-cpu td:nth-child(3),#proc-mem td:nth-child(2),#proc-mem td:nth-child(3){text-align:right;color:var(--mut)}
+.minigraphs>div{margin-bottom:8px}.gl{font-size:11px;color:var(--mut)}.mg{height:90px}
 
 .diskgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .disk{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:11px}

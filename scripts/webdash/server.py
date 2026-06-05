@@ -297,13 +297,14 @@ def api_history():
     except Exception as e: return jsonify({"error": str(e)}), 500
 @app.route("/api/processes")
 def api_processes():
-    out = sh(["ps", "-eo", "pid,comm,pcpu,pmem", "--sort=-pcpu", "--no-headers"])
-    rows = []
-    for line in out.splitlines()[:14]:
-        f = line.split(None, 3)
-        if len(f) >= 4:
-            rows.append({"pid": f[0], "cmd": f[1], "cpu": f[2], "mem": f[3]})
-    return jsonify(rows)
+    def top(by):
+        rows = []
+        for line in sh(["ps", "-eo", "pid,comm,pcpu,pmem", "--sort=-" + by, "--no-headers"]).splitlines()[:8]:
+            f = line.split(None, 3)
+            if len(f) >= 4:
+                rows.append({"pid": f[0], "cmd": f[1], "cpu": f[2], "mem": f[3]})
+        return rows
+    return jsonify({"cpu": top("pcpu"), "mem": top("pmem")})
 @app.route("/api/logs")
 def api_logs():
     units = ["travel-nas-webdash", "nas-backup-runtime", "thermal-guard", "comitup"]
@@ -406,6 +407,9 @@ def api_action(name):
     if name == "power-mode":
         m = (request.json or {}).get("mode")
         cmd = ["sudo", "-n", "/usr/local/bin/power-mode.sh", m] if m in ("auto", "normal", "saver") else None
+    elif name == "cpu-boost":
+        mn = str((request.json or {}).get("min", ""))
+        cmd = ["sudo", "-n", "/usr/local/bin/cpu-boost.sh", "on"] + ([mn] if mn.isdigit() else [])
     else:
         cmd = ACTIONS.get(name)
     if not cmd: return jsonify({"error": "unknown"}), 400

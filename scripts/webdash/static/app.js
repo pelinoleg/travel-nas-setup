@@ -114,7 +114,7 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   // disk tile bar + free
   const dbar=$('#disk-bar');if(dbar){dbar.style.width=(st.pct||0)+'%';
     dbar.className=st.pct>=95?'crit':st.pct>=88?'high':st.pct>=75?'warn':'';}
-  $('#disk-sub').textContent=st.size?`${(st.used/1e12).toFixed(2)} / ${(st.size/1e12).toFixed(2)} TB`:'';
+  $('#disk-sub').textContent=st.size?`${(st.used/1e12).toFixed(2)}/${(st.size/1e12).toFixed(2)} TB${st.disk_temp!=null?' · '+st.disk_temp+'°C':''}`:'';
   // power tile color by mode
   const pt=$('#power-tile');if(pt){pt.className='tile';pt.classList.add('pm-'+(s.pmode||'auto'));}
   // wifi tile
@@ -185,12 +185,13 @@ function setDetail(t,v){if(dchart)dchart.setData([t,v]);
 
 /* System */
 async function loadProc(){try{const r=await(await fetch('/api/processes')).json();
-  $('#proc').innerHTML=r.map(p=>`<tr><td>${p.cmd}</td><td>${p.pid}</td><td>${p.cpu}%</td><td>${p.mem}%</td></tr>`).join('');}catch(e){}}
+  const tbl=rows=>rows.map(p=>`<tr><td>${p.cmd}</td><td>${p.cpu}%</td><td>${p.mem}%</td></tr>`).join('');
+  $('#proc-cpu').innerHTML=tbl(r.cpu||[]);$('#proc-mem').innerHTML=tbl(r.mem||[]);}catch(e){}}
 let sysG={};
 async function sysGraphs(){for(const[m,id]of[['cpu','g-cpu'],['temp','g-temp'],['mem','g-mem']]){
   try{const r=await(await fetch(`/api/history?m=${m}&range=1h`)).json();const el=$('#'+id);el.innerHTML='';
-    sysG[m]=new uPlot({width:el.clientWidth||360,height:78,cursor:{show:false},legend:{show:false},
-      scales:{x:{time:true},y:yrange(m)},axes:[{stroke:'#8b949e',size:20},{stroke:'#8b949e',size:34}],
+    sysG[m]=new uPlot({width:el.clientWidth||360,height:el.clientHeight||90,cursor:{show:false},legend:{show:false},
+      scales:{x:{time:true},y:yrange(m)},axes:[{stroke:'#8b949e',size:26},{stroke:'#8b949e',size:34}],
       series:[{},{stroke:MET[m].col,width:2,fill:MET[m].col+'22',points:{show:false}}]},[r.t||[],r.v||[]],el);}catch(e){}}}
 setInterval(()=>{if(activeTab==='system')loadProc();},5000);
 
@@ -263,7 +264,7 @@ function renderPower(){const s=last.system||{},pm=s.pmode||'auto';
   $('#power-info').innerHTML=R('mode',pm)+R('governor',s.governor||'?')+R('frequency',(s.freq_mhz||0)+' MHz')
     +R('CPU temp',(s.temp??'?')+'°C')+R('throttled',s.throttled_now?'YES ⚠':'no')+R('load',(s.load||[]).join(' '));}
 $$('#powermode button').forEach(b=>b.onclick=()=>{doAction('power-mode',{mode:b.dataset.mode});setTimeout(renderPower,800);});
-$('#act-boost').onclick=()=>doAction('cpu-boost');
+$$('#boost-seg button').forEach(b=>b.onclick=()=>{doAction('cpu-boost',{min:+b.dataset.min});toast('CPU boost '+b.dataset.min+'m');});
 
 /* actions / modal */
 $('#btn-power').onclick=()=>openModal('Power',[['Reboot','reboot',1],['Shut down','poweroff',1]]);

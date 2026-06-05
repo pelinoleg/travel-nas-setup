@@ -2,6 +2,17 @@
 
 Significant changes to travel-nas-setup. Newest first.
 
+## 2026-06-05 — desktop: фавиконки сервисов + trusted-ярлыки (Trixie/labwc)
+
+- Ярлыки docker-сервисов на DSI теперь с **фавиконками самих сервисов** (а не
+  одинаковым глобусом). `resolve_icon` достаёт иконку как браузер: парсит
+  `<link rel=icon>` на `localhost:PORT` → качает; fallback на dashboard-icons CDN
+  по имени (для SPA вроде scrutiny, что не сервят favicon); иначе глобус. Файлы в
+  `~/.local/share/icons/travel-nas/`, `Icon=` — абсолютным путём.
+- Фикс «ярлыки показывали имя файла без иконки и просили подтверждение»: на
+  Trixie/labwc PCManFM требует `gio metadata::trusted` (одного +x мало) +
+  `quick_exec=1`. Icon по имени темы там не резолвится → только абсолютный путь.
+
 ## 2026-06-05 — desktop: на DSI ярлыки на docker-сервисы вместо дашборда
 
 - `20-desktop.sh` теперь screen-aware. На **DSI** (где дашборда нет) больше не

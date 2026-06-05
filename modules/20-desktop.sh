@@ -51,6 +51,53 @@ EOF
               "$DESKTOP_DIR/Travel-NAS-Calibrate.desktop" \
               "$DESKTOP_DIR"/Service-*.desktop 2>/dev/null
 
+        # Иконки для ярлыков = фавиконки самих сервисов (а не одинаковый глобус).
+        # resolve_icon: как браузер достаёт favicon — (1) парсим <link rel=icon>
+        # на localhost:PORT и качаем; (2) fallback dashboard-icons CDN по имени
+        # (для SPA вроде scrutiny, что не сервят favicon); (3) глобус. Кладём в
+        # ~/.local/share/icons/travel-nas/. Icon= ставим АБСОЛЮТНЫМ путём —
+        # pcmanfm на labwc не резолвит desktop-иконку по имени темы.
+        ICON_DIR="$USER_HOME/.local/share/icons/travel-nas"
+        mkdir -p "$ICON_DIR"
+        GLOBE=$(ls /usr/share/icons/PiXtrix/48x48/apps/web-browser.png \
+                   /usr/share/icons/*/48x48/apps/web-browser.png \
+                   /usr/share/icons/hicolor/48x48/apps/chromium.png 2>/dev/null | head -1)
+        GLOBE="${GLOBE:-web-browser}"
+        is_img() {
+            if command -v file >/dev/null 2>&1; then
+                file -b --mime-type "$1" 2>/dev/null | grep -q '^image/'
+            else
+                [[ -s "$1" && "$(head -c1 "$1" 2>/dev/null)" != "<" ]]
+            fi
+        }
+        resolve_icon() {   # name port → echo путь к иконке
+            local name="$1" port="$2" tmp eff hrefs pick url ext out
+            tmp="$(mktemp)"
+            eff=$(curl -sL -o "$tmp" -w '%{url_effective}' --max-time 5 "http://localhost:$port/" 2>/dev/null || echo "")
+            hrefs=$(grep -oiE '<link[^>]+rel="[^"]*icon[^"]*"[^>]*>' "$tmp" 2>/dev/null \
+                    | grep -oiE 'href="[^"]+"' | sed 's/href="//;s/"$//')
+            rm -f "$tmp"
+            pick=$(printf '%s\n' "$hrefs" | grep -iE 'apple-touch|android-chrome|192|180|152|144|128' | head -1)
+            [[ -n "$pick" ]] || pick=$(printf '%s\n' "$hrefs" | grep -iE '\.png' | head -1)
+            [[ -n "$pick" ]] || pick=$(printf '%s\n' "$hrefs" | head -1)
+            [[ -n "$pick" ]] || pick="/favicon.ico"
+            case "$pick" in
+                http*) url="$pick" ;;
+                /*)    url="http://localhost:$port$pick" ;;
+                *)     url="${eff%/*}/${pick#./}" ;;
+            esac
+            ext="${url##*.}"; ext="${ext%%\?*}"
+            case "$ext" in ico|png|svg|jpg|jpeg) : ;; *) ext=png ;; esac
+            out="$ICON_DIR/$name.$ext"
+            if curl -fsSL --max-time 5 "$url" -o "$out" 2>/dev/null && is_img "$out"; then echo "$out"; return; fi
+            rm -f "$out"
+            out="$ICON_DIR/$name.png"
+            if curl -fsSL --max-time 10 "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/$name.png" \
+                 -o "$out" 2>/dev/null && is_img "$out"; then echo "$out"; return; fi
+            rm -f "$out"
+            echo "$GLOBE"
+        }
+
         # Ярлыки на установленные docker-сервисы. «Установлен» = выбран сейчас
         # (DO_STACK_<NAME>) ИЛИ есть /opt/stacks/<name> (стоит с прошлого раза).
         # LABEL/PORT — из meta.conf в репо. Открываем localhost:PORT в браузере.
@@ -66,6 +113,7 @@ EOF
                 source "$STACKS_SRC/$sname/meta.conf" 2>/dev/null || true
                 [[ -n "$PORT" ]] || continue
                 disp="${LABEL%% —*}"   # короткое имя до « —»
+                icon="$(resolve_icon "$sname" "$PORT")"
                 cat > "$DESKTOP_DIR/Service-$sname.desktop" << EOF
 [Desktop Entry]
 Version=1.0
@@ -73,7 +121,7 @@ Type=Application
 Name=$disp
 Comment=$LABEL
 Exec=xdg-open http://localhost:$PORT
-Icon=web-browser
+Icon=$icon
 Terminal=false
 Categories=Network;
 EOF
@@ -81,14 +129,15 @@ EOF
         fi
         # Dockge — менеджер стеков (если установлен).
         if [[ -d /opt/dockge ]]; then
-            cat > "$DESKTOP_DIR/Service-dockge.desktop" << 'EOF'
+            icon="$(resolve_icon dockge 5001)"
+            cat > "$DESKTOP_DIR/Service-dockge.desktop" << EOF
 [Desktop Entry]
 Version=1.0
 Type=Application
 Name=Dockge
 Comment=Docker stacks manager
 Exec=xdg-open http://localhost:5001
-Icon=web-browser
+Icon=$icon
 Terminal=false
 Categories=Network;
 EOF

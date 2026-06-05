@@ -25,6 +25,9 @@ if (
     fetch_script "webdash/static/index.html"  "$WD_DIR/static/index.html"
     fetch_script "webdash/static/app.js"      "$WD_DIR/static/app.js"
     fetch_script "webdash/static/style.css"   "$WD_DIR/static/style.css"
+    # cpu-boost.sh — нужен кнопкам CPU Boost. На DSI 19-display его НЕ кладёт
+    # (фетч в MHS35-ветке после DSI-return), поэтому кладём здесь сами.
+    fetch_script "cpu-boost.sh" /usr/local/bin/cpu-boost.sh
 
     # uPlot (вендорим локально — дашборд должен работать оффлайн)
     UP=1.6.31

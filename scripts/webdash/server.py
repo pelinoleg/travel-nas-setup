@@ -182,7 +182,12 @@ def sample_services():
     projects = [{"project": k, "containers": v,
                  "running": sum(1 for c in v if c["state"] == "running"), "total": len(v)}
                 for k, v in sorted(projs.items())]
-    return {"projects": projects,
+    photo = {}
+    try:
+        dirs = sorted(glob.glob("/mnt/storage/usb-imports/*/"), key=os.path.getmtime, reverse=True)
+        if dirs: photo = {"last": time.strftime("%d.%m %H:%M", time.localtime(os.path.getmtime(dirs[0])))}
+    except Exception: pass
+    return {"projects": projects, "photo": photo,
             "nas_backup": read_json("/var/lib/travel-nas/nas-backup.status.json", {}),
             "progress": read_json("/var/run/travel-nas/backup-progress.json", {})}
 
@@ -226,6 +231,7 @@ ACTIONS = {
     "poweroff": ["sudo", "-n", "/usr/sbin/poweroff"],
     "update": ["sudo", "-n", "/usr/local/bin/travel-nas-update"],
     "nas-backup": ["sudo", "-n", "/usr/local/bin/nas-backup.sh"],
+    "nas-stop": ["sudo", "-n", "/usr/bin/systemctl", "stop", "nas-backup-runtime"],
     "cpu-boost": ["sudo", "-n", "/usr/local/bin/cpu-boost.sh", "on"],
 }
 def compose_file(project):
@@ -255,7 +261,7 @@ def api_stream():
 @app.route("/api/history")
 def api_history():
     m, rng = request.args.get("m", "temp"), request.args.get("range", "1h")
-    secs = {"1h": 3600, "24h": 86400, "7d": 7 * 86400}.get(rng, 3600)
+    secs = {"5m": 300, "1h": 3600, "24h": 86400, "7d": 7 * 86400}.get(rng, 3600)
     if m not in {"cpu", "temp", "mem", "disk", "net_rx", "net_tx"}:
         return jsonify({"error": "bad"}), 400
     try:

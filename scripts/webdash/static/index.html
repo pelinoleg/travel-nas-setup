@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru" translate="no">
+<html lang="en" translate="no">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=800, initial-scale=1, user-scalable=no">
@@ -10,100 +10,120 @@
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+<!-- icon sprite (Lucide-style, stroke=currentColor) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-server" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><line x1="6" y1="7" x2="6.01" y2="7"/><line x1="6" y1="17" x2="6.01" y2="17"/></symbol>
+<symbol id="i-cpu" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></symbol>
+<symbol id="i-thermo" viewBox="0 0 24 24"><path d="M14 14.76V4a2 2 0 0 0-4 0v10.76a4 4 0 1 0 4 0z"/></symbol>
+<symbol id="i-ram" viewBox="0 0 24 24"><rect x="2" y="8" width="20" height="8" rx="1"/><path d="M6 16v3M10 16v3M14 16v3M18 16v3"/></symbol>
+<symbol id="i-net" viewBox="0 0 24 24"><path d="M5 12.55a11 11 0 0 1 14 0M8.5 16.1a6 6 0 0 1 7 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></symbol>
+<symbol id="i-disk" viewBox="0 0 24 24"><line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></symbol>
+<symbol id="i-zap" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></symbol>
+<symbol id="i-power" viewBox="0 0 24 24"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></symbol>
+<symbol id="i-exit" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></symbol>
+<symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 4 20 12 6 20 6 4"/></symbol>
+<symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+<symbol id="i-restart" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 4 21 9 16 9"/></symbol>
+<symbol id="i-camera" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="3.5"/></symbol>
+<symbol id="i-cloud" viewBox="0 0 24 24"><path d="M4 14.5a4 4 0 0 1 .9-7.9 5 5 0 0 1 9.6-1.6A3.5 3.5 0 0 1 19 13.5"/><polyline points="8.5 15 12 11.5 15.5 15"/><line x1="12" y1="11.5" x2="12" y2="21"/></symbol>
+<symbol id="i-back" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></symbol>
+<symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></symbol>
+<symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4l1.4-1.4M17 7l1.4-1.4"/></symbol>
+<symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></symbol>
+<symbol id="i-activity" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></symbol>
+<symbol id="i-list" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></symbol>
+<symbol id="i-box" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.3 7 12 12 20.7 7"/><line x1="12" y1="22" x2="12" y2="12"/></symbol>
+</defs></svg>
+
 <header>
   <div class="bar">
+    <svg class="ic head"><use href="#i-server"/></svg>
     <div class="addr"><span id="host">…</span><span id="ip" class="ip"></span></div>
     <div class="chips" id="topchips"></div>
-    <div class="right"><span id="clock"></span>
-      <button id="btn-power" title="Питание">⏻</button>
-      <button id="btn-exit" title="На десктоп">⤓</button></div>
+    <span id="clock"></span>
+    <button id="btn-power" class="bigbtn" title="Power"><svg class="ic"><use href="#i-power"/></svg></button>
+    <button id="btn-exit" class="bigbtn" title="To desktop"><svg class="ic"><use href="#i-exit"/></svg></button>
   </div>
   <nav id="tabs">
-    <button data-tab="overview" class="active">Обзор</button>
-    <button data-tab="system">Система</button>
-    <button data-tab="storage">Диски</button>
-    <button data-tab="docker">Docker</button>
-    <button data-tab="logs">Логи</button>
-    <button data-tab="settings">⚙</button>
+    <button data-tab="overview" class="active"><svg class="ic"><use href="#i-activity"/></svg>Overview</button>
+    <button data-tab="system"><svg class="ic"><use href="#i-cpu"/></svg>System</button>
+    <button data-tab="storage"><svg class="ic"><use href="#i-disk"/></svg>Disks</button>
+    <button data-tab="docker"><svg class="ic"><use href="#i-box"/></svg>Docker</button>
+    <button data-tab="logs"><svg class="ic"><use href="#i-list"/></svg>Logs</button>
+    <button data-tab="settings"><svg class="ic"><use href="#i-settings"/></svg></button>
   </nav>
 </header>
 
 <main>
   <!-- OVERVIEW -->
   <section id="tab-overview" class="tab active">
-    <div class="cards">
-      <div class="card" data-metric="cpu"><div class="k">CPU</div><div class="v"><b id="cpu">–</b>%</div><canvas class="spark" data-s="cpu"></canvas><div class="sub" id="cpu-sub"></div></div>
-      <div class="card" data-metric="temp"><div class="k">ТЕМП</div><div class="v"><b id="temp">–</b>°</div><canvas class="spark" data-s="temp"></canvas><div class="sub" id="temp-sub"></div></div>
-      <div class="card" data-metric="mem"><div class="k">RAM</div><div class="v"><b id="mem">–</b></div><canvas class="spark" data-s="mem"></canvas><div class="sub" id="mem-sub">GB</div></div>
-      <div class="card" data-metric="net_rx"><div class="k">СЕТЬ</div><div class="v" style="font-size:18px"><span id="net">–</span></div><canvas class="spark" data-s="net_rx"></canvas><div class="sub">↑↓ MB/s</div></div>
+    <div class="tiles">
+      <div class="tile" data-metric="cpu"><div class="th"><svg class="ic"><use href="#i-cpu"/></svg>CPU</div><div class="tv"><b id="cpu">–</b>%</div><canvas class="spark" data-s="cpu"></canvas></div>
+      <div class="tile" data-metric="temp"><div class="th"><svg class="ic"><use href="#i-thermo"/></svg>Temp</div><div class="tv"><b id="temp">–</b>°</div><canvas class="spark" data-s="temp"></canvas></div>
+      <div class="tile" data-metric="mem"><div class="th"><svg class="ic"><use href="#i-ram"/></svg>RAM</div><div class="tv"><b id="mem">–</b></div><canvas class="spark" data-s="mem"></canvas></div>
+      <div class="tile" data-metric="net_rx"><div class="th"><svg class="ic"><use href="#i-net"/></svg>Network</div><div class="tv2" id="net">–</div><canvas class="spark" data-s="net_rx"></canvas></div>
+      <div class="tile" data-metric="disk"><div class="th"><svg class="ic"><use href="#i-disk"/></svg>Disk</div><div class="tv"><b id="disk">–</b>%</div><canvas class="spark" data-s="disk"></canvas></div>
+      <div class="tile static"><div class="th"><svg class="ic"><use href="#i-clock"/></svg>Uptime</div><div class="tv2" id="uptime">–</div></div>
+      <div class="tile static"><div class="th"><svg class="ic"><use href="#i-zap"/></svg>Power</div><div class="tv2" id="power">–</div><div class="sub" id="power-sub"></div></div>
+      <div class="tile static" id="screen-tile"><div class="th"><svg class="ic"><use href="#i-sun"/></svg>Screen</div>
+        <div class="ring"><svg viewBox="0 0 40 40"><circle class="rbg" cx="20" cy="20" r="16"/><circle class="rfg" id="ring" cx="20" cy="20" r="16"/></svg><span id="screen-cd">∞</span></div></div>
     </div>
-    <div class="chiprow" id="ovchips"></div>
-    <div class="graphpanel">
-      <div class="graphhead"><span id="graph-title"></span>
-        <span class="ranges">
-          <button data-range="1h" class="active">1ч</button>
-          <button data-range="24h">24ч</button>
-          <button data-range="7d">7д</button></span></div>
-      <div id="chart"></div>
-    </div>
+    <div class="backups" id="backups"></div>
   </section>
 
   <!-- SYSTEM -->
   <section id="tab-system" class="tab">
-    <div class="chiprow" id="syschips"></div>
     <div class="cols">
-      <div><div class="h">Топ процессов</div><table id="proc"></table></div>
-      <div><div class="h">Графики</div>
+      <div><div class="h">Top processes</div><table id="proc"></table></div>
+      <div><div class="h">Graphs (1h)</div>
         <div class="minigraphs">
-          <div><span class="gl">CPU</span><div id="g-cpu" class="mg"></div></div>
-          <div><span class="gl">Температура</span><div id="g-temp" class="mg"></div></div>
-          <div><span class="gl">RAM</span><div id="g-mem" class="mg"></div></div>
+          <div><span class="gl">CPU %</span><div id="g-cpu" class="mg"></div></div>
+          <div><span class="gl">Temp °C</span><div id="g-temp" class="mg"></div></div>
+          <div><span class="gl">RAM GB</span><div id="g-mem" class="mg"></div></div>
         </div></div>
     </div>
   </section>
 
-  <!-- STORAGE / DISKS -->
   <section id="tab-storage" class="tab"><div id="disks" class="diskgrid"></div></section>
-
-  <!-- DOCKER -->
   <section id="tab-docker" class="tab"><div id="projects" class="projgrid"></div></section>
-
-  <!-- LOGS -->
-  <section id="tab-logs" class="tab">
-    <div class="logbar"><button id="logs-refresh">Обновить</button></div>
-    <pre id="logs-body">…</pre></section>
+  <section id="tab-logs" class="tab"><div class="logbar"><button id="logs-refresh"><svg class="ic"><use href="#i-restart"/></svg>Refresh</button></div><pre id="logs-body">…</pre></section>
 
   <!-- SETTINGS -->
   <section id="tab-settings" class="tab">
-    <div class="setrow"><label>Яркость</label>
-      <input type="range" id="brightness" min="5" max="100" value="80">
-      <span id="brightness-val">80%</span></div>
-    <div class="setrow"><label>Гасить экран через</label>
-      <select id="screen-timeout">
-        <option value="0">никогда</option><option value="60">1 мин</option>
-        <option value="300">5 мин</option><option value="600">10 мин</option>
-        <option value="1800">30 мин</option></select></div>
-    <div class="setrow"><label>Ночное затемнение</label>
+    <div class="setrow"><label><svg class="ic"><use href="#i-sun"/></svg>Brightness</label>
+      <input type="range" id="brightness" min="5" max="100" value="80"><span id="brightness-val">80%</span></div>
+    <div class="setrow"><label><svg class="ic"><use href="#i-power"/></svg>Screen off after</label>
+      <select id="screen-timeout"><option value="0">never</option><option value="60">1 min</option>
+        <option value="300">5 min</option><option value="600">10 min</option><option value="1800">30 min</option></select></div>
+    <div class="setrow"><label><svg class="ic"><use href="#i-moon"/></svg>Night dim</label>
       <input type="time" id="night-from" value="23:00"> – <input type="time" id="night-to" value="07:00">
-      до <input type="number" id="night-level" min="5" max="100" value="20">%</div>
-    <div class="setrow"><label>Поворот (нужен reboot)</label>
-      <select id="rotate"><option value="">—</option><option>0</option><option>90</option>
-        <option>180</option><option>270</option></select>
-      <button id="rotate-apply">Применить</button></div>
-    <div class="setrow"><label>Power-профиль</label>
-      <span class="seg" id="powermode">
-        <button data-mode="auto">Auto</button><button data-mode="normal">Normal</button>
-        <button data-mode="saver">Saver</button></span></div>
-    <div class="setrow"><label>Обновление</label>
-      <button id="act-update">Обновить скрипты с GitHub</button>
-      <button id="act-boost">CPU Boost (5 мин)</button></div>
-    <div class="note">Авто-яркости нет (на панели нет датчика света) — работает ночное расписание выше.</div>
+      to <input type="number" id="night-level" min="5" max="100" value="20">%</div>
+    <div class="setrow"><label><svg class="ic"><use href="#i-restart"/></svg>Rotate (reboot)</label>
+      <select id="rotate"><option value="">—</option><option>0</option><option>90</option><option>180</option><option>270</option></select>
+      <button id="rotate-apply">Apply</button></div>
+    <div class="setrow"><label><svg class="ic"><use href="#i-zap"/></svg>Power profile</label>
+      <span class="seg" id="powermode"><button data-mode="auto">Auto</button><button data-mode="normal">Normal</button><button data-mode="saver">Saver</button></span></div>
+    <div class="setrow"><label><svg class="ic"><use href="#i-cloud"/></svg>Maintenance</label>
+      <button id="act-update">Update scripts</button><button id="act-boost">CPU boost 5m</button></div>
+    <div class="note">No auto-brightness (panel has no light sensor) — night schedule above is used instead.</div>
   </section>
 </main>
 
+<!-- detail overlay (graph on card tap) -->
+<div id="detail" class="detail hidden">
+  <div class="dhead"><button id="detail-back" class="bigbtn"><svg class="ic"><use href="#i-back"/></svg></button>
+    <span id="detail-title"></span>
+    <span class="ranges" id="detail-ranges">
+      <button data-range="5m">5m</button><button data-range="1h" class="active">1h</button>
+      <button data-range="24h">24h</button><button data-range="7d">7d</button></span></div>
+  <div id="dchart"></div>
+  <div class="dstats" id="detail-stats"></div>
+</div>
+
 <div id="modal" class="modal hidden"><div class="modalbox">
   <h3 id="modal-title"></h3><div id="modal-body" class="modalbtns"></div>
-  <button id="modal-cancel" class="cancel">Отмена</button></div></div>
+  <button id="modal-cancel" class="cancel">Cancel</button></div></div>
 <div id="toast" class="toast hidden"></div>
 
 <script src="/static/uplot.min.js"></script>

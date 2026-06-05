@@ -43,6 +43,7 @@ if (
 $DASH_USER ALL=(root) NOPASSWD: /usr/sbin/reboot, /usr/sbin/poweroff
 $DASH_USER ALL=(root) NOPASSWD: /usr/local/bin/travel-nas-update
 $DASH_USER ALL=(root) NOPASSWD: /usr/local/bin/nas-backup.sh
+$DASH_USER ALL=(root) NOPASSWD: /usr/bin/systemctl stop nas-backup-runtime
 $DASH_USER ALL=(root) NOPASSWD: /usr/local/bin/cpu-boost.sh on, /usr/local/bin/cpu-boost.sh off
 $DASH_USER ALL=(root) NOPASSWD: /usr/local/bin/power-mode.sh auto, /usr/local/bin/power-mode.sh normal, /usr/local/bin/power-mode.sh saver
 $DASH_USER ALL=(root) NOPASSWD: /usr/local/bin/dsi-rotate.sh 0, /usr/local/bin/dsi-rotate.sh 90, /usr/local/bin/dsi-rotate.sh 180, /usr/local/bin/dsi-rotate.sh 270

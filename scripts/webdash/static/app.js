@@ -51,7 +51,7 @@ function drawEvents(){const ev=_evCache,hid=evHidden(),filt=$('#ev-filters'),bod
     h+=`<div class="evcat c-${c.k}"><div class="evcat-title"><span class="evdot">${ic(c.ic)}</span><div><div class="evct">${c.label}</div><div class="evcn">${items.length} events</div></div></div><div class="evcat-list">`;
     items.slice(0,40).forEach(e=>{h+=`<div class="evrow"><span class="evlvl ${e.level||'ok'}"></span><div class="evbody"><div class="evtitle">${(e.title||'').slice(0,80)}</div>${e.sub?'<div class="evsub">'+e.sub+'</div>':''}</div><span class="evtime">${dt(e.ts)}</span></div>`;});
     h+=`</div></div>`;});
-  $('#events-body').innerHTML=h||'<div class="note">нет событий (все категории скрыты?)</div>';}
+  $('#events-body').innerHTML=h||'<div class="note">no events (all categories hidden?)</div>';}
 $$('#tabs button').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
 setInterval(()=>{const d=new Date();$('#clock').textContent=`${('0'+d.getHours()).slice(-2)}:${('0'+d.getMinutes()).slice(-2)}`;},1000);
 
@@ -184,7 +184,7 @@ function renderAlerts(s,st,sv,nw){const a=[];
   if(s.throttled_now)a.push(['crit','i-zap','Throttled']);
   if(s.temp>=82)a.push(['crit','i-thermo','CPU '+s.temp+'°C']);else if(s.temp>=72)a.push(['warn','i-thermo',s.temp+'°C']);
   if(st.mounted===false)a.push(['crit','i-disk','Storage disk NOT MOUNTED — backups disabled']);
-  else if(st.readonly)a.push(['crit','i-disk','Disk READ-ONLY (ext4 error) — нужен fsck/ребут']);
+  else if(st.readonly)a.push(['crit','i-disk','Disk READ-ONLY (ext4 error) — needs fsck/reboot']);
   else if(st.pct>=95)a.push(['crit','i-disk','Disk '+st.pct+'%']);else if(st.pct>=88)a.push(['warn','i-disk','Disk '+st.pct+'%']);
   if((nw.ip||'?')==='?')a.push(['warn','i-net','No network']);
   const nb=sv.nas_backup||{};if((nb.last_status||'')==='failed')a.push(['crit','i-cloud','Backup failed']);
@@ -237,7 +237,7 @@ function renderProjects(){const pr=(last.services||{}).projects||[];
 
 /* Apps tab: launcher of service UIs (tap → QR) */
 async function renderApps(){try{const r=await(await fetch('/api/services')).json();
-  $('#apps-grid').innerHTML=r.map((s,i)=>`<div class="appcard" data-i="${i}"><img class="appico" src="/api/appicon?u=${encodeURIComponent(s.url)}" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><svg class="ic appico" style="display:none"><use href="#i-grid"/></svg><div class="an">${s.name}</div><div class="au">${s.url.replace('http://','')}</div></div>`).join('')||'<div class="note">нет сервисов (поставь docker-стеки)</div>';
+  $('#apps-grid').innerHTML=r.map((s,i)=>`<div class="appcard" data-i="${i}"><img class="appico" src="/api/appicon?u=${encodeURIComponent(s.url)}" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><svg class="ic appico" style="display:none"><use href="#i-grid"/></svg><div class="an">${s.name}</div><div class="au">${s.url.replace('http://','')}</div></div>`).join('')||'<div class="note">no services (install docker stacks)</div>';
   $$('#apps-grid .appcard').forEach(el=>el.onclick=()=>{const s=r[el.dataset.i];openApp(s.name,s.url);});}catch(e){$('#apps-grid').innerHTML='error';}}
 function openApp(name,url){$('#appframe-title').textContent=name;$('#appframe-iframe').src=url;
   $('#appframe-qr').onclick=()=>showQR(name,url);$('#appframe').classList.remove('hidden');}
@@ -246,7 +246,7 @@ function showQR(name,url){$('#modal-title').textContent=name;const qr=qrcode(0,'
   $('#modal-body').innerHTML=`<div style="background:#fff;padding:10px;border-radius:10px;display:inline-block">${qr.createSvgTag({cellSize:5,margin:1})}</div><div style="margin-top:10px;color:var(--mut);font-size:13px">${url}</div>`;
   $('#modal').classList.remove('hidden');}
 async function renderServices(){try{const r=await(await fetch('/api/services')).json();
-  $('#services-body').innerHTML=(r.length?'<div class="svc-list">'+r.map((s,i)=>`<div class="svc-item" data-i="${i}"><span>${ic('i-grid')} ${s.name}</span><span class="u">${s.url.replace('http://','')} · QR</span></div>`).join('')+'</div>':'<div class="note">нет сервисов</div>')+'<div class="note">Тап по сервису → QR-код для открытия на телефоне.</div>';
+  $('#services-body').innerHTML=(r.length?'<div class="svc-list">'+r.map((s,i)=>`<div class="svc-item" data-i="${i}"><span>${ic('i-grid')} ${s.name}</span><span class="u">${s.url.replace('http://','')} · QR</span></div>`).join('')+'</div>':'<div class="note">no services</div>')+'<div class="note">Tap a service → QR code to open it on your phone.</div>';
   $$('#services-body .svc-item').forEach(el=>el.onclick=()=>{const s=r[el.dataset.i];showQR(s.name,s.url);});}catch(e){$('#services-body').innerHTML='error';}}
 
 /* Disks */
@@ -302,7 +302,7 @@ async function renderNasPage(){const sv=last.services||{},nb=sv.nas_backup||{},p
   const folders=(conf.modules||[]).map(m=>{const[mod,fold]=m.split('|');const e=byKey(fold||mod);
     const dot=e.status?`<span class="dot ${e.status==='ok'?'ok':'crit'}"></span> `:'';
     return `<div class="svc-item"><span>${ic('i-box')} <span class="ell">${mod}</span></span><span class="u">${dot}${e.size?e.size+' ':''}→ ${fold||mod}</span></div>`;}).join('')
-    ||`<div class="note">${cfg?'modules empty — добавь в Edit config (формат: rsync-модуль/подпапка|локальная_папка)':'not configured — нажми «Edit config»'}</div>`;
+    ||`<div class="note">${cfg?'modules empty — add via Edit config (format: rsync-module/subpath|local_folder)':'not configured — tap "Edit config"'}</div>`;
   // карточка последнего бэкапа (когда + успех). last_run/status бывают null —
   // тогда сигнал о наличии копии берём из exists+size + времени проверки (updated).
   let last_run=0,anyFail=false,hasData=false,totSz=0;
@@ -363,7 +363,7 @@ async function renderDiskPage(){const st=last.storage||{},pct=st.pct||0,cl=pct>=
   }catch(e){$('#smart-pills').innerHTML='<div class="note">SMART error</div>';}}
 async function loadCleanup(){try{const r=await(await fetch('/api/imports')).json();
   $('#imp-total').textContent='· '+TB(r.total);
-  $('#bk-cleanup').innerHTML=r.items.map(i=>`<div class="svc-item"><span>${i.name} · ${TB(i.size)}</span><button class="del" data-n="${i.name}">${ic('i-stop')}Delete</button></div>`).join('')||'<div class="note">пусто</div>';
+  $('#bk-cleanup').innerHTML=r.items.map(i=>`<div class="svc-item"><span>${i.name} · ${TB(i.size)}</span><button class="del" data-n="${i.name}">${ic('i-stop')}Delete</button></div>`).join('')||'<div class="note">empty</div>';
   $$('#bk-cleanup .del').forEach(b=>b.onclick=()=>openModal('Delete '+b.dataset.n+'?',[['Delete','__del:'+b.dataset.n,1]]));}catch(e){}}
 async function delImport(name){await api('/api/imports/delete',{name});toast('deleted');loadCleanup();}
 
@@ -394,10 +394,10 @@ function renderYT(){const yt=(last.services||{}).yt||{},tog=$('#yt-toggle'),B=`h
      +grp('MUSIC','g-mus',sp(mT,'tracks')+sp((mus&&mus.playlists)||0,'playlists')+sp(szu(mB),'size'));
     const Q=Array.isArray(queue)?queue:[];
     $('#yt-queue').innerHTML=Q.length?Q.slice(0,12).map(x=>{const dl=(x.status||'').toLowerCase()==='downloading',p=x.progress!=null?Math.round(x.progress):null;
-      return `<div class="svc-item ${dl?'online':''}"><span>${ic('i-video')} ${(x.title||'').slice(0,34)}</span><span class="u">${dl?(p!=null?p+'%':'↓'):(x.status||'queued')}</span></div>`;}).join(''):'<div class="note">очередь пуста</div>';
+      return `<div class="svc-item ${dl?'online':''}"><span>${ic('i-video')} ${(x.title||'').slice(0,34)}</span><span class="u">${dl?(p!=null?p+'%':'↓'):(x.status||'queued')}</span></div>`;}).join(''):'<div class="note">queue empty</div>';
     const L=Array.isArray(large)?large:[],mx=Math.max(1,...L.map(c=>c.total_bytes||0));
     $('#yt-chn').textContent=L.length?'· '+(yt.channels||0)+' total':'';
-    $('#yt-channels').innerHTML=L.slice(0,8).map(c=>`<div class="chrow"><div class="chtop"><span class="ell">${(c.name||'').slice(0,26)}</span><span class="u">${TB(c.total_bytes)} · ${c.video_count||0}v</span></div><div class="bar-fill"><i style="width:${Math.round((c.total_bytes||0)/mx*100)}%"></i></div></div>`).join('')||'<div class="note">нет данных</div>';
+    $('#yt-channels').innerHTML=L.slice(0,8).map(c=>`<div class="chrow"><div class="chtop"><span class="ell">${(c.name||'').slice(0,26)}</span><span class="u">${TB(c.total_bytes)} · ${c.video_count||0}v</span></div><div class="bar-fill"><i style="width:${Math.round((c.total_bytes||0)/mx*100)}%"></i></div></div>`).join('')||'<div class="note">no data</div>';
     const v=Array.isArray(vids)?vids:[],rec=v.filter(x=>x.downloaded_at).sort((a,b)=>(b.downloaded_at||'').localeCompare(a.downloaded_at||'')).slice(0,10);
     $('#yt-recent').innerHTML=(rec.length?rec:v.slice(0,10)).map(x=>`<div class="svc-item"><span>${ic((x.is_music||x.is_music_via_playlist)?'i-music':'i-video')} ${(x.title||'').slice(0,30)}</span><span class="u">${x.file_size_bytes?TB(x.file_size_bytes):''}</span></div>`).join('')||'<div class="note">empty</div>';
   });}
@@ -469,7 +469,7 @@ async function renderFailed(){try{const u=await(await fetch('/api/failed')).json
 
 /* Configs */
 async function renderConfigs(){try{const r=await(await fetch('/api/configs')).json();
-  $('#configs-body').innerHTML='<div class="svc-list">'+r.map(c=>`<div class="svc-item" data-n="${c.name}"><span>${c.name}${c.desc?' — <span style="color:var(--mut)">'+c.desc+'</span>':''}</span><span class="u">edit</span></div>`).join('')+'</div><div class="note">Tap to edit. Некоторые содержат пароли/токены.</div>';
+  $('#configs-body').innerHTML='<div class="svc-list">'+r.map(c=>`<div class="svc-item" data-n="${c.name}"><span>${c.name}${c.desc?' — <span style="color:var(--mut)">'+c.desc+'</span>':''}</span><span class="u">edit</span></div>`).join('')+'</div><div class="note">Tap to edit. Some contain passwords/tokens.</div>';
   $$('#configs-body .svc-item').forEach(el=>el.onclick=()=>editConfig(el.dataset.n));}catch(e){$('#configs-body').innerHTML='error';}}
 async function editConfig(name){try{const r=await(await fetch('/api/config?name='+encodeURIComponent(name))).json();const esc=(r.content||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
   $('#configs-body').innerHTML=`<div class="edbar"><span class="ell" style="flex:1">${name}</span><button class="cbtn dry sm" id="cfg-back">${ic('i-back')}Back</button><button class="cbtn run sm" id="cfg-save">Save</button></div><textarea id="cfg-edit" class="editor">${esc}</textarea>`;
@@ -511,7 +511,7 @@ $('#logfiles-btn').onclick=()=>{openPage('page-logfiles');renderLogfiles();};
 /* NAS dry/diff/run — парсим rsync-статистику в понятную сводку (не сырой лог) */
 async function showNasResult(title){openPage('page-logfiles');
   $('#page-logfiles .back').onclick=()=>openPage('page-nas');   // back → обратно на NAS, не на главную
-  $('#lf-body').innerHTML=`<div class="h">${title}</div><div class="note" style="margin:0 0 10px">Dry-run = превью (ничего не копируется). Diff = какие файлы отличаются.</div><div id="nas-res">running…</div>`;
+  $('#lf-body').innerHTML=`<div class="h">${title}</div><div class="note" style="margin:0 0 10px">Dry-run = preview (nothing is copied). Diff = which files differ.</div><div id="nas-res">running…</div>`;
   try{let raw=(await(await fetch('/api/naslog')).text()).replace(/\x1b\[[0-9;]*m/g,'');
     // только ПОСЛЕДНИЙ запуск (журнал хранит и старые провальные)
     const seg=raw.split(/Started nas-backup-runtime/);let t=seg.length>1?seg[seg.length-1]:raw;
@@ -524,13 +524,13 @@ async function showNasResult(title){openPage('page-logfiles');
     const changes=t.split('\n').map(l=>l.trim()).filter(l=>/^([<>ch.*][fdLDS][.+cstpoguaxn?]+\s)|^\*deleting\s/.test(l)).slice(0,60);
     const pill=(n,l,c)=>`<div class="pill"${c?` style="border-color:${c}66"`:''}><div class="pn"${c?` style="color:${c}"`:''}>${n==null?'–':n}</div><div class="pl">${l}</div></div>`;
     let banner;
-    if(failed)banner=`<div class="lastbk fail">${ic('i-stop')}<div><div class="lbt">Failed</div><div class="lbs">см. Log — rsync error</div></div></div>`;
-    else if((copy||0)===0&&(del||0)===0&&(created||0)===0)banner=`<div class="lastbk ok">${ic('i-cloud')}<div><div class="lbt">In sync ✓</div><div class="lbs">копия совпадает с NAS, копировать нечего</div></div></div>`;
-    else banner=`<div class="lastbk run">${ic('i-dl')}<div><div class="lbt">${copy||0} файлов к копированию${del?' · '+del+' к удалению':''}</div><div class="lbs">Run выполнит это</div></div></div>`;
+    if(failed)banner=`<div class="lastbk fail">${ic('i-stop')}<div><div class="lbt">Failed</div><div class="lbs">see Log — rsync error</div></div></div>`;
+    else if((copy||0)===0&&(del||0)===0&&(created||0)===0)banner=`<div class="lastbk ok">${ic('i-cloud')}<div><div class="lbt">In sync ✓</div><div class="lbs">copy matches NAS, nothing to copy</div></div></div>`;
+    else banner=`<div class="lastbk run">${ic('i-dl')}<div><div class="lbt">${copy||0} files to copy${del?' · '+del+' to delete':''}</div><div class="lbs">Run will do it</div></div></div>`;
     let h=banner+`<div class="pills" style="margin-top:10px">${pill(files,'files total','#3b82f6')}${pill(copy,'to copy',copy?'#3fb950':null)}${pill(del,'to delete',del?'#f85149':null)}${pill(total,'size','#22d3ee')}</div>`;
     if(changes.length)h+=`<div class="h" style="margin-top:6px">Changed files (${changes.length})</div><div class="svc-list">`+changes.map(l=>`<div class="svc-item"><span class="ell">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</span></div>`).join('')+`</div>`;
     $('#nas-res').innerHTML=h;
-  }catch(e){$('#nas-res').innerHTML='<div class="note">ошибка чтения результата</div>';}}
+  }catch(e){$('#nas-res').innerHTML='<div class="note">error reading result</div>';}}
 /* Pi config backup (#1) */
 async function loadPiBackup(){try{const d=await(await fetch('/api/pibackup')).json();
   $('#pibk-info').textContent=d.count?`${d.count} · last ${d.when}`:'none yet';}catch(e){}}
@@ -545,6 +545,7 @@ br.oninput=()=>{brDragging=true;setBrightness(br.value,true);};
 ['pointerup','pointercancel','change'].forEach(e=>br.addEventListener(e,()=>setTimeout(()=>brDragging=false,500)));
 $('#screen-timeout').value=LS.screenTimeout||'300';$('#screen-timeout').onchange=e=>uiSet('screenTimeout',e.target.value);
 {const im=$('#idle-mode');if(im){im.value=LS.idleMode||'ambient';im.onchange=e=>uiSet('idleMode',e.target.value);}}
+{const nt=$('#night-timeout');if(nt){nt.value=LS.nightTimeout||'';nt.onchange=e=>uiSet('nightTimeout',e.target.value);}}
 ['night-from','night-to','night-level'].forEach(id=>{const el=$('#'+id);if(LS[id])el.value=LS[id];el.onchange=()=>{uiSet(id,el.value);nightApplied=null;};});
 $('#rotate-apply').onclick=()=>{const v=$('#rotate').value;if(v)doAction('screen',{rotate:v});};
 let lastAct=Date.now(),screenOff=false,ambientOn=false;
@@ -575,7 +576,7 @@ function ambVals(){const s=last.system||{},nw=last.network||{},sv=last.services|
 function updateAmbient(){const d=new Date(),sh=ambShowSet(),V=ambVals();
   $('#amb-time').textContent=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
   $('#amb-date').style.display=sh.has('date')?'':'none';
-  $('#amb-date').textContent=d.toLocaleDateString('ru-RU',{weekday:'long',day:'numeric',month:'long'});
+  $('#amb-date').textContent=d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'});
   let cols='';
   AMB_CATS.forEach(cat=>{const items=AMB_ITEMS.filter(it=>it.cat===cat&&sh.has(it.k));if(!items.length)return;
     cols+=`<div class="ambcol"><div class="ambct">${cat}</div>`+items.map(it=>`<div class="ambrow">${ic(it.ic)}<span class="ambk">${it.label}</span><span class="ambv">${V[it.k]}</span></div>`).join('')+`</div>`;});
@@ -595,17 +596,20 @@ function renderAmbientSettings(){const ab=$('#amb-bright');if(ab){ab.value=local
 $('#btn-ambient').onclick=()=>ambientShow();
 const RING=2*Math.PI*16;
 setInterval(()=>{if(ambientOn)updateAmbient();
-  const to=+($('#screen-timeout').value||0),ring=$('#ring'),cd=$('#screen-cd');
+  let to=+($('#screen-timeout').value||0);const nt=+(($('#night-timeout')||{}).value||0);if(nt&&inNightWindow())to=nt;
+  const ring=$('#ring'),cd=$('#screen-cd');
   if(!to){cd.textContent='∞';ring.style.strokeDashoffset=0;return;}
   if(screenOff||ambientOn){cd.textContent=ambientOn?'◐':'zZ';ring.style.strokeDashoffset=RING;return;}
   const rem=Math.max(0,to-(Date.now()-lastAct)/1000);cd.textContent=rem>=60?Math.ceil(rem/60)+'m':Math.ceil(rem)+'s';
   ring.style.strokeDasharray=RING;ring.style.strokeDashoffset=RING*(1-rem/to);
   if(rem<=0){if((localStorage.idleMode||'ambient')==='off'){screenOff=true;api('/api/action/screen',{backlight:'off'});}else ambientShow();}},1000);
 let nightApplied=null;
-function applyNight(){const f=$('#night-from').value,t=$('#night-to').value;if(!f||!t)return;
+function inNightWindow(){const f=$('#night-from').value,t=$('#night-to').value;if(!f||!t)return false;
   const d=new Date(),cur=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
-  const inWin=f<t?(cur>=f&&cur<t):(cur>=f||cur<t),target=inWin?+$('#night-level').value:+br.value;
-  if(!screenOff&&target!==nightApplied){nightApplied=target;api('/api/action/screen',{brightness:target+'%'});}}
+  return f<t?(cur>=f&&cur<t):(cur>=f||cur<t);}
+function applyNight(){if(!$('#night-from').value||!$('#night-to').value)return;
+  const target=inNightWindow()?+$('#night-level').value:+br.value;
+  if(!screenOff&&!ambientOn&&target!==nightApplied){nightApplied=target;api('/api/action/screen',{brightness:target+'%'});}}
 
 /* mini-graph period per metric */
 const fmtPer=s=>({60:'1m',300:'5m',900:'15m',1800:'30m',3600:'1h',10800:'3h',21600:'6h',43200:'12h',86400:'24h'}[s]||((s/60|0)+'m'));

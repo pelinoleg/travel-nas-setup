@@ -93,7 +93,7 @@
     <div class="h">Apps — open service UI</div>
     <div id="apps-grid" class="appsgrid"></div>
     <div class="h" style="margin-top:12px">Built-in (coming soon)</div>
-    <div class="note">Здесь будут встроенные мини-приложения (галерея, плеер…). Пока — лаунчер docker-сервисов выше (тап → QR для телефона).</div>
+    <div class="note">Embedded mini-apps (gallery, player…) will live here. For now — the docker services launcher above (tap → QR for phone).</div>
   </section>
 
   <section id="tab-storage" class="tab"><div id="disks" class="diskgrid"></div></section>
@@ -117,8 +117,8 @@
       <button id="logfiles-btn">Browse logs</button></div>
     <div class="setrow"><label><svg class="ic"><use href="#i-box"/></svg>Pi config backup</label>
       <span id="pibk-info" class="sub"></span><button id="pibk-run">Backup now</button></div>
-    <div class="themeblock"><div class="tlabel">Accent colour</div><div class="tdesc">Цвет акцента интерфейса — применяется сразу.</div><div class="swatches" id="accent"></div></div>
-    <div class="themeblock"><div class="tlabel">Background</div><div class="tdesc">Оттенок и тёмность фона — применяется сразу.</div><div class="swatches" id="bgsw"></div></div>
+    <div class="themeblock"><div class="tlabel">Accent colour</div><div class="tdesc">Interface accent colour — applies instantly.</div><div class="swatches" id="accent"></div></div>
+    <div class="themeblock"><div class="tlabel">Background</div><div class="tdesc">Background tint & darkness — applies instantly.</div><div class="swatches" id="bgsw"></div></div>
     <div class="setrow"><label><svg class="ic"><use href="#i-activity"/></svg>Mini-graph period</label>
       <span class="gp">
         <span>CPU <select data-sp="cpu"><option value="60">1m</option><option value="300">5m</option><option value="900">15m</option><option value="1800">30m</option><option value="3600">1h</option><option value="10800">3h</option><option value="21600">6h</option><option value="43200">12h</option><option value="86400">24h</option></select></span>
@@ -258,6 +258,8 @@
         <option value="300">5 min</option><option value="600">10 min</option><option value="1800">30 min</option></select></div>
     <div class="setrow"><label><svg class="ic"><use href="#i-moon"/></svg>Idle action</label>
       <select id="idle-mode"><option value="ambient">Ambient clock</option><option value="off">Screen off</option></select></div>
+    <div class="setrow"><label><svg class="ic"><use href="#i-moon"/></svg>Night: go idle after</label>
+      <select id="night-timeout"><option value="">same as above</option><option value="20">20 sec</option><option value="30">30 sec</option><option value="60">1 min</option><option value="120">2 min</option><option value="300">5 min</option></select></div>
     <div class="setrow"><label><svg class="ic"><use href="#i-sun"/></svg>Ambient brightness</label>
       <input type="range" id="amb-bright" min="5" max="100" value="30"><span id="amb-bright-val">30%</span></div>
     <div class="h" style="margin-top:6px">Show on ambient</div>
@@ -277,7 +279,7 @@
   <div class="amb-time" id="amb-time">--:--</div>
   <div class="amb-date" id="amb-date"></div>
   <div class="amb-stat" id="amb-stat"></div>
-  <div class="amb-hint">коснись, чтобы выйти</div>
+  <div class="amb-hint">tap to exit</div>
 </div>
 
 <div id="modal" class="modal hidden"><div class="modalbox">

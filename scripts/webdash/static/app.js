@@ -247,14 +247,14 @@ async function renderNasPage(){const sv=last.services||{},nb=sv.nas_backup||{},p
     <div class="nasbtns" style="margin-top:8px"><button class="minib" id="nas-editcfg" style="flex:1">${ic('i-list')}Edit config</button><button class="minib" id="nas-viewlog" style="flex:1">${ic('i-activity')}Log</button></div></div>`;
   $('#nas-body').innerHTML=`<div class="naslayout"><div class="nasmain"><div class="h">Backup folders</div><div class="svc-list">${folders}</div>${progBlock}</div>${panel}</div>`;
   renderSchedArea(sched);
-  $('#nas-viewlog').onclick=()=>openLogfile('__nas__','NAS backup run log');
+  $('#nas-viewlog').onclick=()=>showNasResult('Last NAS run');
   $('#nas-editcfg').onclick=()=>{$$('.page').forEach(p=>p.classList.add('hidden'));$('#page-configs').classList.remove('hidden');editConfig('nas-backup.conf');};
   $('#nas-acts').innerHTML=acts;   // Run/Dry/Diff/Stop — в шапке справа, возле заголовка
   const b=(id,act,msg)=>{const e=$('#'+id);if(e)e.onclick=()=>{doAction(act);toast(msg);};};
   b('bk-run','nas-backup','backup started');b('bk-stop','nas-stop','stopping');
   // dry/diff — детачатся, вывод в журнал → авто-открываем лог с результатом
-  const bLog=(id,act)=>{const e=$('#'+id);if(e)e.onclick=()=>{doAction(act);toast(act.replace('nas-','')+' running…');setTimeout(()=>openLogfile('__nas__','NAS '+act.replace('nas-','')+' result'),3000);};};
-  bLog('bk-dry','nas-dry');bLog('bk-diff','nas-diff');}
+  const bLog=(id,act,t)=>{const e=$('#'+id);if(e)e.onclick=()=>{doAction(act);toast(t+' running…');setTimeout(()=>showNasResult(t+' result'),3200);};};
+  bLog('bk-dry','nas-dry','Dry-run');bLog('bk-diff','nas-diff','Diff');}
 function updateBackupLive(){const pr=(last.services||{}).progress||{};
   const open=!$('#page-photo').classList.contains('hidden')?'photo':(!$('#page-nas').classList.contains('hidden')?'nas':null);
   if(!open)return;const wantActive=!!(pr.active&&pr.kind===open);
@@ -400,6 +400,14 @@ async function openLogfile(name,title){openPage('page-logfiles');
   $('#lf-back').onclick=renderLogfiles;dragScroll($('#lf-view'));
   try{const url=name==='__nas__'?'/api/naslog':'/api/logfile?name='+encodeURIComponent(name);const t=await(await fetch(url)).text();$('#lf-view').textContent=t||'(empty)';const v=$('#lf-view');v.scrollTop=v.scrollHeight;}catch(e){$('#lf-view').textContent='error';}}
 $('#logfiles-btn').onclick=()=>{openPage('page-logfiles');renderLogfiles();};
+/* NAS dry/diff/run результат — только суть (без ANSI и мусора), крупно */
+async function showNasResult(title){openPage('page-logfiles');
+  $('#lf-body').innerHTML=`<div class="h">${title}</div><div class="note" style="margin:0 0 8px">Dry-run = превью, ничего не копируется. Diff = что отличается от копии.</div><div id="nas-res">running…</div>`;
+  try{let t=await(await fetch('/api/naslog')).text();t=t.replace(/\x1b\[[0-9;]*m/g,'');
+    const lines=t.split('\n').filter(l=>l.trim()&&/(\bOK\b|ERR|ERROR|WARN|Module|complet|success|fail|transferred|files|would|Total|sent |received |speedup|differ|deleting|^[<>*][f d])/i.test(l)).slice(-30);
+    $('#nas-res').innerHTML=lines.map(l=>{const c=/ERR|ERROR|fail/i.test(l)?'r':/WARN/i.test(l)?'w':/\bOK\b|complet|success/i.test(l)?'g':'';return `<div class="resline ${c}">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>`;}).join('')||'<div class="note">нет вывода — запусти Dry-run / Diff</div>';
+    dragScroll($('#nas-res'));
+  }catch(e){$('#nas-res').innerHTML='error';}}
 /* Pi config backup (#1) */
 async function loadPiBackup(){try{const d=await(await fetch('/api/pibackup')).json();
   $('#pibk-info').textContent=d.count?`${d.count} · last ${d.when}`:'none yet';}catch(e){}}

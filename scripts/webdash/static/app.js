@@ -342,28 +342,26 @@ async function delImport(name){await api('/api/imports/delete',{name});toast('de
 
 /* YT page */
 function renderYT(){const yt=(last.services||{}).yt||{},tog=$('#yt-toggle'),B=`http://${location.hostname}:8081`;
-  if(!Object.keys(yt).length){$('#yt-status').innerHTML='<div class="note">YT-Archiver offline.</div>';['yt-pills','yt-queue','yt-recent','yt-channels','yt-music'].forEach(i=>{const e=$('#'+i);if(e)e.innerHTML='';});tog.style.display='none';return;}
-  // статус-баннер
+  if(!Object.keys(yt).length){$('#yt-status').innerHTML='<div class="note">YT-Archiver offline.</div>';['yt-stats','yt-queue','yt-recent','yt-channels'].forEach(i=>{const e=$('#'+i);if(e)e.innerHTML='';});tog.style.display='none';return;}
+  // компактный статус-стрип
   let st;
-  if(yt.downloading>0)st=`<div class="lastbk run"><span class="dlspin">${ic('i-dl')}</span><div><div class="lbt">Downloading ${yt.downloading}</div><div class="lbs">${yt.pending||0} in queue${yt.error?' · '+yt.error+' errors':''}</div></div></div>`;
-  else if(yt.paused)st=`<div class="lastbk none">${ic('i-stop')}<div><div class="lbt">Paused</div><div class="lbs">${yt.pending||0} pending</div></div></div>`;
-  else st=`<div class="lastbk ok">${ic('i-video')}<div><div class="lbt">Up to date ✓</div><div class="lbs">${yt.pending||0} pending${yt.error?' · '+yt.error+' errors':''}</div></div></div>`;
+  if(yt.downloading>0)st=`<div class="ytstrip dl">${ic('i-dl')}<b>Downloading ${yt.downloading}</b> · ${yt.pending||0} queued${yt.error?' · '+yt.error+' err':''}</div>`;
+  else if(yt.paused)st=`<div class="ytstrip warn">${ic('i-stop')}Paused · ${yt.pending||0} pending</div>`;
+  else st=`<div class="ytstrip ok">${ic('i-video')}Up to date · ${yt.pending||0} pending${yt.error?' · '+yt.error+' err':''}</div>`;
   $('#yt-status').innerHTML=st;
   tog.style.display='';tog.innerHTML=yt.paused?ic('i-play')+'Resume':ic('i-stop')+'Pause';
   tog.onclick=async()=>{await api('/api/yt',{action:yt.paused?'resume':'pause'});toast(yt.paused?'resumed':'paused');setTimeout(()=>api('/api/snapshot').then(r=>r.json()).then(d=>{last=d;renderYT();}),800);};
-  const pill=(n,l,c)=>`<div class="pill"${c?` style="border-color:${c}66"`:''}><div class="pn"${c?` style="color:${c}"`:''}>${n}</div><div class="pl">${l}</div></div>`;
-  const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span>${v}</span></div>`,J=p=>fetch(B+p).then(r=>r.json()).catch(()=>null);
+  const J=p=>fetch(B+p).then(r=>r.json()).catch(()=>null);
+  const sp=(n,l)=>`<div class="sgp"><div class="sgn">${n}</div><div class="sgl">${l}</div></div>`;
+  const grp=(label,cls,inner)=>`<div class="statgroup ${cls}"><div class="sglabel">${label}</div><div class="sgrow">${inner}</div></div>`;
   Promise.all([J('/api/music/stats'),J('/api/storage/largest-channels'),J('/api/queue'),J('/api/videos'),J('/api/manual/count')]).then(([mus,large,queue,vids,man])=>{
-    // видео БЕЗ музыки
     const V=Array.isArray(vids)?vids.filter(x=>!(x.is_music||x.is_music_via_playlist)):[];
     const vBytes=V.reduce((a,x)=>a+(x.file_size_bytes||0),0);
     const mT=(mus&&mus.tracks)||0,mB=(mus&&mus.total_bytes)||0;
-    // ОБЩАЯ статистика (видео + музыка)
-    $('#yt-pills').innerHTML=pill(V.length+mT,'items','#3b82f6')+pill(TB(vBytes+mB),'total size','#22d3ee')+pill(yt.channels||0,'channels','#e8a87c')+(man&&man.count?pill(man.count,'manual','#d29922'):'');
-    // ВИДЕО (исключая музыку)
-    $('#yt-video').innerHTML=`<div class="sideinfo">${R(ic('i-video')+' Videos',V.length||(yt.videos||0))}${R('Size',TB(vBytes||((yt.total_bytes||0)-mB)))}${R('Channels',yt.channels||0)}${(yt.pending?R('Pending',yt.pending):'')}</div>`;
-    // МУЗЫКА
-    $('#yt-music').innerHTML=mus?`<div class="sideinfo">${R(ic('i-music')+' Tracks',mus.tracks||0)}${R('Playlists',mus.playlists||0)}${R('Favorites',mus.favorites||0)}${R('Size',TB(mus.total_bytes))}</div>`:'<div class="note">no music</div>';
+    $('#yt-stats').innerHTML=
+      grp('OVERALL','g-all',sp(V.length+mT,'items')+sp(TB(vBytes+mB),'size')+sp(yt.channels||0,'channels')+(man&&man.count?sp(man.count,'manual'):''))
+     +grp('VIDEO','g-vid',sp(V.length||(yt.videos||0),'videos')+sp(TB(vBytes||((yt.total_bytes||0)-mB)),'size'))
+     +grp('MUSIC','g-mus',sp(mT,'tracks')+sp((mus&&mus.playlists)||0,'playlists')+sp(TB(mB),'size'));
     const Q=Array.isArray(queue)?queue:[];
     $('#yt-queue').innerHTML=Q.length?Q.slice(0,12).map(x=>{const dl=(x.status||'').toLowerCase()==='downloading',p=x.progress!=null?Math.round(x.progress):null;
       return `<div class="svc-item ${dl?'online':''}"><span>${ic('i-video')} ${(x.title||'').slice(0,34)}</span><span class="u">${dl?(p!=null?p+'%':'↓'):(x.status||'queued')}</span></div>`;}).join(''):'<div class="note">очередь пуста</div>';

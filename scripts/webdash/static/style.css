@@ -139,6 +139,19 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:32px;heigh
 .bkbar>i.warn{background:var(--warn)}.bkbar>i.high{background:var(--high)}.bkbar>i.crit{background:var(--crit)}
 .appcard .an{font-weight:600;font-size:14px}.appcard .au{color:var(--mut);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* YT pills */
+/* компактный статус-стрип */
+.ytstrip{display:flex;align-items:center;gap:7px;height:30px;padding:0 12px;border-radius:9px;font-size:13px;font-weight:600}
+.ytstrip .ic{width:16px;height:16px}
+.ytstrip.dl{background:rgba(59,130,246,.16);color:#3b82f6}.ytstrip.dl .ic{animation:dlbounce .9s ease-in-out infinite}
+.ytstrip.warn{background:rgba(210,153,34,.16);color:var(--warn)}
+.ytstrip.ok{background:rgba(63,185,80,.14);color:var(--ok)}
+/* 3 группы статистики — Overall/Video/Music, цветные сверху */
+.statgroups{display:flex;gap:12px;flex-wrap:wrap;margin:10px 0}
+.statgroup{flex:1;min-width:150px;background:var(--panel);border:1px solid var(--line);border-top:3px solid #3b82f6;border-radius:11px;padding:9px 12px}
+.statgroup.g-vid{border-top-color:#f85149}.statgroup.g-mus{border-top-color:#a371f7}
+.sglabel{font-size:11px;font-weight:700;letter-spacing:.6px;color:var(--mut);margin-bottom:8px}
+.sgrow{display:flex;gap:16px}
+.sgn{font-size:23px;font-weight:700;line-height:1}.sgl{font-size:11px;color:var(--mut);margin-top:3px}
 .ytcols{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px}
 .ytcol{min-width:0}
 .h .ic{width:15px;height:15px;vertical-align:-2px;margin-right:3px}

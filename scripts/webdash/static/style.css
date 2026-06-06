@@ -95,6 +95,14 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:32px;heigh
 .t-yt{border-left:3px solid #f85149}.t-yt .th .ic{color:#f85149}
 .t-photo{border-left:3px solid #22d3ee}.t-photo .th .ic{color:#22d3ee}
 .t-nas{border-left:3px solid #a371f7}.t-nas .th .ic{color:#a371f7}
+/* backup-плитки (Photo/NAS) — другой дизайн: горизонтальная карточка, отличается от метрик */
+.tile.bk{display:flex;align-items:center;gap:11px;background:var(--panel2)}
+.tile.bk .bkicon{width:30px;height:30px;flex:none}
+.t-photo .bkicon{color:#22d3ee}.t-nas .bkicon{color:#a371f7}
+.tile.bk .bkbody{min-width:0;flex:1}
+.tile.bk .bktitle{font-size:12px;color:var(--mut);font-weight:600;margin-bottom:3px}
+.tile.bk .tv2{font-size:17px;margin-top:0;text-transform:none}
+.tile.bk .tdot{position:static;display:inline-block;margin-left:4px;vertical-align:middle}
 .th{position:relative}
 .tdot{position:absolute;right:0;top:3px;width:9px;height:9px;border-radius:50%;background:var(--mut)}
 .tdot.ok{background:var(--ok)}.tdot.warn{background:var(--warn)}.tdot.crit{background:var(--crit);box-shadow:0 0 7px var(--crit)}

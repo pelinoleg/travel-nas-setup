@@ -349,9 +349,10 @@ function renderYT(){const yt=(last.services||{}).yt||{},tog=$('#yt-toggle'),B=`h
   else if(yt.paused)st=`<div class="ytstrip warn">${ic('i-stop')}Paused · ${yt.pending||0} pending</div>`;
   else st=`<div class="ytstrip ok">${ic('i-video')}Up to date · ${yt.pending||0} pending${yt.error?' · '+yt.error+' err':''}</div>`;
   $('#yt-status').innerHTML=st;
-  tog.style.display='';tog.className='cbtn '+(yt.paused?'run':'diff');tog.innerHTML=yt.paused?ic('i-play')+'Resume all':ic('i-stop')+'Pause all';
+  tog.style.display='';tog.className='cbtn '+(yt.paused?'run':'diff');tog.innerHTML=yt.paused?ic('i-play')+'Resume all':ic('i-pause')+'Pause all';
   tog.onclick=async()=>{await api('/api/yt',{action:yt.paused?'resume':'pause'});toast(yt.paused?'resumed':'paused');setTimeout(()=>api('/api/snapshot').then(r=>r.json()).then(d=>{last=d;renderYT();}),800);};
   const J=p=>fetch(B+p).then(r=>r.json()).catch(()=>null);
+  const szu=b=>{const p=TB(b).split(' ');return p[0]+`<span class="u2"> ${p[1]||''}</span>`;};
   const sp=(n,l)=>`<div class="sgp"><div class="sgn">${n}</div><div class="sgl">${l}</div></div>`;
   const grp=(label,cls,inner)=>`<div class="statgroup ${cls}"><div class="sglabel">${label}</div><div class="sgrow">${inner}</div></div>`;
   Promise.all([J('/api/music/stats'),J('/api/storage/largest-channels'),J('/api/queue'),J('/api/videos'),J('/api/manual/count')]).then(([mus,large,queue,vids,man])=>{
@@ -359,9 +360,9 @@ function renderYT(){const yt=(last.services||{}).yt||{},tog=$('#yt-toggle'),B=`h
     const vBytes=V.reduce((a,x)=>a+(x.file_size_bytes||0),0);
     const mT=(mus&&mus.tracks)||0,mB=(mus&&mus.total_bytes)||0;
     $('#yt-stats').innerHTML=
-      grp('OVERALL','g-all',sp(V.length+mT,'items')+sp(TB(vBytes+mB),'size')+sp(yt.channels||0,'channels')+(man&&man.count?sp(man.count,'manual'):''))
-     +grp('VIDEO','g-vid',sp(V.length||(yt.videos||0),'videos')+sp(TB(vBytes||((yt.total_bytes||0)-mB)),'size'))
-     +grp('MUSIC','g-mus',sp(mT,'tracks')+sp((mus&&mus.playlists)||0,'playlists')+sp(TB(mB),'size'));
+      grp('OVERALL','g-all',sp(V.length+mT,'items')+sp(szu(vBytes+mB),'size')+sp(yt.channels||0,'channels')+(man&&man.count?sp(man.count,'manual'):''))
+     +grp('VIDEO','g-vid',sp(V.length||(yt.videos||0),'videos')+sp(szu(vBytes||((yt.total_bytes||0)-mB)),'size'))
+     +grp('MUSIC','g-mus',sp(mT,'tracks')+sp((mus&&mus.playlists)||0,'playlists')+sp(szu(mB),'size'));
     const Q=Array.isArray(queue)?queue:[];
     $('#yt-queue').innerHTML=Q.length?Q.slice(0,12).map(x=>{const dl=(x.status||'').toLowerCase()==='downloading',p=x.progress!=null?Math.round(x.progress):null;
       return `<div class="svc-item ${dl?'online':''}"><span>${ic('i-video')} ${(x.title||'').slice(0,34)}</span><span class="u">${dl?(p!=null?p+'%':'↓'):(x.status||'queued')}</span></div>`;}).join(''):'<div class="note">очередь пуста</div>';

@@ -127,8 +127,9 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   if(Object.keys(yt).length){$('#yt-v').innerHTML=`${yt.videos||0}<span class="u2"> vids</span>`;
     $('#yt-sub').innerHTML=`${TB(yt.total_bytes)}${yt.music?' · '+yt.music+' mus':''}${yt.downloading?' · <span style="color:var(--ok)">'+yt.downloading+' dl</span>':(yt.paused?' · <span style="color:var(--warn)">paused</span>':'')}`;
     $('#yt-dot').className='tdot '+(yt.paused?'warn':(yt.downloading?'ok':''));
-    const dl=$('#yt-dl');if(dl){if(yt.downloading>0){dl.innerHTML=ic('i-dl')+yt.downloading;dl.className='dlbadge on';}else dl.className='dlbadge';}}
-  else{$('#yt-v').textContent='–';$('#yt-sub').textContent='offline';$('#yt-dot').className='tdot';const dl=$('#yt-dl');if(dl)dl.className='dlbadge';}
+    const dl=$('#yt-dl');if(dl){if(yt.downloading>0){dl.innerHTML=ic('i-dl')+yt.downloading;dl.className='dlbadge on';}else dl.className='dlbadge';}
+    const ytt=$('#yt-v').closest('.tile');if(ytt)ytt.classList.toggle('dl-active',yt.downloading>0);}
+  else{$('#yt-v').textContent='–';$('#yt-sub').textContent='offline';$('#yt-dot').className='tdot';const dl=$('#yt-dl');if(dl)dl.className='dlbadge';const ytt=$('#yt-v').closest('.tile');if(ytt)ytt.classList.remove('dl-active');}
   // backups tiles (photo/nas раздельно)
   renderBackupTiles(sv);
   // buffers + sparks

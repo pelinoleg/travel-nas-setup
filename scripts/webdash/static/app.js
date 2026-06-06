@@ -72,11 +72,18 @@ async function initOvChart(){const el=$('#ovchart-c');if(!el||typeof uPlot==='un
   if(ovChart){ovChart.destroy();ovChart=null;}el.innerHTML='';
   ovChart=new uPlot({width:el.clientWidth||760,height:el.clientHeight||62,cursor:{show:false},legend:{show:false},
     scales:{x:{time:true},y:{range:[0,100]}},axes:[{show:false},{show:false}],
-    series:[{},{stroke:'#3b82f6',width:1.6,fill:'#3b82f622',points:{show:false}},{stroke:'#f85149',width:1.6,points:{show:false}}]},
-    [OVT,OVC,OVTEMP],el);}
+    series:[{},{stroke:'#3b82f6',width:1.3,points:{show:false}},{stroke:'#f85149',width:1.3,points:{show:false}}]},
+    ovData(),el);}
+/* прорежаем (усредняем) до ~200 точек — иначе на больших периодах сплошная каша */
+function ovData(){const max=200;if(OVT.length<=max)return[OVT,OVC,OVTEMP];
+  const step=OVT.length/max,T=[],C=[],M=[];
+  for(let i=0;i<max;i++){const a=Math.floor(i*step),b=Math.max(a+1,Math.floor((i+1)*step));
+    let sc=0,nc=0,sm=0,nm=0;for(let j=a;j<b;j++){if(OVC[j]!=null){sc+=OVC[j];nc++;}if(OVTEMP[j]!=null){sm+=OVTEMP[j];nm++;}}
+    T.push(OVT[a]);C.push(nc?sc/nc:null);M.push(nm?sm/nm:null);}
+  return[T,C,M];}
 function pushOv(s){if(!ovChart)return;const now=Date.now()/1000|0;OVT.push(now);OVC.push(s.cpu||0);OVTEMP.push(s.temp||0);
   const cut=now-ovWin();while(OVT.length&&OVT[0]<cut){OVT.shift();OVC.shift();OVTEMP.shift();}
-  ovChart.setData([OVT,OVC,OVTEMP]);}
+  ovChart.setData(ovData());}
 
 /* render */
 const chip=(cls,txt)=>`<span class="chip"><span class="dot ${cls}"></span>${txt}</span>`;

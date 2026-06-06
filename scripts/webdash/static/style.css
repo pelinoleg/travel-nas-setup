@@ -38,7 +38,7 @@ main{position:relative;height:382px}
 
 .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .tile{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:6px 9px;min-height:86px;position:relative;overflow:hidden}
-.tile>:not(.spark):not(.dtemp){position:relative;z-index:1}
+.tile>:not(.spark):not(.dtemp):not(.spkper){position:relative;z-index:1}
 .tile[data-open]:active{border-color:var(--acc)}
 .th{display:flex;align-items:center;gap:6px;color:var(--mut);font-size:12px}
 .th .ic{width:15px;height:15px}

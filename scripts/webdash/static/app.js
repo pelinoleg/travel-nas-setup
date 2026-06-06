@@ -20,7 +20,6 @@ const MET={cpu:{label:'CPU %',col:'#3b82f6',max:100,th:[70,85,95]},
   dtemp:{label:'Disk temp °C',col:'#fb923c',max:70,th:[45,52,58]}};
 const fmtNet=k=>{k=k||0;return k>=1000?(k/1000).toFixed(1)+' MB/s':Math.round(k)+' KB/s';};
 let memTotal=8, last={}, activeTab='overview';
-const demoUntil=Date.now()+25000;   /* временный демо-алерт после загрузки — показать вид */
 const lvl=(m,v)=>{const t=MET[m]&&MET[m].th;if(!t||v==null)return'';return v>=t[2]?'lv-crit':v>=t[1]?'lv-high':v>=t[0]?'lv-warn':'';};
 const colorVal=(id,m,v)=>{const e=$('#'+id);if(!e)return;e.classList.remove('lv-warn','lv-high','lv-crit');const c=lvl(m,v);if(c)e.classList.add(c);};
 
@@ -147,7 +146,6 @@ function renderAlerts(s,st,sv,nw){const a=[];
   else if(st.pct>=95)a.push(['crit','i-disk','Disk '+st.pct+'%']);else if(st.pct>=88)a.push(['warn','i-disk','Disk '+st.pct+'%']);
   if((nw.ip||'?')==='?')a.push(['warn','i-net','No network']);
   const nb=sv.nas_backup||{};if((nb.last_status||'')==='failed')a.push(['crit','i-cloud','Backup failed']);
-  if(Date.now()<demoUntil)a.push(['warn','i-zap','DEMO alert — так выглядит (исчезнет сам через ~25с)']);
   const has=a.length>0;
   $('#alerts').innerHTML=a.map(([c,i,t])=>`<span class="alert ${c}">${ic(i)}${t}</span>`).join('');
   // алерт занимает место нижнего графика (та же высота); плитки lastrow НЕ прячем

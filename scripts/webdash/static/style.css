@@ -49,7 +49,9 @@ main{position:relative;height:382px}
 .dtemp.warn{color:var(--warn)}.dtemp.high{color:var(--high)}.dtemp.crit{color:var(--crit)}
 .tv2{font-size:18px;font-weight:600;margin-top:6px;text-transform:capitalize}
 .tile .sub{color:var(--mut);font-size:11px}
-.spark{position:absolute;left:0;right:0;bottom:0;width:100%;height:56px;z-index:0;opacity:.8}
+.spark{position:absolute;left:0;right:0;bottom:0;width:100%;height:50px;z-index:0;opacity:.4}
+/* контраст цифр над графиком-фоном */
+.tile .tv,.tile .tv2,.tile .sub{text-shadow:0 1px 4px var(--bg),0 0 2px var(--bg)}
 .ring{position:relative;width:62px;height:62px;margin:2px auto 0}
 .ring svg{transform:rotate(-90deg)}
 .ring .rbg{fill:none;stroke:var(--panel2);stroke-width:4}
@@ -286,8 +288,10 @@ select,input[type=number],input[type=time]{background:var(--panel2);border:1px s
 .toast.hidden{display:none}
 
 /* alerts banner */
-.alerts{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
-.alerts:empty{display:none}
+/* алерт-баннер внизу — на месте графика, та же высота */
+.alerts{display:flex;gap:8px;align-items:stretch;margin-top:8px;height:54px}
+.alerts.hidden,.ovchart.hidden{display:none}
+.alerts .alert{flex:1;justify-content:center;font-size:14px}
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--mut);vertical-align:1px}
 .dot.ok{background:var(--ok)}.dot.off{background:var(--mut)}.dot.warn{background:var(--warn)}.dot.err,.dot.crit{background:var(--crit)}
 .alert .ic{width:15px;height:15px}

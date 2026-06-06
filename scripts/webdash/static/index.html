@@ -60,7 +60,6 @@
 
 <main>
   <section id="tab-overview" class="tab active">
-    <div id="alerts" class="alerts"></div>
     <div class="tiles">
       <div class="tile" data-open="detail" data-metric="cpu"><div class="th"><svg class="ic"><use href="#i-cpu"/></svg>CPU</div><div class="tv"><b id="cpu">–</b><span class="u2">%</span></div><canvas class="spark" data-s="cpu"></canvas></div>
       <div class="tile" data-open="detail" data-metric="temp"><div class="th"><svg class="ic"><use href="#i-thermo"/></svg>CPU Temp</div><div class="tv"><b id="temp">–</b><span class="u2">°C</span></div><canvas class="spark" data-s="temp"></canvas></div>
@@ -79,10 +78,11 @@
       <div class="tile bk t-photo" id="bk-photo" data-open="page-photo"><div class="th"><svg class="ic"><use href="#i-camera"/></svg>Photo import</div><div class="tv2" id="photo-v">idle</div><div class="sub" id="photo-sub"></div></div>
       <div class="tile bk t-nas" id="bk-nas" data-open="page-nas"><div class="th"><svg class="ic"><use href="#i-cloud"/></svg>NAS backup<span class="tdot" id="nas-dot"></span></div><div class="tv2" id="nas-v">–</div><div class="sub" id="nas-sub"></div></div>
     </div>
-    <div class="ovchart" data-open="detail" data-metric="cpu">
+    <div class="ovchart" id="ovchart-wrap" data-open="detail" data-metric="cpu">
       <div class="ovlegend"><span class="lg cpu"><i></i>CPU</span><span class="lg temp"><i></i>Temp</span><span class="lgr">last 1h</span></div>
       <div id="ovchart-c"></div>
     </div>
+    <div id="alerts" class="alerts hidden"></div>
   </section>
 
   <section id="tab-apps" class="tab">

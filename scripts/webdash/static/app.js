@@ -15,6 +15,7 @@ const MET={cpu:{label:'CPU %',col:'#3b82f6',max:100,th:[70,85,95]},
   dtemp:{label:'Disk temp °C',col:'#fb923c',max:70,th:[45,52,58]}};
 const fmtNet=k=>{k=k||0;return k>=1000?(k/1000).toFixed(1)+' MB/s':Math.round(k)+' KB/s';};
 let memTotal=8, last={}, activeTab='overview';
+const demoUntil=Date.now()+25000;   /* временный демо-алерт после загрузки — показать вид */
 const lvl=(m,v)=>{const t=MET[m]&&MET[m].th;if(!t||v==null)return'';return v>=t[2]?'lv-crit':v>=t[1]?'lv-high':v>=t[0]?'lv-warn':'';};
 const colorVal=(id,m,v)=>{const e=$('#'+id);if(!e)return;e.classList.remove('lv-warn','lv-high','lv-crit');const c=lvl(m,v);if(c)e.classList.add(c);};
 
@@ -77,7 +78,7 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   const memPct=s.mem_total?Math.round(s.mem_used/s.mem_total*100):null;
   $('#cpu').textContent=s.cpu!=null?Math.round(s.cpu):'–';colorVal('cpu','cpu',s.cpu);
   $('#temp').textContent=s.temp!=null?Math.round(s.temp):'–';colorVal('temp','temp',s.temp);
-  $('#mem').textContent=s.mem_total?(+s.mem_used).toFixed(1):'–';$('#mem-tot').textContent=s.mem_total?'/'+Math.round(s.mem_total):'';colorVal('mem','disk',memPct);
+  $('#mem').textContent=s.mem_total?(+s.mem_used).toFixed(1):'–';$('#mem-tot').textContent=s.mem_total?'/'+Math.round(s.mem_total)+' GB':'';colorVal('mem','disk',memPct);
   {const tx=s.net_tx||0,rx=s.net_rx||0;
    $('#net').innerHTML=`<span class="dl ${rx>=1?'on':''}">${ic('i-dl')}${fmtNet(rx)}</span><span class="ul ${tx>=1?'on':''}">${ic('i-ul')}${fmtNet(tx)}</span>`;}
   const dkTile=$('#disk').closest('.tile'),unmounted=st.mounted===false,ro=st.readonly;
@@ -141,8 +142,12 @@ function renderAlerts(s,st,sv,nw){const a=[];
   else if(st.pct>=95)a.push(['crit','i-disk','Disk '+st.pct+'%']);else if(st.pct>=88)a.push(['warn','i-disk','Disk '+st.pct+'%']);
   if((nw.ip||'?')==='?')a.push(['warn','i-net','No network']);
   const nb=sv.nas_backup||{};if((nb.last_status||'')==='failed')a.push(['crit','i-cloud','Backup failed']);
+  if(Date.now()<demoUntil)a.push(['warn','i-zap','DEMO alert — так выглядит (исчезнет сам через ~25с)']);
+  const has=a.length>0;
   $('#alerts').innerHTML=a.map(([c,i,t])=>`<span class="alert ${c}">${ic(i)}${t}</span>`).join('');
-  $('#lastrow').style.display=a.length?'none':'';}   // alerts на всю ширину → прячем последний ряд
+  // алерт занимает место нижнего графика (та же высота); плитки lastrow НЕ прячем
+  $('#alerts').classList.toggle('hidden',!has);
+  const ov=$('#ovchart-wrap');if(ov)ov.classList.toggle('hidden',has);}
 
 /* SSE */
 function connect(){const es=new EventSource('/api/stream');

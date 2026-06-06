@@ -191,8 +191,17 @@ table#proc-cpu,table#proc-mem{width:100%;border-collapse:collapse;font-size:12px
 .naspanel .sideinfo{display:block;font-size:14px;line-height:1.9}
 .naspanel .ell{max-width:200px}
 .naspanel .minib{padding:11px 14px;font-size:14px}
-.foldhdr{display:flex;justify-content:space-between;align-items:baseline;font-size:14px;font-weight:600;margin:4px 0 7px;color:var(--mut);text-transform:uppercase;letter-spacing:.4px}
-.foldhdr .fhd{font-size:12px;font-weight:400;text-transform:none;letter-spacing:0}
+.foldhdr{display:flex;justify-content:space-between;align-items:baseline;font-size:15px;font-weight:700;margin:16px 0 8px;color:var(--fg)}
+.foldhdr .fhd{font-size:13px;font-weight:400;color:var(--mut)}
+.nasmain .svc-item{font-size:15px;padding:12px 13px}
+.nasmain .svc-item .u{font-size:13px}
+/* theme pickers (accent + background) */
+.themeblock{padding:13px 0;border-top:1px solid var(--line)}
+.tlabel{font-size:16px;font-weight:700}
+.tdesc{color:var(--mut);font-size:12px;margin:3px 0 11px}
+.swatches{display:flex;flex-wrap:wrap;gap:11px}
+.swatch{width:32px;height:32px;border-radius:50%;border:2px solid var(--line);padding:0}
+.swatch.sel{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--fg)}
 .naspanel .sideinfo .row{display:flex;justify-content:space-between;gap:8px}
 .naspanel .schedbanner{padding:8px 11px;margin:6px 0;gap:9px}
 .naspanel .schedbanner .ic{width:20px;height:20px}.naspanel .schedbanner .sbt{font-size:13px}.naspanel .schedbanner .sbs{font-size:11px}

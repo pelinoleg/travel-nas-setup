@@ -473,9 +473,29 @@ $$('select[data-sp]').forEach(s=>{const m=s.dataset.sp;s.value=localStorage['spa
   if(+s.value>900)fetchSparkHist(m);});
 
 /* accent */
-function applyAccent(c){document.documentElement.style.setProperty('--acc',c);}
-if(localStorage.accent)applyAccent(localStorage.accent);
-$$('#accent button').forEach(b=>b.onclick=()=>{applyAccent(b.dataset.c);localStorage.accent=b.dataset.c;});
+const ACCENTS=['#e8a87c','#d29922','#d9c47a','#f0883e','#f85149','#ec6cb9','#c264f0','#a371f7','#7c83f7','#3b82f6','#2196f3','#22d3ee','#2dd4bf','#3fb950','#56d364','#a5d64c','#f0506e','#b1bac4'];
+const BGS=[
+ {bg:'#0d1117',panel:'#161b22',p2:'#1c2128',line:'#30363d'},
+ {bg:'#000000',panel:'#0d0d10',p2:'#17171c',line:'#28282f'},
+ {bg:'#11141a',panel:'#1a1f27',p2:'#232a34',line:'#343d49'},
+ {bg:'#15181d',panel:'#20242b',p2:'#2b313a',line:'#3c4450'},
+ {bg:'#0a0f1f',panel:'#12182b',p2:'#1b2540',line:'#2d3c5e'},
+ {bg:'#0e0c1a',panel:'#171328',p2:'#211c38',line:'#382e5a'},
+ {bg:'#08151a',panel:'#0f2028',p2:'#172d36',line:'#28424c'},
+ {bg:'#0a140f',panel:'#121e18',p2:'#1a2a21',line:'#2b4035'},
+ {bg:'#140a16',panel:'#1e1424',p2:'#291c33',line:'#412e4e'},
+ {bg:'#160a0e',panel:'#221319',p2:'#301d24',line:'#4a2e38'},
+ {bg:'#15110b',panel:'#1f1a11',p2:'#2a2318',line:'#3e3424'}];
+function applyAccent(c){document.documentElement.style.setProperty('--acc',c);localStorage.accent=c;
+  $$('#accent .swatch').forEach(s=>s.classList.toggle('sel',s.dataset.c===c));}
+function applyBg(i){const b=BGS[i];if(!b)return;const r=document.documentElement.style;
+  r.setProperty('--bg',b.bg);r.setProperty('--panel',b.panel);r.setProperty('--panel2',b.p2);r.setProperty('--line',b.line);
+  localStorage.bgTheme=i;$$('#bgsw .swatch').forEach(s=>s.classList.toggle('sel',+s.dataset.i===i));}
+$('#accent').innerHTML=ACCENTS.map(c=>`<button class="swatch" data-c="${c}" style="background:${c}"></button>`).join('');
+$('#bgsw').innerHTML=BGS.map((b,i)=>`<button class="swatch" data-i="${i}" style="background:linear-gradient(135deg,${b.panel} 50%,${b.p2} 50%);border-color:${b.line}"></button>`).join('');
+$$('#accent .swatch').forEach(s=>s.onclick=()=>applyAccent(s.dataset.c));
+$$('#bgsw .swatch').forEach(s=>s.onclick=()=>applyBg(+s.dataset.i));
+applyAccent(localStorage.accent||'#3b82f6');applyBg(localStorage.bgTheme!=null?+localStorage.bgTheme:0);
 
 /* drag-scroll */
 function dragScroll(el){let down=false,sy=0,stp=0,moved=false;

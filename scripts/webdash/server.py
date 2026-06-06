@@ -575,7 +575,8 @@ def api_nas_conf():
         return m.group(1).strip() if m else ""
     def arr(k):
         m = re.search(r'%s=\((.*?)\)' % k, txt, re.S)
-        return re.findall(r'"([^"]+)"', m.group(1)) if m else []
+        # терпимо к «умным» кавычкам (“ ” „) — частая опечатка при правке на тач-экране
+        return re.findall(u'[“”„"]([^“”„"]+)[“”„"]', m.group(1)) if m else []
     return jsonify({"configured": True, "host": val("NAS_HOST"), "user": val("NAS_USER"),
                     "dest": val("DEST"), "modules": arr("MODULES"), "excludes": arr("EXCLUDES"),
                     "auto": val("AUTO_BACKUP"), "freq": val("AUTO_BACKUP_FREQ"), "time": val("AUTO_BACKUP_TIME")})

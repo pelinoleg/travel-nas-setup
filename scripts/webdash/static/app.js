@@ -234,16 +234,16 @@ async function renderNasPage(){const sv=last.services||{},nb=sv.nas_backup||{},p
   const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span class="ell">${v}</span></div>`;
   let conf={};try{conf=await(await fetch('/api/nas-conf')).json();}catch(e){}
   const cfg=conf.configured;
-  // per-module статус из nas-backup-status.json: {target:{last_run,status,size}}
-  const ents=Object.entries(nb).filter(([,v])=>v&&typeof v==='object');
-  const byKey=k=>{for(const[kk,v]of ents)if(kk===k||kk.endsWith('/'+k)||k.endsWith('/'+kk))return v;return null;};
-  const folders=(conf.modules||[]).map(m=>{const[mod,fold]=m.split('|');const e=byKey(fold||mod)||{};
-    const dot=e.status?`<span class="dot ${e.status==='ok'?'ok':'crit'}"></span>`:'';
-    return `<div class="svc-item"><span>${ic('i-box')} <span class="ell">${mod}</span></span><span class="u">${dot}${e.size?e.size+' · ':''}→ ${fold||mod}</span></div>`;}).join('')
+  // nas-backup-status.json = {updated, dest, disk:{}, modules:[{target,size,last_run,status}]}
+  const mods=Array.isArray(nb.modules)?nb.modules:[];
+  const byKey=k=>mods.find(e=>{const n=e.target||e.name||e.module||'';return n===k||n.endsWith('/'+k)||k.endsWith('/'+n);})||{};
+  const folders=(conf.modules||[]).map(m=>{const[mod,fold]=m.split('|');const e=byKey(fold||mod);
+    const dot=e.status?`<span class="dot ${e.status==='ok'?'ok':'crit'}"></span> `:'';
+    return `<div class="svc-item"><span>${ic('i-box')} <span class="ell">${mod}</span></span><span class="u">${dot}${e.size?e.size+' ':''}→ ${fold||mod}</span></div>`;}).join('')
     ||`<div class="note">${cfg?'modules empty — добавь в Edit config (формат: rsync-модуль/подпапка|локальная_папка)':'not configured — нажми «Edit config»'}</div>`;
   // карточка последнего бэкапа (когда + успех)
   let last_run=0,anyFail=false,hasRun=false;
-  ents.forEach(([,v])=>{if(v.last_run){last_run=Math.max(last_run,v.last_run);hasRun=true;}if(v.status==='fail')anyFail=true;});
+  mods.forEach(e=>{if(e.last_run){last_run=Math.max(last_run,e.last_run);hasRun=true;}if(e.status==='fail')anyFail=true;});
   const rel=ts=>{if(!ts)return'';const d=(Date.now()/1000|0)-ts;return d<3600?Math.round(d/60)+' min ago':d<86400?Math.round(d/3600)+'h ago':Math.round(d/86400)+'d ago';};
   let lastCard;
   if(active)lastCard=`<div class="bkcard"><div class="lbic spin">${ic('i-cloud')}</div><div class="bkc"><div class="bkt">Backing up…</div>${bkProg(pr)}</div></div>`;
@@ -258,7 +258,8 @@ async function renderNasPage(){const sv=last.services||{},nb=sv.nas_backup||{},p
     <div class="h" style="margin-top:8px">Connection</div>
     <div class="sideinfo">${R('Host',conf.host||'—')}${R('User',conf.user||'—')}${R('Dest',conf.dest||'—')}</div>
     <div class="nasbtns" style="margin-top:8px"><button class="minib" id="nas-editcfg" style="flex:1">${ic('i-list')}Edit config</button><button class="minib" id="nas-viewlog" style="flex:1">${ic('i-activity')}Log</button></div></div>`;
-  $('#nas-body').innerHTML=`<div class="naslayout"><div class="nasmain">${progBlock}<div class="h">Backup folders</div><div class="svc-list">${folders}</div></div>${panel}</div>`;
+  const diskInfo=nb.disk?` · <span style="color:var(--mut);font-weight:400">${nb.disk.used} on disk</span>`:'';
+  $('#nas-body').innerHTML=`<div class="naslayout"><div class="nasmain">${progBlock}<div class="h">Backup folders${diskInfo}</div><div class="svc-list">${folders}</div></div>${panel}</div>`;
   renderSchedArea(sched);
   $('#nas-viewlog').onclick=()=>showNasResult('Last NAS run');
   $('#nas-editcfg').onclick=()=>{$$('.page').forEach(p=>p.classList.add('hidden'));$('#page-configs').classList.remove('hidden');editConfig('nas-backup.conf');};

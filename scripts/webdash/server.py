@@ -565,6 +565,21 @@ def api_pibackup():
                     "when": time.strftime("%d.%m %H:%M", time.localtime(os.path.getmtime(f))),
                     "bytes": os.path.getsize(f)})
 
+@app.route("/api/nas-conf")
+def api_nas_conf():
+    p = "/etc/travel-nas/nas-backup.conf"
+    if not os.path.isfile(p): return jsonify({"configured": False})
+    txt = read(p)
+    def val(k):
+        m = re.search(r'^\s*%s=\"?([^\"\n]*)\"?' % k, txt, re.M)
+        return m.group(1).strip() if m else ""
+    def arr(k):
+        m = re.search(r'%s=\((.*?)\)' % k, txt, re.S)
+        return re.findall(r'"([^"]+)"', m.group(1)) if m else []
+    return jsonify({"configured": True, "host": val("NAS_HOST"), "user": val("NAS_USER"),
+                    "dest": val("DEST"), "modules": arr("MODULES"), "excludes": arr("EXCLUDES"),
+                    "auto": val("AUTO_BACKUP"), "freq": val("AUTO_BACKUP_FREQ"), "time": val("AUTO_BACKUP_TIME")})
+
 @app.route("/api/failed")
 def api_failed():
     units = []

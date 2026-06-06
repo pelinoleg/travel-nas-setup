@@ -223,21 +223,26 @@ function renderPhotoPage(){const sv=last.services||{},pr=sv.progress||{},ph=sv.p
 function schedBanner(sched){const on=sched&&sched!=='off';
   return `<div class="schedbanner ${on?'on':'off'}" id="nas-sched-banner">${ic('i-clock')}<div class="sb"><div class="sbt">Auto-backup ${on?'ON':'OFF'}</div><div class="sbs">${on?sched:'manual only — runs only when you press Run'}</div></div></div>`;}
 /* NAS backup — домашний NAS → /mnt/storage/nas-backup (rsync-модули). Без удаления. */
-function renderNasPage(){const sv=last.services||{},nb=sv.nas_backup||{},pr=sv.progress||{},active=pr.active&&pr.kind==='nas',sched=sv.nas_sched||'off';
-  const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span>${v}</span></div>`,cfg=Object.keys(nb).length>0;
-  let h=bkCard(ic('i-cloud'),'Pull backup from home NAS',active?bkProg(pr):`<div class="bks">${cfg?'idle':'not configured — set NAS in Settings → Configs → nas-backup.conf'}</div>`);
-  if(nb.last_run||nb.last_status||nb.host)
-    h+=`<div class="sideinfo">${nb.last_run?R('Last run',nb.last_run):''}${nb.last_status?R('Last status',(nb.last_status==='failed'?'<span style="color:var(--crit)">failed</span>':'<span style="color:var(--ok)">'+nb.last_status+'</span>')):''}${nb.host?R('NAS host',nb.host):''}${nb.dest?R('Dest',nb.dest):''}</div>`;
-  const sm=(sched||'').match(/^(daily|weekly) (\d\d:\d\d)/),stime=sm?sm[2]:'03:00';
-  h+=schedBanner(sched)+`<div class="schedrow"><select id="sch-freq"><option value="daily">daily</option><option value="weekly">weekly (Sun)</option></select>
-    <input type="time" id="sch-time" value="${stime}">
-    <button class="minib" id="sch-set">${ic('i-clock')}Set</button><button class="minib" id="sch-off">${ic('i-power')}Off</button>
-    <button class="minib" id="nas-viewlog">${ic('i-list')}Log</button></div>`;
-  $('#nas-body').innerHTML=h;
-  if(sm)$('#sch-freq').value=sm[1];
+async function renderNasPage(){const sv=last.services||{},nb=sv.nas_backup||{},pr=sv.progress||{},active=pr.active&&pr.kind==='nas',sched=sv.nas_sched||'off';
+  const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span>${v}</span></div>`;
+  let conf={};try{conf=await(await fetch('/api/nas-conf')).json();}catch(e){}
+  const cfg=conf.configured;
+  const folders=(conf.modules||[]).map(m=>{const[mod,fold]=m.split('|');return `<div class="svc-item"><span>${ic('i-box')} ${mod}</span><span class="u">→ ${fold||mod}</span></div>`;}).join('')
+    ||`<div class="note">${cfg?'MODULES пуст':'not configured — нажми «Edit config» справа'}</div>`;
+  const statusCard=bkCard(ic('i-cloud'),'Pull backup from home NAS',active?bkProg(pr):`<div class="bks">${cfg?(nb.last_run?'last run '+nb.last_run:'idle'):'not configured'}</div>`);
+  const sm=(sched||'').match(/^(daily|weekly) (\d\d:\d\d)/),stime=sm?sm[2]:(conf.time||'03:00');
+  const panel=`<div class="naspanel"><div class="h">Settings</div>
+    <div class="sideinfo">${R('Host',conf.host||'—')}${R('User',conf.user||'—')}${R('Dest',conf.dest||'—')}${R('Excludes',(conf.excludes||[]).length)}${nb.last_status?R('Last status',nb.last_status==='failed'?'<span style="color:var(--crit)">failed</span>':'<span style="color:var(--ok)">'+nb.last_status+'</span>'):''}</div>
+    ${schedBanner(sched)}
+    <div class="schedrow"><select id="sch-freq"><option value="daily">daily</option><option value="weekly">weekly</option></select><input type="time" id="sch-time" value="${stime}"><button class="minib" id="sch-set">${ic('i-clock')}Set</button><button class="minib" id="sch-off">Off</button></div>
+    <button class="minib wide2" id="nas-editcfg">${ic('i-list')}Edit config</button>
+    <button class="minib wide2" id="nas-viewlog">${ic('i-activity')}View run log</button></div>`;
+  $('#nas-body').innerHTML=`<div class="naslayout"><div class="nasmain"><div class="h">Backup folders (NAS → ${conf.dest||'/mnt/storage/nas-backup'})</div><div class="svc-list">${folders}</div>${statusCard}</div>${panel}</div>`;
+  if(sm)$('#sch-freq').value=sm[1];else if(conf.freq)$('#sch-freq').value=conf.freq;
   $('#sch-set').onclick=()=>{const fr=$('#sch-freq').value,tm=$('#sch-time').value;doAction('nas-sched-set',{freq:fr,time:tm});$('#nas-sched-banner').outerHTML=schedBanner(fr+' '+tm);toast('auto-backup ON · '+fr+' '+tm);};
   $('#sch-off').onclick=()=>{doAction('nas-sched-off');$('#nas-sched-banner').outerHTML=schedBanner('off');toast('auto-backup OFF');};
   $('#nas-viewlog').onclick=()=>openLogfile('__nas__','NAS backup run log');
+  $('#nas-editcfg').onclick=()=>{$$('.page').forEach(p=>p.classList.add('hidden'));$('#page-configs').classList.remove('hidden');editConfig('nas-backup.conf');};
   $('#nas-acts').innerHTML=active?`<button class="rbtn danger" id="bk-stop">${ic('i-stop')}Stop</button>`
     :`<button class="rbtn" id="bk-run">${ic('i-cloud')}Run</button><button class="rbtn" id="bk-dry">${ic('i-list')}Dry</button><button class="rbtn" id="bk-diff">${ic('i-activity')}Diff</button>`;
   const b=(id,act,msg)=>{const e=$('#'+id);if(e)e.onclick=()=>{doAction(act);toast(msg);};};

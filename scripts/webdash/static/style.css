@@ -171,6 +171,10 @@ table#proc-cpu,table#proc-mem{width:100%;border-collapse:collapse;font-size:12px
 #net .dl .ic{width:17px;height:17px}#net .ul .ic{width:14px;height:14px}
 #net .dl.on{opacity:1;color:var(--ok)}
 #net .ul.on{opacity:1;color:var(--crit)}
+.naslayout{display:grid;grid-template-columns:1fr 250px;gap:14px}
+.nasmain{min-width:0}
+.naspanel{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:11px;align-self:start}
+.wide2{width:100%;display:flex;align-items:center;justify-content:center;gap:6px;margin-top:8px}
 .schedbanner{display:flex;align-items:center;gap:12px;border-radius:12px;padding:12px 14px;margin:10px 0;border:1px solid var(--line)}
 .schedbanner .ic{width:26px;height:26px;flex:none}
 .schedbanner.on{background:rgba(63,185,80,.14);border-color:var(--ok)}.schedbanner.on .ic{color:var(--ok)}

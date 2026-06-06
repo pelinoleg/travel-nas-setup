@@ -31,12 +31,14 @@ const EVCATS=[{k:'yt',label:'YouTube',ic:'i-video'},{k:'nas',label:'NAS backup',
 let _evCache=[];
 async function renderEvents(){let ev=[];
   try{ev=await(await fetch('/api/events')).json();}catch(e){}
-  try{const y=await(await fetch(`http://${location.hostname}:8081/api/events`)).json();
+  _evCache=ev.filter(e=>e.ts).sort((a,b)=>b.ts-a.ts);
+  drawEvents();   // показываем системные/наши сразу, не дожидаясь YT
+  try{const c=new AbortController(),tm=setTimeout(()=>c.abort(),3500);
+    const y=await(await fetch(`http://${location.hostname}:8081/api/events`,{signal:c.signal})).json();clearTimeout(tm);
     (Array.isArray(y)?y:[]).slice(0,40).forEach(e=>{const ts=Math.floor(Date.parse((e.created_at||e.timestamp||e.time||'').replace(' ','T'))/1000)||0;
       const ty=(e.type||'').replace(/_/g,' ');
-      ev.push({ts,type:'yt',title:(e.video_title||e.message||ty||'YT event'),sub:(e.channel_name||'')+(ty?' · '+ty:''),level:/err|fail/i.test(e.type||e.level||'')?'crit':'ok'});});}catch(e){}
-  _evCache=ev.filter(e=>e.ts).sort((a,b)=>b.ts-a.ts);
-  drawEvents();}
+      ev.push({ts,type:'yt',title:(e.video_title||e.message||ty||'YT event'),sub:(e.channel_name||'')+(ty?' · '+ty:''),level:/err|fail/i.test(e.type||e.level||'')?'crit':'ok'});});
+    _evCache=ev.filter(e=>e.ts).sort((a,b)=>b.ts-a.ts);drawEvents();}catch(e){}}
 function evHidden(){return new Set((localStorage.ev_hidden||'').split(',').filter(Boolean));}
 function drawEvents(){const ev=_evCache,hid=evHidden();
   $('#ev-filters').innerHTML=EVCATS.map(c=>{const n=ev.filter(e=>e.type===c.k).length;return `<button class="evchip ${hid.has(c.k)?'off':''}" data-k="${c.k}">${ic(c.ic)}${c.label}<span class="evn">${n}</span></button>`;}).join('');
@@ -57,7 +59,7 @@ setInterval(()=>{const d=new Date();$('#clock').textContent=`${('0'+d.getHours()
 function openPage(id){$$('.page').forEach(p=>p.classList.add('hidden'));$('#'+id).classList.remove('hidden');
   ({'page-power':renderPower,'page-photo':renderPhotoPage,'page-nas':renderNasPage,'page-logs':loadLogs,'page-network':renderNetwork,
     'page-services':renderServices,'page-yt':renderYT,'page-configs':renderConfigs,'page-today':renderToday,
-    'page-failed':renderFailed,'page-docker':renderProjects,'page-disk':renderDiskPage}[id]||(()=>{}))();}
+    'page-failed':renderFailed,'page-docker':renderProjects,'page-disk':renderDiskPage,'page-ambient':renderAmbientSettings}[id]||(()=>{}))();}
 const closePages=()=>$$('.page').forEach(p=>p.classList.add('hidden'));
 $$('.page .back').forEach(b=>b.onclick=closePages);
 $$('[data-open]').forEach(el=>el.onclick=()=>{const o=el.dataset.open;
@@ -546,13 +548,27 @@ $('#screen-timeout').value=LS.screenTimeout||'300';$('#screen-timeout').onchange
 ['night-from','night-to','night-level'].forEach(id=>{const el=$('#'+id);if(LS[id])el.value=LS[id];el.onchange=()=>{uiSet(id,el.value);nightApplied=null;};});
 $('#rotate-apply').onclick=()=>{const v=$('#rotate').value;if(v)doAction('screen',{rotate:v});};
 let lastAct=Date.now(),screenOff=false,ambientOn=false;
-function ambientShow(){ambientOn=true;updateAmbient();$('#ambient').classList.remove('hidden');}
-function ambientHide(){if(!ambientOn)return;ambientOn=false;$('#ambient').classList.add('hidden');lastAct=Date.now();}
-function updateAmbient(){const d=new Date(),s=last.system||{},nw=last.network||{},nb=(last.services||{}).nas_backup||{},sg=last.storage||{};
+function ambientShow(){ambientOn=true;updateAmbient();$('#ambient').classList.remove('hidden');api('/api/action/screen',{brightness:(+(localStorage.ambBright||30))+'%'});}
+function ambientHide(){if(!ambientOn)return;ambientOn=false;$('#ambient').classList.add('hidden');lastAct=Date.now();api('/api/action/screen',{brightness:(+br.value)+'%'});}
+function ambShowSet(){return new Set((localStorage.amb_show||'date,wifi,temp,disk,backup').split(',').filter(Boolean));}
+function updateAmbient(){const d=new Date(),s=last.system||{},nw=last.network||{},nb=(last.services||{}).nas_backup||{},sg=last.storage||{},sh=ambShowSet();
   $('#amb-time').textContent=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
+  $('#amb-date').style.display=sh.has('date')?'':'none';
   $('#amb-date').textContent=d.toLocaleDateString('ru-RU',{weekday:'long',day:'numeric',month:'long'});
-  const bk=nb.last_status==='ok'?`<span style="color:var(--ok)">${ic('i-cloud')} backup OK</span>`:(nb.last_status==='failed'?`<span style="color:var(--crit)">${ic('i-cloud')} backup failed</span>`:`${ic('i-cloud')} backup —`);
-  $('#amb-stat').innerHTML=`<span>${ic('i-net')} ${nw.mode==='AP'?'Hotspot':(nw.ssid||'—')}</span><span>${ic('i-thermo')} ${s.temp??'?'}°</span><span>${ic('i-disk')} ${sg.pct??'?'}%</span>${bk}`;}
+  const bits=[];
+  if(sh.has('wifi'))bits.push(`<span>${ic('i-net')} ${nw.mode==='AP'?'Hotspot':(nw.ssid||'—')}</span>`);
+  if(sh.has('temp'))bits.push(`<span>${ic('i-thermo')} ${s.temp??'?'}°</span>`);
+  if(sh.has('disk'))bits.push(`<span>${ic('i-disk')} ${sg.pct??'?'}%</span>`);
+  if(sh.has('backup'))bits.push(nb.last_status==='ok'?`<span style="color:var(--ok)">${ic('i-cloud')} backup OK</span>`:(nb.last_status==='failed'?`<span style="color:var(--crit)">${ic('i-cloud')} backup failed</span>`:`<span>${ic('i-cloud')} backup —</span>`));
+  $('#amb-stat').innerHTML=bits.join('');}
+const AMBSHOW=[['date','Date'],['wifi','WiFi'],['temp','Temperature'],['disk','Disk'],['backup','Backup']];
+function renderAmbientSettings(){const ab=$('#amb-bright');if(ab){ab.value=localStorage.ambBright||30;$('#amb-bright-val').textContent=ab.value+'%';
+    ab.oninput=()=>$('#amb-bright-val').textContent=ab.value+'%';
+    ab.onchange=()=>{uiSet('ambBright',ab.value);if(ambientOn)api('/api/action/screen',{brightness:ab.value+'%'});};}
+  const sh=ambShowSet();
+  $('#amb-toggles').innerHTML=AMBSHOW.map(([k,l])=>`<button class="evchip ${sh.has(k)?'':'off'}" data-k="${k}">${l}</button>`).join('');
+  $$('#amb-toggles .evchip').forEach(b=>b.onclick=()=>{const s=ambShowSet(),k=b.dataset.k;s.has(k)?s.delete(k):s.add(k);uiSet('amb_show',[...s].join(','));renderAmbientSettings();if(ambientOn)updateAmbient();});
+  $('#amb-preview').onclick=()=>ambientShow();}
 ['pointerdown','touchstart','keydown'].forEach(ev=>addEventListener(ev,()=>{
   if(ambientOn){ambientHide();return;}
   lastAct=Date.now();if(screenOff){screenOff=false;api('/api/action/screen',{backlight:'on'});setBrightness(br.value);}},{passive:true}));

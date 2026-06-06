@@ -9,7 +9,7 @@ const api=(p,b)=>fetch(p,b?{method:'POST',headers:{'Content-Type':'application/j
 const uiSet=(k,v)=>{localStorage[k]=v;try{api('/api/ui',{[k]:String(v)});}catch(e){}};
 const toast=m=>{const t=$('#toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.add('hidden'),2500);};
 const fmtUp=s=>{const d=s/86400|0,h=s%86400/3600|0,m=s%3600/60|0;return d?`${d}d ${h}h`:h?`${h}h ${m}m`:`${m}m`;};
-const TB=b=>b==null?'?':(b>=1e12?(b/1e12).toFixed(2)+' TB':b>=1e9?(b/1e9).toFixed(1)+' GB':(b/1e6).toFixed(0)+' MB');
+const TB=b=>b==null?'?':(b>=1e12?(b/1e12).toFixed(1)+' TB':b>=1e9?Math.round(b/1e9)+' GB':(b/1e6).toFixed(0)+' MB');
 const ic=n=>`<svg class="ic"><use href="#${n}"/></svg>`;
 
 const MET={cpu:{label:'CPU %',col:'#3b82f6',max:100,th:[70,85,95]},
@@ -349,7 +349,7 @@ function renderYT(){const yt=(last.services||{}).yt||{},tog=$('#yt-toggle'),B=`h
   else if(yt.paused)st=`<div class="ytstrip warn">${ic('i-stop')}Paused · ${yt.pending||0} pending</div>`;
   else st=`<div class="ytstrip ok">${ic('i-video')}Up to date · ${yt.pending||0} pending${yt.error?' · '+yt.error+' err':''}</div>`;
   $('#yt-status').innerHTML=st;
-  tog.style.display='';tog.innerHTML=yt.paused?ic('i-play')+'Resume':ic('i-stop')+'Pause';
+  tog.style.display='';tog.className='cbtn '+(yt.paused?'run':'diff');tog.innerHTML=yt.paused?ic('i-play')+'Resume all':ic('i-stop')+'Pause all';
   tog.onclick=async()=>{await api('/api/yt',{action:yt.paused?'resume':'pause'});toast(yt.paused?'resumed':'paused');setTimeout(()=>api('/api/snapshot').then(r=>r.json()).then(d=>{last=d;renderYT();}),800);};
   const J=p=>fetch(B+p).then(r=>r.json()).catch(()=>null);
   const sp=(n,l)=>`<div class="sgp"><div class="sgn">${n}</div><div class="sgl">${l}</div></div>`;

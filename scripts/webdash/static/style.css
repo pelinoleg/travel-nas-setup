@@ -152,6 +152,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:32px;heigh
 .sglabel{font-size:11px;font-weight:700;letter-spacing:.6px;color:var(--mut);margin-bottom:8px}
 .sgrow{display:flex;gap:16px}
 .sgn{font-size:23px;font-weight:700;line-height:1}.sgl{font-size:11px;color:var(--mut);margin-top:3px}
+.g-all .sgn{color:#5b9bff}.g-vid .sgn{color:#ff6b63}.g-mus .sgn{color:#bd8cff}
 .ytcols{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px}
 .ytcol{min-width:0}
 .h .ic{width:15px;height:15px;vertical-align:-2px;margin-right:3px}

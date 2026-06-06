@@ -24,8 +24,12 @@ const lvl=(m,v)=>{const t=MET[m]&&MET[m].th;if(!t||v==null)return'';return v>=t[
 const colorVal=(id,m,v)=>{const e=$('#'+id);if(!e)return;e.classList.remove('lv-warn','lv-high','lv-crit');const c=lvl(m,v);if(c)e.classList.add(c);};
 
 /* tabs */
-function switchTab(t){$$('#tabs button').forEach(x=>x.classList.toggle('active',x.dataset.tab===t));
+let prePhotoBright=null;
+function switchTab(t){const prev=activeTab;
+  $$('#tabs button').forEach(x=>x.classList.toggle('active',x.dataset.tab===t));
   $$('.tab').forEach(x=>x.classList.toggle('active',x.id==='tab-'+t));activeTab=t;
+  if(t==='photos'&&prev!=='photos'){prePhotoBright=+br.value||80;api('/api/action/screen',{brightness:'100%'});}
+  else if(prev==='photos'&&t!=='photos'&&prePhotoBright!=null){api('/api/action/screen',{brightness:prePhotoBright+'%'});prePhotoBright=null;}
   if(t==='storage')renderDisks();else if(t==='apps')renderApps();else if(t==='settings')loadPiBackup();else if(t==='events')renderEvents();else if(t==='photos')renderPhotos();}
 const EVCATS=[{k:'yt',label:'YouTube',ic:'i-video'},{k:'nas',label:'NAS backup',ic:'i-cloud'},{k:'photo',label:'Photo import',ic:'i-camera'},{k:'system',label:'System',ic:'i-settings'},{k:'thermal',label:'Thermal',ic:'i-thermo'}];
 let _evCache=[];
@@ -73,9 +77,8 @@ async function loadPhotoGrid(){
   $('#ph-count').textContent=phFiles.length+' photos';
   if(!phFiles.length){g.innerHTML='<div class="note">empty</div>';return;}
   const ts=localStorage.phThumb||400;
-  g.innerHTML=phFiles.map((f,i)=>`<div class="phcell" data-i="${i}"><img data-src="/api/photos/img?s=${ts}&f=${encodeURIComponent(f.f)}"></div>`).join('');
-  const io=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){const im=e.target.querySelector('img');if(im&&!im.src)im.src=im.dataset.src;io.unobserve(e.target);}});},{root:null,rootMargin:'300px'});
-  $$('#ph-grid .phcell').forEach(c=>{io.observe(c);c.onclick=()=>openPhoto(+c.dataset.i);});}
+  g.innerHTML=phFiles.map((f,i)=>`<div class="phcell" data-i="${i}"><img loading="lazy" src="/api/photos/img?s=${ts}&f=${encodeURIComponent(f.f)}"></div>`).join('');
+  $$('#ph-grid .phcell').forEach(c=>c.onclick=()=>openPhoto(+c.dataset.i));}
 function openPhoto(i){phIdx=i;$('#ph-view').classList.remove('hidden');showPhoto();}
 function closePhoto(){$('#ph-view').classList.add('hidden');$('#pv-img').src='';loadPhotoGrid();}
 function showPhoto(){const f=phFiles[phIdx];if(!f){closePhoto();return;}
@@ -223,7 +226,7 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   if($('#net-url'))$('#net-url').textContent=`http://${(nw.host||'nas')}.local:8090 · http://${nw.ip||'?'}:8090`;
   if(!$('#ambient').classList.contains('hidden'))updateAmbient();
   {const on=s.screen_on!==false,sb=s.bright;
-   if(sb!=null&&!brDragging&&!ambientOn){br.value=sb;bv.textContent=sb+'%';}   // слайдер = реальная яркость (не во время ambient)
+   if(sb!=null&&!brDragging&&!ambientOn&&activeTab!=='photos'){br.value=sb;bv.textContent=sb+'%';}   // слайдер = реальная (не в ambient/photos)
    const nf=$('#night-from').value,nt=$('#night-to').value;
    $('#screen-sub').innerHTML=(on?`<span>${ic('i-sun')} ${sb!=null?sb:br.value}%</span>`:`<span class="lv-crit">${ic('i-moon')} off</span>`)+(nf&&nt?`<span>${ic('i-moon')} ${nf}–${nt}</span>`:'');}
   renderAlerts(s,st,sv,nw);

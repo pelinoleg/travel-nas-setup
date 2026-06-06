@@ -115,10 +115,13 @@ EOF
     LABWC_AUTO="$USER_HOME/.config/labwc/autostart"
     mkdir -p "$(dirname "$LABWC_AUTO")"
     touch "$LABWC_AUTO"
-    grep -q "travel-nas-webdash-kiosk" "$LABWC_AUTO" 2>/dev/null || \
-        echo "# travel-nas-webdash-kiosk" >> "$LABWC_AUTO"
-    grep -q -- "--app=http://localhost:$WD_PORT" "$LABWC_AUTO" 2>/dev/null || \
-        echo "$KIOSK &" >> "$LABWC_AUTO"
+    # ВСЕГДА перезаписываем строку kiosk (а не «добавить если нет») — иначе при
+    # смене флагов на устройстве остаётся старая команда. Критично: без
+    # --password-store=basic Chromium на буте лезет в gnome-keyring → запрос
+    # пароля → серый экран (keyring заблокирован при автологине).
+    sed -i '/travel-nas-webdash-kiosk/d' "$LABWC_AUTO"
+    sed -i "\#chromium.*--app=http://localhost:$WD_PORT#d" "$LABWC_AUTO"
+    printf '# travel-nas-webdash-kiosk\n%s &\n' "$KIOSK" >> "$LABWC_AUTO"
 
     DESK="$USER_HOME/Desktop"; mkdir -p "$DESK"
     cat > "$DESK/Dashboard.desktop" << EOF

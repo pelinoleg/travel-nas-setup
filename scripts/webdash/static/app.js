@@ -1,7 +1,12 @@
 /* Travel-NAS web dashboard — client. */
 'use strict';
+/* UI-настройки храним на сервере (переживают ребут; localStorage в kiosk теряется
+   при kill'е). Синхронно подтягиваем их в localStorage ДО инициализации. */
+try{const _x=new XMLHttpRequest();_x.open('GET','/api/ui',false);_x.send();
+  if(_x.status===200){const u=JSON.parse(_x.responseText||'{}');for(const k in u)localStorage[k]=u[k];}}catch(e){}
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const api=(p,b)=>fetch(p,b?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}:undefined);
+const uiSet=(k,v)=>{localStorage[k]=v;try{api('/api/ui',{[k]:String(v)});}catch(e){}};
 const toast=m=>{const t=$('#toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.add('hidden'),2500);};
 const fmtUp=s=>{const d=s/86400|0,h=s%86400/3600|0,m=s%3600/60|0;return d?`${d}d ${h}h`:h?`${h}h ${m}m`:`${m}m`;};
 const TB=b=>b==null?'?':(b>=1e12?(b/1e12).toFixed(2)+' TB':b>=1e9?(b/1e9).toFixed(1)+' GB':(b/1e6).toFixed(0)+' MB');
@@ -465,13 +470,13 @@ $('#pibk-run').onclick=()=>{doAction('pi-backup');toast('pi config backup starte
 
 /* screen */
 const LS=localStorage,br=$('#brightness'),bv=$('#brightness-val');let brDragging=false;
-function setBrightness(v,save){bv.textContent=v+'%';api('/api/action/screen',{brightness:v+'%'});if(save)LS.brightness=v;}
+function setBrightness(v,save){bv.textContent=v+'%';api('/api/action/screen',{brightness:v+'%'});if(save)uiSet('brightness',v);}
 br.value=LS.brightness||80;bv.textContent=br.value+'%';
 br.addEventListener('pointerdown',()=>brDragging=true);
 br.oninput=()=>{brDragging=true;setBrightness(br.value,true);};
 ['pointerup','pointercancel','change'].forEach(e=>br.addEventListener(e,()=>setTimeout(()=>brDragging=false,500)));
-$('#screen-timeout').value=LS.screenTimeout||'300';$('#screen-timeout').onchange=e=>LS.screenTimeout=e.target.value;
-['night-from','night-to','night-level'].forEach(id=>{const el=$('#'+id);if(LS[id])el.value=LS[id];el.onchange=()=>{LS[id]=el.value;nightApplied=null;};});
+$('#screen-timeout').value=LS.screenTimeout||'300';$('#screen-timeout').onchange=e=>uiSet('screenTimeout',e.target.value);
+['night-from','night-to','night-level'].forEach(id=>{const el=$('#'+id);if(LS[id])el.value=LS[id];el.onchange=()=>{uiSet(id,el.value);nightApplied=null;};});
 $('#rotate-apply').onclick=()=>{const v=$('#rotate').value;if(v)doAction('screen',{rotate:v});};
 let lastAct=Date.now(),screenOff=false;
 ['pointerdown','touchstart','keydown'].forEach(ev=>addEventListener(ev,()=>{lastAct=Date.now();if(screenOff){screenOff=false;api('/api/action/screen',{backlight:'on'});setBrightness(br.value);}},{passive:true}));
@@ -488,9 +493,12 @@ function applyNight(){const f=$('#night-from').value,t=$('#night-to').value;if(!
   if(!screenOff&&target!==nightApplied){nightApplied=target;api('/api/action/screen',{brightness:target+'%'});}}
 
 /* mini-graph period per metric */
+const fmtPer=s=>({60:'1m',300:'5m',900:'15m',1800:'30m',3600:'1h',10800:'3h',21600:'6h',43200:'12h',86400:'24h'}[s]||((s/60|0)+'m'));
+function updatePeriodLabels(){$$('.spkper').forEach(e=>e.textContent=fmtPer(sparkWin(e.dataset.m)));}
 $$('select[data-sp]').forEach(s=>{const m=s.dataset.sp;s.value=localStorage['spark_'+m]||'300';
-  s.onchange=()=>{localStorage['spark_'+m]=s.value;fetchSparkHist(m);updateSparks();};
+  s.onchange=()=>{uiSet('spark_'+m,s.value);fetchSparkHist(m);updateSparks();updatePeriodLabels();};
   if(+s.value>900)fetchSparkHist(m);});
+updatePeriodLabels();
 
 /* accent */
 const ACCENTS=['#e8a87c','#d29922','#d9c47a','#f0883e','#f85149','#ec6cb9','#c264f0','#a371f7','#7c83f7','#3b82f6','#2196f3','#22d3ee','#2dd4bf','#3fb950','#56d364','#a5d64c','#f0506e','#b1bac4'];
@@ -513,8 +521,8 @@ function applyBg(i){const b=BGS[i];if(!b)return;const r=document.documentElement
   localStorage.bgTheme=i;$$('#bgsw .swatch').forEach(s=>s.classList.toggle('sel',+s.dataset.i===i));}
 $('#accent').innerHTML=ACCENTS.map(c=>`<button class="swatch" data-c="${c}" style="background:${c}"></button>`).join('');
 $('#bgsw').innerHTML=BGS.map((b,i)=>`<button class="swatch" data-i="${i}" style="background:linear-gradient(135deg,${b.panel} 50%,${b.p2} 50%);border-color:${b.line}"></button>`).join('');
-$$('#accent .swatch').forEach(s=>s.onclick=()=>applyAccent(s.dataset.c));
-$$('#bgsw .swatch').forEach(s=>s.onclick=()=>applyBg(+s.dataset.i));
+$$('#accent .swatch').forEach(s=>s.onclick=()=>{applyAccent(s.dataset.c);uiSet('accent',s.dataset.c);});
+$$('#bgsw .swatch').forEach(s=>s.onclick=()=>{applyBg(+s.dataset.i);uiSet('bgTheme',s.dataset.i);});
 applyAccent(localStorage.accent||'#3b82f6');applyBg(localStorage.bgTheme!=null?+localStorage.bgTheme:0);
 
 /* тач-клавиатура (squeekboard) по фокусу текстовых полей — Chromium сам не зовёт */

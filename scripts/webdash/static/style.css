@@ -50,6 +50,7 @@ main{position:relative;height:382px}
 .tv2{font-size:18px;font-weight:600;margin-top:6px;text-transform:capitalize}
 .tile .sub{color:var(--mut);font-size:11px}
 .spark{position:absolute;left:0;right:0;bottom:0;width:100%;height:50px;z-index:0;opacity:.4}
+.spkper{position:absolute;top:6px;right:9px;z-index:2;font-size:11px;font-weight:600;color:var(--mut)}
 /* контраст цифр над графиком-фоном */
 .tile .tv,.tile .tv2,.tile .sub{text-shadow:0 1px 4px var(--bg),0 0 2px var(--bg)}
 .ring{position:relative;width:62px;height:62px;margin:2px auto 0}

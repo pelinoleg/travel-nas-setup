@@ -598,6 +598,21 @@ def api_nas_conf():
                     "dest": val("DEST"), "modules": arr("MODULES"), "excludes": arr("EXCLUDES"),
                     "auto": val("AUTO_BACKUP"), "freq": val("AUTO_BACKUP_FREQ"), "time": val("AUTO_BACKUP_TIME")})
 
+UICONF = os.path.expanduser("~/.local/share/travel-nas-webdash-ui.json")
+@app.route("/api/ui", methods=["GET", "POST"])
+def api_ui():
+    # UI-настройки (период графиков, accent, фон, яркость…) — на сервере, чтобы
+    # переживали ребут (localStorage в kiosk-Chromium теряется при kill'е).
+    if request.method == "GET":
+        return jsonify(read_json(UICONF, {}))
+    d = read_json(UICONF, {}); d.update(request.json or {})
+    try:
+        os.makedirs(os.path.dirname(UICONF), exist_ok=True)
+        with open(UICONF, "w") as f: json.dump(d, f)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+    return jsonify({"ok": True})
+
 @app.route("/api/failed")
 def api_failed():
     units = []

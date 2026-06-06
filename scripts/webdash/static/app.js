@@ -350,7 +350,9 @@ function renderYT(){const yt=(last.services||{}).yt||{},tog=$('#yt-toggle'),B=`h
   else st=`<div class="ytstrip ok">${ic('i-video')}Up to date · ${yt.pending||0} pending${yt.error?' · '+yt.error+' err':''}</div>`;
   $('#yt-status').innerHTML=st;
   tog.style.display='';tog.className='cbtn '+(yt.paused?'run':'diff');tog.innerHTML=yt.paused?ic('i-play')+'Resume all':ic('i-pause')+'Pause all';
-  tog.onclick=async()=>{await api('/api/yt',{action:yt.paused?'resume':'pause'});toast(yt.paused?'resumed':'paused');setTimeout(()=>api('/api/snapshot').then(r=>r.json()).then(d=>{last=d;renderYT();}),800);};
+  tog.onclick=async()=>{const np=!yt.paused;api('/api/yt',{action:np?'pause':'resume'});
+    yt.paused=np;if(last.services&&last.services.yt)last.services.yt.paused=np;   // оптимистично — снапшот кэшируется ~30с
+    toast(np?'paused':'resumed');renderYT();};
   const J=p=>fetch(B+p).then(r=>r.json()).catch(()=>null);
   const szu=b=>{const p=TB(b).split(' ');return p[0]+`<span class="u2"> ${p[1]||''}</span>`;};
   const sp=(n,l)=>`<div class="sgp"><div class="sgn">${n}</div><div class="sgl">${l}</div></div>`;

@@ -245,8 +245,8 @@ async function renderNasPage(){const sv=last.services||{},nb=sv.nas_backup||{},p
     :`<div class="nasbtns"><button class="cbtn run" id="bk-run">${ic('i-cloud')}Run</button><button class="cbtn dry" id="bk-dry">${ic('i-list')}Dry-run</button><button class="cbtn diff" id="bk-diff">${ic('i-activity')}Diff</button></div>`;
   const panel=`<div class="naspanel">
     <div class="h">Actions</div>${acts}
-    <div class="h" style="margin-top:10px">Auto-backup</div><div id="sch-area"></div>
-    <div class="h" style="margin-top:10px">Connection</div>
+    <div class="h" style="margin-top:7px">Auto-backup</div><div id="sch-area"></div>
+    <div class="h" style="margin-top:7px">Connection</div>
     <div class="sideinfo">${R('Host',conf.host||'—')}${R('User',conf.user||'—')}${R('Dest',conf.dest||'—')}${nb.last_status?R('Status',nb.last_status==='failed'?'<span style="color:var(--crit)">failed</span>':'<span style="color:var(--ok)">'+nb.last_status+'</span>'):''}</div>
     <button class="minib wide2" id="nas-editcfg">${ic('i-list')}Edit config</button>
     <button class="minib wide2" id="nas-viewlog">${ic('i-activity')}View run log</button></div>`;

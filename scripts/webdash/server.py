@@ -38,7 +38,8 @@ def sh(cmd, timeout=8):
     except Exception:
         return ""
 def read(path, d=""):
-    try: return Path(path).read_text().strip()
+    # errors="replace": один битый байт в конфиге не должен обнулять весь read
+    try: return Path(path).read_text(errors="replace").strip()
     except Exception: return d
 def read_json(path, d):
     try: return json.loads(Path(path).read_text())

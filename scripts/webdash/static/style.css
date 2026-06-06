@@ -255,6 +255,9 @@ table#proc-cpu,table#proc-mem{width:100%;border-collapse:collapse;font-size:12px
 .schedbanner.off .ic{color:var(--mut)}
 .schedbanner .sbt{font-weight:700;font-size:15px}.schedbanner .sbs{color:var(--mut);font-size:12px}
 .schedbanner.toggle{cursor:pointer}.schedbanner.toggle:active{filter:brightness(1.15)}
+.aphot{display:flex;gap:10px}
+.aphot .apcol{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;text-align:center}
+.aphot .apv{font-size:20px;font-weight:700;margin-top:3px;word-break:break-all}
 .schedbanner .tgl{margin-left:auto;width:40px;height:23px;border-radius:12px;background:var(--line);position:relative;flex:none}
 .schedbanner .tgl::after{content:"";position:absolute;top:2px;left:2px;width:19px;height:19px;border-radius:50%;background:#fff;transition:left .2s}
 .schedbanner .tgl.on{background:var(--ok)}.schedbanner .tgl.on::after{left:19px}

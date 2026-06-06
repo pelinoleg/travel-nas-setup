@@ -174,15 +174,8 @@
 </div>
 
 <div id="page-network" class="page hidden">
-  <div class="phead"><button class="bigbtn back"><svg class="ic"><use href="#i-back"/></svg></button><span>Network</span>
-    <span class="pacts"><button id="ts-toggle" class="rbtn">TS</button>
-      <button id="wifi-reconnect" class="rbtn"><svg class="ic"><use href="#i-restart"/></svg>Recon</button>
-      <button id="force-ap" class="rbtn"><svg class="ic"><use href="#i-net"/></svg>AP</button></span></div>
-  <div class="pbody"><div class="sideinfo" id="net-info"></div>
-    <div class="h" style="margin-top:10px">WiFi networks <button id="wifi-scan" class="rbtn" style="float:right"><svg class="ic"><use href="#i-restart"/></svg></button></div>
-    <div id="wifi-list" class="svc-list"></div>
-    <div class="h" style="margin-top:10px">Tailscale devices</div>
-    <div id="ts-list" class="svc-list"></div></div>
+  <div class="phead"><button class="bigbtn back"><svg class="ic"><use href="#i-back"/></svg></button><span>Network</span></div>
+  <div class="pbody" id="net-body"></div>
 </div>
 
 <div id="page-services" class="page hidden">
@@ -210,7 +203,8 @@
   <div class="pbody"><div id="yt-status"></div>
     <div id="yt-pills" class="pills" style="margin-top:10px"></div>
     <div class="h" style="margin-top:10px">Queue / downloading</div><div id="yt-queue" class="svc-list"></div>
-    <div class="h" style="margin-top:10px">Recently downloaded</div><div id="yt-recent" class="svc-list"></div></div>
+    <div class="h" style="margin-top:10px">Recently downloaded</div><div id="yt-recent" class="svc-list"></div>
+    <div class="h" style="margin-top:10px">Top channels <span id="yt-chn" class="k"></span></div><div id="yt-channels" class="svc-list"></div></div>
 </div>
 
 <div id="page-today" class="page hidden">

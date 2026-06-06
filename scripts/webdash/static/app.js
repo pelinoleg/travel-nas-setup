@@ -32,7 +32,7 @@ setInterval(()=>{const d=new Date();$('#clock').textContent=`${('0'+d.getHours()
 
 /* pages */
 function openPage(id){$$('.page').forEach(p=>p.classList.add('hidden'));$('#'+id).classList.remove('hidden');
-  ({'page-power':renderPower,'page-photo':renderPhotoPage,'page-nas':renderNasPage,'page-logs':loadLogs,'page-network':()=>{renderNetwork();loadTsList();},
+  ({'page-power':renderPower,'page-photo':renderPhotoPage,'page-nas':renderNasPage,'page-logs':loadLogs,'page-network':renderNetwork,
     'page-services':renderServices,'page-yt':renderYT,'page-configs':renderConfigs,'page-today':renderToday,
     'page-failed':renderFailed,'page-docker':renderProjects,'page-disk':renderDiskPage}[id]||(()=>{}))();}
 const closePages=()=>$$('.page').forEach(p=>p.classList.add('hidden'));
@@ -365,7 +365,13 @@ function renderYT(){const yt=(last.services||{}).yt||{},tog=$('#yt-toggle');
       return `<div class="svc-item ${dl?'online':''}"><span>${ico(x)} ${(x.title||'').slice(0,40)}</span><span class="u">${dl?(p!=null?p+'%':'↓'):x.status}</span></div>`;}).join(''):'<div class="note">очередь пуста</div>';
     const rec=v.filter(x=>x.downloaded_at).sort((a,b)=>(b.downloaded_at||'').localeCompare(a.downloaded_at||'')).slice(0,10);
     $('#yt-recent').innerHTML=(rec.length?rec:v.slice(0,10)).map(x=>`<div class="svc-item"><span>${ico(x)} ${(x.title||'').slice(0,40)}</span><span class="u">${x.file_size_bytes?TB(x.file_size_bytes):''}</span></div>`).join('')||'<div class="note">empty</div>';
-  }).catch(()=>{$('#yt-queue').innerHTML='<div class="note">нет связи с YT-бэкендом</div>';});}
+  }).catch(()=>{$('#yt-queue').innerHTML='<div class="note">нет связи с YT-бэкендом</div>';});
+  // 5) топ-каналы по числу видео
+  fetch(`http://${location.hostname}:8081/api/channels`).then(r=>r.json()).then(ch=>{
+    $('#yt-chn').textContent='· '+ch.length+' total';
+    const top=ch.slice().sort((a,b)=>(b.video_count||0)-(a.video_count||0)).slice(0,8);
+    $('#yt-channels').innerHTML=top.map(c=>`<div class="svc-item"><span>${c.is_music?ic('i-music'):ic('i-video')} ${(c.name||'').slice(0,34)}</span><span class="u">${c.video_count||0} vids</span></div>`).join('')||'<div class="note">нет каналов</div>';
+  }).catch(()=>{});}
 
 /* Power */
 const MODEDESC={auto:'Auto — system picks governor by temp/throttle.',normal:'Normal — ondemand, up to max clock.',saver:'Saver — powersave, min clock.'};
@@ -377,14 +383,26 @@ function renderPower(){const s=last.system||{},pm=s.pmode||'auto';
 $$('#powermode button').forEach(b=>b.onclick=()=>{doAction('power-mode',{mode:b.dataset.mode});setTimeout(renderPower,800);});
 $$('#boost-seg button').forEach(b=>b.onclick=()=>{doAction('cpu-boost',{min:+b.dataset.min});toast('CPU boost '+b.dataset.min+'m');});
 
-/* Network */
+/* Network — блоки: Connection / Tailscale-тумблер / Hotspot / actions / WiFi / TS-devices */
 function renderNetwork(){const nw=last.network||{},R=(k,v)=>`<div class="row"><span class="k">${k}</span><span>${v}</span></div>`;
-  const apBig=`<div style="text-align:center;margin-bottom:12px;padding:12px;background:var(--panel);border:1px solid var(--line);border-radius:12px"><div class="k">Hotspot SSID</div><div style="font-size:26px;font-weight:700">${nw.ap_ssid||'—'}</div><div class="k" style="margin-top:8px">Password</div><div style="font-size:18px;font-weight:600">${nw.ap_pass||'open'}</div></div>`;
-  $('#net-info').innerHTML=apBig+R('hostname',(nw.host||'nas')+'.local')+R('IP',nw.ip||'—')+R('WiFi',nw.ssid||'—')+R('signal',nw.signal?nw.signal+' dB':'—')+R('mode',nw.mode==='AP'?'Hotspot':'Client')+R('Tailscale',nw.ts_up?`up · ${nw.ts_peers||0} peers`:'down');
-  $('#ts-toggle').innerHTML=ic('i-net')+(nw.ts_up?'TS off':'TS on');}
-$('#force-ap').onclick=()=>openModal('Force hotspot',[['Drop WiFi → start AP','force-ap',1]]);
-$('#ts-toggle').onclick=()=>doAction((last.network||{}).ts_up?'tailscale-down':'tailscale-up');
-$('#wifi-reconnect').onclick=()=>doAction('wifi-reconnect');
+  const ap=nw.mode==='AP',sig=nw.signal,q=sig!=null?Math.max(0,Math.min(100,2*(sig+100))):null,tsOn=nw.ts_up;
+  let h='<div class="h">Connection</div><div class="sideinfo">'
+    +R('Network',ap?'Hotspot':(nw.ssid||'—'))
+    +R('Signal',q!=null?`${q}% <span style="color:var(--mut)">(${sig} dBm)</span>`:'—')
+    +R('IP',(nw.ip&&nw.ip!=='?')?nw.ip:'<span style="color:var(--crit)">no network</span>')
+    +R('Hostname',(nw.host||'nas')+'.local')+R('Mode',ap?'Access Point':'Client')+'</div>';
+  h+=`<div class="h" style="margin-top:12px">Tailscale VPN</div>
+    <div class="schedbanner toggle ${tsOn?'on':'off'}" id="ts-banner">${ic('i-net')}<div class="sb"><div class="sbt">Tailscale ${tsOn?'ON':'OFF'}</div><div class="sbs">${tsOn?((nw.tailscale||'')+' · '+(nw.ts_peers||0)+' peers · tap to disconnect'):'tap to connect'}</div></div><span class="tgl ${tsOn?'on':''}"></span></div>`;
+  if(nw.ap_ssid)h+=`<div class="h" style="margin-top:12px">Field hotspot</div><div class="aphot"><div class="apcol"><div class="k">SSID</div><div class="apv">${nw.ap_ssid}</div></div><div class="apcol"><div class="k">Password</div><div class="apv">${nw.ap_pass||'open'}</div></div></div>`;
+  h+=`<div class="nasbtns" style="margin-top:12px"><button class="cbtn dry" id="wifi-reconnect">${ic('i-restart')}Reconnect</button><button class="cbtn diff" id="force-ap">${ic('i-net')}Force AP</button></div>`;
+  h+=`<div class="h" style="margin-top:12px">WiFi networks <button id="wifi-scan" class="rbtn" style="float:right">${ic('i-restart')}</button></div><div id="wifi-list" class="svc-list"></div>`;
+  h+=`<div class="h" style="margin-top:12px">Tailscale devices</div><div id="ts-list" class="svc-list"></div>`;
+  $('#net-body').innerHTML=h;
+  $('#ts-banner').onclick=()=>{doAction(tsOn?'tailscale-down':'tailscale-up');toast(tsOn?'Tailscale OFF':'Tailscale ON…');setTimeout(()=>api('/api/snapshot').then(r=>r.json()).then(d=>{last=d;renderNetwork();}),1800);};
+  $('#wifi-reconnect').onclick=()=>{doAction('wifi-reconnect');toast('reconnecting WiFi');};
+  $('#force-ap').onclick=()=>openModal('Force hotspot',[['Drop WiFi → start AP','force-ap',1]]);
+  $('#wifi-scan').onclick=loadWifi;
+  loadTsList();}
 async function loadTsList(){try{const d=await(await fetch('/api/tailscale')).json();
   $('#ts-list').innerHTML=d.peers.map(p=>`<div class="svc-item ${p.online?'online':'offline'}" data-ip="${p.ip}"><span>${p.name} <span style="color:var(--mut);font-size:11px">${p.os}</span></span><span class="u">${p.online?'online':'offline'} · ${p.ip}</span></div>`).join('')||'<div class="note">no peers</div>';
   $$('#ts-list .svc-item').forEach(el=>el.onclick=async()=>{toast('ping '+el.dataset.ip+'…');const r=await(await api('/api/ts-ping',{ip:el.dataset.ip})).json();toast((r.out||'no reply').split('\n').pop());});}catch(e){}}
@@ -396,7 +414,6 @@ function connectWifi(ssid,sec){if(sec&&sec!=='--'&&sec!==''){
     $('#wifi-list').innerHTML=`<div class="h">${ssid}</div><input id="wifi-pw" class="lfilter" type="password" placeholder="password" style="max-width:100%"><div style="display:flex;gap:8px;margin-top:8px"><button id="wifi-go" class="wide">Connect</button><button id="wifi-cancel" class="wide">Cancel</button></div>`;
     $('#wifi-go').onclick=()=>{doAction('wifi-connect',{ssid,password:$('#wifi-pw').value});toast('connecting '+ssid);};$('#wifi-cancel').onclick=loadWifi;
   }else{doAction('wifi-connect',{ssid});toast('connecting '+ssid);}}
-$('#wifi-scan').onclick=loadWifi;
 
 /* Today + recent */
 async function renderToday(){try{const d=await(await fetch('/api/today')).json();

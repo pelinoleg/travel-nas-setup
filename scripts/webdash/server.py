@@ -12,7 +12,7 @@
 #   /api/action/screen     → яркость/поворот/гашение/выход из kiosk
 # История пишется в SQLite на /mnt/storage (не на microSD).
 # =============================================================================
-import json, os, pwd, re, sqlite3, subprocess, threading, time, glob, shutil, urllib.request, zipfile
+import json, os, pwd, re, sqlite3, subprocess, threading, time, glob, gzip, shutil, urllib.request, zipfile
 from pathlib import Path
 from flask import Flask, Response, request, jsonify, send_from_directory
 
@@ -638,8 +638,49 @@ def api_events():
     th = read_json("/var/lib/travel-nas/thermal-guard.state.json", {})
     if th.get("last_action") and th.get("last_ts"):
         ev.append({"ts": int(th["last_ts"]), "type": "thermal", "title": "Thermal: " + str(th.get("last_action")), "level": "warn"})
+    # диагностики, отправленные в Telegram
+    for z in glob.glob("/mnt/storage/_logs/diag-*.zip"):
+        ev.append({"ts": int(os.path.getmtime(z)), "type": "system", "title": "Diagnostics exported", "sub": os.path.basename(z), "level": "ok"})
+    # последний boot
+    try:
+        boot = int(time.time() - float(open("/proc/uptime").read().split()[0]))
+        ev.append({"ts": boot, "type": "system", "title": "System booted", "level": "ok"})
+    except Exception:
+        pass
+    # apt-история — установки/апгрейды (что менялось на устройстве)
+    def _pkgnames(s, n=4):
+        ps = [p.strip().split(":")[0].split(" ")[0] for p in s.split("),") if p.strip()]
+        ps = [p for p in ps if p]
+        return ", ".join(ps[:n]) + (f" +{len(ps) - n} more" if len(ps) > n else "")
+    for f in glob.glob("/var/log/apt/history.log*"):
+        try:
+            txt = gzip.open(f, "rt", errors="replace").read() if f.endswith(".gz") else open(f, errors="replace").read()
+        except Exception:
+            continue
+        for blk in txt.split("Start-Date:")[1:]:
+            lines = blk.splitlines()
+            try:
+                ts = int(time.mktime(time.strptime(" ".join(lines[0].split())[:19], "%Y-%m-%d %H:%M:%S")))
+            except Exception:
+                ts = 0
+            inst = upg = cmd = ""
+            for ln in lines:
+                t = ln.strip()
+                if t.startswith("Install:"): inst = t[8:]
+                elif t.startswith("Upgrade:"): upg = t[8:]
+                elif t.startswith("Commandline:"): cmd = t[12:]
+            if upg:
+                cnt = upg.count("),") + 1
+                title = f"Upgraded {cnt} package" + ("s" if cnt != 1 else "")
+                if "linux-image" in upg: title += " (kernel)"
+            elif inst and "update-packages" not in cmd:
+                title = "Installed " + _pkgnames(inst)
+            else:
+                continue
+            ev.append({"ts": ts, "type": "system", "title": title, "sub": "apt", "level": "ok"})
+    ev = [e for e in ev if e.get("ts")]
     ev.sort(key=lambda e: e.get("ts", 0), reverse=True)
-    return jsonify(ev[:60])
+    return jsonify(ev[:120])
 
 @app.route("/api/failed")
 def api_failed():

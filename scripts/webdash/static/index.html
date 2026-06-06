@@ -46,8 +46,8 @@
     <svg class="ic head"><use href="#i-server"/></svg>
     <div class="addr"><span id="host">…</span><span id="ip" class="ip"></span></div>
     <span id="uptime" class="up"></span>
-    <div class="chips" id="topchips"></div>
     <span id="clock"></span>
+    <button id="btn-ambient" class="bigbtn"><svg class="ic"><use href="#i-moon"/></svg></button>
     <button id="btn-power" class="bigbtn"><svg class="ic"><use href="#i-power"/></svg></button>
     <button id="btn-exit" class="bigbtn"><svg class="ic"><use href="#i-exit"/></svg></button>
   </div>
@@ -165,9 +165,11 @@
   <div class="pbody">
     <div class="setrow"><label><svg class="ic"><use href="#i-sun"/></svg>Brightness</label>
       <input type="range" id="brightness" min="5" max="100" value="80"><span id="brightness-val">80%</span></div>
-    <div class="setrow"><label><svg class="ic"><use href="#i-power"/></svg>Turn off after</label>
+    <div class="setrow"><label><svg class="ic"><use href="#i-moon"/></svg>On idle after</label>
       <select id="screen-timeout"><option value="0">never</option><option value="60">1 min</option>
         <option value="300">5 min</option><option value="600">10 min</option><option value="1800">30 min</option></select></div>
+    <div class="setrow"><label><svg class="ic"><use href="#i-moon"/></svg>Idle action</label>
+      <select id="idle-mode"><option value="ambient">Ambient clock</option><option value="off">Screen off</option></select></div>
     <div class="setrow"><label><svg class="ic"><use href="#i-moon"/></svg>Night dim</label>
       <input type="time" id="night-from"> – <input type="time" id="night-to">
       to <input type="number" id="night-level" min="5" max="100" value="20">%</div>
@@ -257,6 +259,13 @@
     <span id="appframe-title"></span>
     <button id="appframe-qr" class="bigbtn">QR</button></div>
   <iframe id="appframe-iframe" src="about:blank"></iframe>
+</div>
+
+<div id="ambient" class="hidden">
+  <div class="amb-time" id="amb-time">--:--</div>
+  <div class="amb-date" id="amb-date"></div>
+  <div class="amb-stat" id="amb-stat"></div>
+  <div class="amb-hint">коснись, чтобы выйти</div>
 </div>
 
 <div id="modal" class="modal hidden"><div class="modalbox">

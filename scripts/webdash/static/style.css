@@ -153,15 +153,35 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:32px;heigh
 .sgrow{display:flex;gap:16px}
 .sgn{font-size:23px;font-weight:700;line-height:1}.sgl{font-size:11px;color:var(--mut);margin-top:3px}
 .g-all .sgn{color:#5b9bff}.g-vid .sgn{color:#ff6b63}.g-mus .sgn{color:#bd8cff}
-/* events timeline */
-.evday{font-size:11px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.6px;margin:14px 0 8px}
-.evrow{display:flex;align-items:center;gap:11px;padding:9px 0;border-bottom:1px solid var(--line)}
-.evdot{flex:none;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--panel2);border:1px solid var(--line)}
-.evdot .ic{width:18px;height:18px;color:var(--mut)}
-.evdot.ok{border-color:var(--ok)}.evdot.ok .ic{color:var(--ok)}
-.evdot.warn{border-color:var(--warn)}.evdot.warn .ic{color:var(--warn)}
-.evdot.crit{border-color:var(--crit)}.evdot.crit .ic{color:var(--crit)}
-.evbody{flex:1;min-width:0}.evtitle{font-size:14px;font-weight:500}
+/* ambient — большие часы на простое */
+#ambient{position:fixed;inset:0;z-index:200;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center}
+#ambient.hidden{display:none}
+.amb-time{font-size:150px;font-weight:300;line-height:.9;letter-spacing:3px}
+.amb-date{font-size:24px;color:var(--mut);text-transform:capitalize;margin-top:6px}
+.amb-stat{display:flex;gap:24px;margin-top:26px;font-size:16px;align-items:center;flex-wrap:wrap;justify-content:center}
+.amb-stat .ic{width:17px;height:17px;vertical-align:-3px;margin-right:4px;color:var(--mut)}
+.amb-hint{position:absolute;bottom:18px;font-size:12px;color:var(--mut)}
+/* events — фильтр-чипы + категории со sticky-заголовком слева */
+.evfilters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.evchip{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:999px;background:var(--panel2);border:1px solid var(--line);color:var(--fg);font-size:13px;font-weight:600}
+.evchip .ic{width:15px;height:15px}
+.evchip.off{opacity:.38}
+.evchip .evn{background:var(--line);border-radius:8px;padding:0 6px;font-size:11px;color:var(--mut)}
+.evcat{display:grid;grid-template-columns:165px 1fr;gap:18px;align-items:start;margin-bottom:4px}
+.evcat-title{position:sticky;top:0;display:flex;gap:9px;align-items:center;padding:10px 0;background:var(--bg);z-index:3}
+.evcat-title .evdot{flex:none;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--panel2);border:1px solid var(--line)}
+.evcat-title .evdot .ic{width:17px;height:17px;color:var(--mut)}
+.c-yt .evdot{border-color:#f85149}.c-yt .evdot .ic{color:#f85149}
+.c-nas .evdot{border-color:#a371f7}.c-nas .evdot .ic{color:#a371f7}
+.c-photo .evdot{border-color:#22d3ee}.c-photo .evdot .ic{color:#22d3ee}
+.c-system .evdot{border-color:#3b82f6}.c-system .evdot .ic{color:#3b82f6}
+.c-thermal .evdot{border-color:#e8a87c}.c-thermal .evdot .ic{color:#e8a87c}
+.evct{font-size:14px;font-weight:700}.evcn{font-size:11px;color:var(--mut)}
+.evcat-list{min-width:0}
+.evrow{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.evlvl{flex:none;width:8px;height:8px;border-radius:50%;background:var(--ok)}
+.evlvl.warn{background:var(--warn)}.evlvl.crit{background:var(--crit)}
+.evbody{flex:1;min-width:0}.evtitle{font-size:14px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .evsub{font-size:12px;color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .evtime{flex:none;color:var(--mut);font-size:12px;font-weight:600}
 .ytcols{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px}

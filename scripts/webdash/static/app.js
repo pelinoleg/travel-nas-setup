@@ -27,22 +27,29 @@ const colorVal=(id,m,v)=>{const e=$('#'+id);if(!e)return;e.classList.remove('lv-
 function switchTab(t){$$('#tabs button').forEach(x=>x.classList.toggle('active',x.dataset.tab===t));
   $$('.tab').forEach(x=>x.classList.toggle('active',x.id==='tab-'+t));activeTab=t;
   if(t==='storage')renderDisks();else if(t==='apps')renderApps();else if(t==='settings')loadPiBackup();else if(t==='events')renderEvents();}
-const evIcon={system:'i-settings',photo:'i-camera',nas:'i-cloud',thermal:'i-thermo',yt:'i-video',verify:'i-disk'};
+const EVCATS=[{k:'yt',label:'YouTube',ic:'i-video'},{k:'nas',label:'NAS backup',ic:'i-cloud'},{k:'photo',label:'Photo import',ic:'i-camera'},{k:'system',label:'System',ic:'i-settings'},{k:'thermal',label:'Thermal',ic:'i-thermo'}];
+let _evCache=[];
 async function renderEvents(){let ev=[];
   try{ev=await(await fetch('/api/events')).json();}catch(e){}
   try{const y=await(await fetch(`http://${location.hostname}:8081/api/events`)).json();
-    (Array.isArray(y)?y:[]).slice(0,30).forEach(e=>{const ts=Math.floor(Date.parse((e.created_at||e.timestamp||e.time||'').replace(' ','T'))/1000)||0;
+    (Array.isArray(y)?y:[]).slice(0,40).forEach(e=>{const ts=Math.floor(Date.parse((e.created_at||e.timestamp||e.time||'').replace(' ','T'))/1000)||0;
       const ty=(e.type||'').replace(/_/g,' ');
       ev.push({ts,type:'yt',title:(e.video_title||e.message||ty||'YT event'),sub:(e.channel_name||'')+(ty?' · '+ty:''),level:/err|fail/i.test(e.type||e.level||'')?'crit':'ok'});});}catch(e){}
-  ev=ev.filter(e=>e.ts).sort((a,b)=>b.ts-a.ts).slice(0,80);
-  if(!ev.length){$('#events-body').innerHTML='<div class="note">пока нет событий</div>';return;}
-  const lab=ts=>{const d=new Date(ts*1000),t=new Date(),y=new Date();y.setDate(t.getDate()-1);const s=(a,b)=>a.toDateString()===b.toDateString();
-    return s(d,t)?'Today':s(d,y)?'Yesterday':d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'});};
-  let h='',cur=null;
-  ev.forEach(e=>{const d=new Date(e.ts*1000),k=d.toDateString();if(k!==cur){cur=k;h+=`<div class="evday">${lab(e.ts)}</div>`;}
+  _evCache=ev.filter(e=>e.ts).sort((a,b)=>b.ts-a.ts);
+  drawEvents();}
+function evHidden(){return new Set((localStorage.ev_hidden||'').split(',').filter(Boolean));}
+function drawEvents(){const ev=_evCache,hid=evHidden();
+  $('#ev-filters').innerHTML=EVCATS.map(c=>{const n=ev.filter(e=>e.type===c.k).length;return `<button class="evchip ${hid.has(c.k)?'off':''}" data-k="${c.k}">${ic(c.ic)}${c.label}<span class="evn">${n}</span></button>`;}).join('');
+  $$('#ev-filters .evchip').forEach(b=>b.onclick=()=>{const k=b.dataset.k,h=evHidden();h.has(k)?h.delete(k):h.add(k);uiSet('ev_hidden',[...h].join(','));drawEvents();});
+  const dt=ts=>{const d=new Date(ts*1000),t=new Date(),y=new Date();y.setDate(t.getDate()-1);const s=(a,b)=>a.toDateString()===b.toDateString();
     const hm=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
-    h+=`<div class="evrow"><span class="evdot ${e.level||'ok'}">${ic(evIcon[e.type]||'i-activity')}</span><div class="evbody"><div class="evtitle">${(e.title||'').slice(0,90)}</div>${e.sub?'<div class="evsub">'+e.sub+'</div>':''}</div><span class="evtime">${hm}</span></div>`;});
-  $('#events-body').innerHTML=h;}
+    return (s(d,t)?'Today':s(d,y)?'Yest':d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}))+' '+hm;};
+  let h='';
+  EVCATS.forEach(c=>{if(hid.has(c.k))return;const items=ev.filter(e=>e.type===c.k);if(!items.length)return;
+    h+=`<div class="evcat c-${c.k}"><div class="evcat-title"><span class="evdot">${ic(c.ic)}</span><div><div class="evct">${c.label}</div><div class="evcn">${items.length} events</div></div></div><div class="evcat-list">`;
+    items.slice(0,40).forEach(e=>{h+=`<div class="evrow"><span class="evlvl ${e.level||'ok'}"></span><div class="evbody"><div class="evtitle">${(e.title||'').slice(0,80)}</div>${e.sub?'<div class="evsub">'+e.sub+'</div>':''}</div><span class="evtime">${dt(e.ts)}</span></div>`;});
+    h+=`</div></div>`;});
+  $('#events-body').innerHTML=h||'<div class="note">нет событий (все категории скрыты?)</div>';}
 $$('#tabs button').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
 setInterval(()=>{const d=new Date();$('#clock').textContent=`${('0'+d.getHours()).slice(-2)}:${('0'+d.getMinutes()).slice(-2)}`;},1000);
 
@@ -141,7 +148,9 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   // yt tile
   const yt=sv.yt||{};
   if(Object.keys(yt).length){$('#yt-v').innerHTML=`${yt.videos||0}<span class="u2"> vids</span>`;
-    $('#yt-sub').innerHTML=`${TB(yt.total_bytes)}${yt.music?' · '+yt.music+' mus':''}${yt.downloading?' · <span style="color:var(--ok)">'+yt.downloading+' dl</span>':(yt.paused?' · <span style="color:var(--warn)">paused</span>':'')}`;
+    {const bits=[`${yt.pending||0} queued`];if(yt.error)bits.push(`<span style="color:var(--crit)">${yt.error} err</span>`);
+     if(yt.downloading)bits.push(`<span style="color:var(--ok)">${yt.downloading} dl</span>`);else if(yt.paused)bits.push(`<span style="color:var(--warn)">paused</span>`);
+     $('#yt-sub').innerHTML=bits.join(' · ');}
     $('#yt-dot').className='tdot '+(yt.paused?'warn':(yt.downloading?'ok':''));
     const dl=$('#yt-dl');if(dl){if(yt.downloading>0){dl.innerHTML=ic('i-dl')+yt.downloading;dl.className='dlbadge on';}else dl.className='dlbadge';}
     const ytt=$('#yt-v').closest('.tile');if(ytt)ytt.classList.toggle('dl-active',yt.downloading>0);}
@@ -157,9 +166,9 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   // header + chips
   $('#host').textContent=(nw.host||'nas')+'.local';
   $('#ip').textContent=nw.ip&&nw.ip!=='?'?nw.ip:'no network';
-  const wc=nw.mode==='AP'?'warn':(nw.ip&&nw.ip!=='?'?'ok':'err');
-  $('#topchips').innerHTML=chip(wc,nw.mode==='AP'?`Hotspot ${nw.ssid||''}`:`${nw.ssid||'no wifi'} ${nw.signal?nw.signal+'dB':''}`);
+  const tc=$('#topchips');if(tc){const wc=nw.mode==='AP'?'warn':(nw.ip&&nw.ip!=='?'?'ok':'err');tc.innerHTML=chip(wc,nw.mode==='AP'?`Hotspot ${nw.ssid||''}`:`${nw.ssid||'no wifi'} ${nw.signal?nw.signal+'dB':''}`);}
   if($('#net-url'))$('#net-url').textContent=`http://${(nw.host||'nas')}.local:8090 · http://${nw.ip||'?'}:8090`;
+  if(!$('#ambient').classList.contains('hidden'))updateAmbient();
   {const on=s.screen_on!==false,sb=s.bright;
    if(sb!=null&&!brDragging){br.value=sb;bv.textContent=sb+'%';}   // слайдер = реальная яркость
    const nf=$('#night-from').value,nt=$('#night-to').value;
@@ -533,16 +542,29 @@ br.addEventListener('pointerdown',()=>brDragging=true);
 br.oninput=()=>{brDragging=true;setBrightness(br.value,true);};
 ['pointerup','pointercancel','change'].forEach(e=>br.addEventListener(e,()=>setTimeout(()=>brDragging=false,500)));
 $('#screen-timeout').value=LS.screenTimeout||'300';$('#screen-timeout').onchange=e=>uiSet('screenTimeout',e.target.value);
+{const im=$('#idle-mode');if(im){im.value=LS.idleMode||'ambient';im.onchange=e=>uiSet('idleMode',e.target.value);}}
 ['night-from','night-to','night-level'].forEach(id=>{const el=$('#'+id);if(LS[id])el.value=LS[id];el.onchange=()=>{uiSet(id,el.value);nightApplied=null;};});
 $('#rotate-apply').onclick=()=>{const v=$('#rotate').value;if(v)doAction('screen',{rotate:v});};
-let lastAct=Date.now(),screenOff=false;
-['pointerdown','touchstart','keydown'].forEach(ev=>addEventListener(ev,()=>{lastAct=Date.now();if(screenOff){screenOff=false;api('/api/action/screen',{backlight:'on'});setBrightness(br.value);}},{passive:true}));
+let lastAct=Date.now(),screenOff=false,ambientOn=false;
+function ambientShow(){ambientOn=true;updateAmbient();$('#ambient').classList.remove('hidden');}
+function ambientHide(){if(!ambientOn)return;ambientOn=false;$('#ambient').classList.add('hidden');lastAct=Date.now();}
+function updateAmbient(){const d=new Date(),s=last.system||{},nw=last.network||{},nb=(last.services||{}).nas_backup||{},sg=last.storage||{};
+  $('#amb-time').textContent=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
+  $('#amb-date').textContent=d.toLocaleDateString('ru-RU',{weekday:'long',day:'numeric',month:'long'});
+  const bk=nb.last_status==='ok'?`<span style="color:var(--ok)">${ic('i-cloud')} backup OK</span>`:(nb.last_status==='failed'?`<span style="color:var(--crit)">${ic('i-cloud')} backup failed</span>`:`${ic('i-cloud')} backup —`);
+  $('#amb-stat').innerHTML=`<span>${ic('i-net')} ${nw.mode==='AP'?'Hotspot':(nw.ssid||'—')}</span><span>${ic('i-thermo')} ${s.temp??'?'}°</span><span>${ic('i-disk')} ${sg.pct??'?'}%</span>${bk}`;}
+['pointerdown','touchstart','keydown'].forEach(ev=>addEventListener(ev,()=>{
+  if(ambientOn){ambientHide();return;}
+  lastAct=Date.now();if(screenOff){screenOff=false;api('/api/action/screen',{backlight:'on'});setBrightness(br.value);}},{passive:true}));
+$('#btn-ambient').onclick=()=>ambientShow();
 const RING=2*Math.PI*16;
-setInterval(()=>{const to=+($('#screen-timeout').value||0),ring=$('#ring'),cd=$('#screen-cd');
+setInterval(()=>{if(ambientOn)updateAmbient();
+  const to=+($('#screen-timeout').value||0),ring=$('#ring'),cd=$('#screen-cd');
   if(!to){cd.textContent='∞';ring.style.strokeDashoffset=0;return;}
-  if(screenOff){cd.textContent='zZ';ring.style.strokeDashoffset=RING;return;}
+  if(screenOff||ambientOn){cd.textContent=ambientOn?'◐':'zZ';ring.style.strokeDashoffset=RING;return;}
   const rem=Math.max(0,to-(Date.now()-lastAct)/1000);cd.textContent=rem>=60?Math.ceil(rem/60)+'m':Math.ceil(rem)+'s';
-  ring.style.strokeDasharray=RING;ring.style.strokeDashoffset=RING*(1-rem/to);if(rem<=0){screenOff=true;api('/api/action/screen',{backlight:'off'});}},1000);
+  ring.style.strokeDasharray=RING;ring.style.strokeDashoffset=RING*(1-rem/to);
+  if(rem<=0){if((localStorage.idleMode||'ambient')==='off'){screenOff=true;api('/api/action/screen',{backlight:'off'});}else ambientShow();}},1000);
 let nightApplied=null;
 function applyNight(){const f=$('#night-from').value,t=$('#night-to').value;if(!f||!t)return;
   const d=new Date(),cur=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);

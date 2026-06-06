@@ -139,6 +139,11 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:32px;heigh
 .bkbar>i.warn{background:var(--warn)}.bkbar>i.high{background:var(--high)}.bkbar>i.crit{background:var(--crit)}
 .appcard .an{font-weight:600;font-size:14px}.appcard .au{color:var(--mut);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* YT pills */
+.ytcols{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px}
+.ytcol{min-width:0}
+.chrow{padding:6px 2px}
+.chtop{display:flex;justify-content:space-between;gap:8px;font-size:13px;margin-bottom:4px}
+.chrow .bar-fill{height:6px}
 .pills{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
 .pill{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 14px;text-align:center;min-width:78px}
 .pill .pn{font-size:22px;font-weight:700}.pill .pl{color:var(--mut);font-size:11px}

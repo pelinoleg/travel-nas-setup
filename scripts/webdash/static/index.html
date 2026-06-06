@@ -202,9 +202,16 @@
   <div class="phead"><button class="bigbtn back"><svg class="ic"><use href="#i-back"/></svg></button><span>YT-Archiver</span><span class="pacts"><button id="yt-toggle" class="rbtn"></button></span></div>
   <div class="pbody"><div id="yt-status"></div>
     <div id="yt-pills" class="pills" style="margin-top:10px"></div>
-    <div class="h" style="margin-top:10px">Queue / downloading</div><div id="yt-queue" class="svc-list"></div>
-    <div class="h" style="margin-top:10px">Recently downloaded</div><div id="yt-recent" class="svc-list"></div>
-    <div class="h" style="margin-top:10px">Top channels <span id="yt-chn" class="k"></span></div><div id="yt-channels" class="svc-list"></div></div>
+    <div class="ytcols">
+      <div class="ytcol">
+        <div class="h">Music library</div><div id="yt-music"></div>
+        <div class="h" style="margin-top:10px">Queue / downloading</div><div id="yt-queue" class="svc-list"></div>
+      </div>
+      <div class="ytcol">
+        <div class="h">Largest channels <span id="yt-chn" class="k"></span></div><div id="yt-channels" class="svc-list"></div>
+        <div class="h" style="margin-top:10px">Recently downloaded</div><div id="yt-recent" class="svc-list"></div>
+      </div>
+    </div></div>
 </div>
 
 <div id="page-today" class="page hidden">

@@ -188,7 +188,9 @@ $('#appframe-back').onclick=()=>{$('#appframe-iframe').src='about:blank';$('#app
 function showQR(name,url){$('#modal-title').textContent=name;const qr=qrcode(0,'M');qr.addData(url);qr.make();
   $('#modal-body').innerHTML=`<div style="background:#fff;padding:10px;border-radius:10px;display:inline-block">${qr.createSvgTag({cellSize:5,margin:1})}</div><div style="margin-top:10px;color:var(--mut);font-size:13px">${url}</div>`;
   $('#modal').classList.remove('hidden');}
-function renderServices(){renderApps();}   /* page-services не используется, но не падаем */
+async function renderServices(){try{const r=await(await fetch('/api/services')).json();
+  $('#services-body').innerHTML=(r.length?'<div class="svc-list">'+r.map((s,i)=>`<div class="svc-item" data-i="${i}"><span>${ic('i-grid')} ${s.name}</span><span class="u">${s.url.replace('http://','')} · QR</span></div>`).join('')+'</div>':'<div class="note">нет сервисов</div>')+'<div class="note">Тап по сервису → QR-код для открытия на телефоне.</div>';
+  $$('#services-body .svc-item').forEach(el=>el.onclick=()=>{const s=r[el.dataset.i];showQR(s.name,s.url);});}catch(e){$('#services-body').innerHTML='error';}}
 
 /* Disks */
 function renderDisks(){const disks=(last.storage||{}).disks||[];
@@ -223,12 +225,15 @@ function renderPhotoPage(){const sv=last.services||{},pr=sv.progress||{},ph=sv.p
 /* Auto-backup: сам баннер — тумблер (тап вкл/выкл, меняет стиль/контент). */
 function renderSchedArea(sched){const on=sched&&sched!=='off';const sm=(sched||'').match(/^(daily|weekly) (\d\d:\d\d)/),fr=sm?sm[1]:'daily',tm=sm?sm[2]:'03:00';
   let h=`<div class="schedbanner toggle ${on?'on':'off'}" id="nas-sched-banner">${ic('i-clock')}<div class="sb"><div class="sbt">Auto-backup ${on?'ON':'OFF'}</div><div class="sbs">${on?sched:'tap to enable'}</div></div><span class="tgl ${on?'on':''}"></span></div>`;
-  if(on)h+=`<div class="schedrow"><select id="sch-freq"><option value="daily">daily</option><option value="weekly">weekly (Sun)</option></select><input type="time" id="sch-time" value="${tm}"><button class="cbtn run sm" id="sch-set">Update</button></div>`;
+  if(on){const[hh,mm]=tm.split(':');
+    const hSel=`<select id="sch-h">${Array.from({length:24},(_,i)=>{const v=('0'+i).slice(-2);return `<option${v===hh?' selected':''}>${v}</option>`;}).join('')}</select>`;
+    const mSel=`<select id="sch-m">${Array.from({length:12},(_,i)=>{const v=('0'+i*5).slice(-2);return `<option${v===mm?' selected':''}>${v}</option>`;}).join('')}</select>`;
+    h+=`<div class="schedrow"><select id="sch-freq"><option value="daily">daily</option><option value="weekly">weekly (Sun)</option></select><span class="timepick">${hSel}<b>:</b>${mSel}</span><button class="cbtn run sm" id="sch-set">Update</button></div>`;}
   $('#sch-area').innerHTML=h;
   if($('#sch-freq'))$('#sch-freq').value=fr;
   $('#nas-sched-banner').onclick=()=>{if(on){doAction('nas-sched-off');renderSchedArea('off');toast('auto-backup OFF');}
     else{doAction('nas-sched-set',{freq:'daily',time:'03:00'});renderSchedArea('daily 03:00');toast('auto-backup ON · daily 03:00');}};
-  const s=$('#sch-set');if(s)s.onclick=()=>{const f=$('#sch-freq').value,t=$('#sch-time').value;doAction('nas-sched-set',{freq:f,time:t});renderSchedArea(f+' '+t);toast('updated · '+f+' '+t);};}
+  const s=$('#sch-set');if(s)s.onclick=()=>{const f=$('#sch-freq').value,t=$('#sch-h').value+':'+$('#sch-m').value;doAction('nas-sched-set',{freq:f,time:t});renderSchedArea(f+' '+t);toast('updated · '+f+' '+t);};}
 /* NAS backup — домашний NAS → /mnt/storage/nas-backup (rsync-модули). Без удаления. */
 async function renderNasPage(){const sv=last.services||{},nb=sv.nas_backup||{},pr=sv.progress||{},active=pr.active&&pr.kind==='nas',sched=sv.nas_sched||'off';
   const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span class="ell">${v}</span></div>`;
@@ -382,8 +387,8 @@ async function renderConfigs(){try{const r=await(await fetch('/api/configs')).js
   $('#configs-body').innerHTML='<div class="svc-list">'+r.map(c=>`<div class="svc-item" data-n="${c.name}"><span>${c.name}${c.desc?' — <span style="color:var(--mut)">'+c.desc+'</span>':''}</span><span class="u">edit</span></div>`).join('')+'</div><div class="note">Tap to edit. Некоторые содержат пароли/токены.</div>';
   $$('#configs-body .svc-item').forEach(el=>el.onclick=()=>editConfig(el.dataset.n));}catch(e){$('#configs-body').innerHTML='error';}}
 async function editConfig(name){try{const r=await(await fetch('/api/config?name='+encodeURIComponent(name))).json();const esc=(r.content||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
-  $('#configs-body').innerHTML=`<div class="h">${name}</div><textarea id="cfg-edit" class="editor">${esc}</textarea><div style="display:flex;gap:8px;margin-top:8px"><button id="cfg-save" class="wide">Save</button><button id="cfg-back" class="wide">Back</button></div>`;
-  $('#cfg-save').onclick=async()=>{const x=await(await api('/api/config',{name,content:$('#cfg-edit').value})).json();toast(x.ok?'saved':'error: '+(x.err||x.error||''));};
+  $('#configs-body').innerHTML=`<div class="edbar"><span class="ell" style="flex:1">${name}</span><button class="cbtn dry sm" id="cfg-back">${ic('i-back')}Back</button><button class="cbtn run sm" id="cfg-save">Save</button></div><textarea id="cfg-edit" class="editor">${esc}</textarea>`;
+  $('#cfg-save').onclick=async()=>{const x=await(await api('/api/config',{name,content:$('#cfg-edit').value})).json();toast(x.ok?'saved ✓':'error: '+(x.err||x.error||''));};
   $('#cfg-back').onclick=renderConfigs;}catch(e){toast('error');}}
 
 /* Logs */

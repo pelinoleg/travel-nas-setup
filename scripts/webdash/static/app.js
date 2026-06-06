@@ -56,6 +56,19 @@ function updateSparks(){$$('.spark').forEach(cv=>{const k=cv.dataset.s;if(!SPARK
   drawSpark(cv,arr,col,sparkMax(k,arr));});}
 setInterval(()=>['cpu','temp','mem','net_rx','disk','dtemp'].forEach(m=>{if(sparkWin(m)>900)fetchSparkHist(m);}),60000);
 
+/* живой широкий график CPU+Temp за час (низ главного экрана) */
+let ovChart=null,OVT=[],OVC=[],OVTEMP=[];
+async function initOvChart(){const el=$('#ovchart-c');if(!el||typeof uPlot==='undefined')return;
+  try{const[c,t]=await Promise.all([fetch('/api/history?m=cpu&range=1h').then(r=>r.json()),fetch('/api/history?m=temp&range=1h').then(r=>r.json())]);
+    OVT=c.t||[];OVC=c.v||[];OVTEMP=(t.v||[]).slice(0,OVT.length);}catch(e){}
+  ovChart=new uPlot({width:el.clientWidth||760,height:el.clientHeight||62,cursor:{show:false},legend:{show:false},
+    scales:{x:{time:true},y:{range:[0,100]}},axes:[{show:false},{show:false}],
+    series:[{},{stroke:'#3b82f6',width:1.6,fill:'#3b82f622',points:{show:false}},{stroke:'#f85149',width:1.6,points:{show:false}}]},
+    [OVT,OVC,OVTEMP],el);}
+function pushOv(s){if(!ovChart)return;const now=Date.now()/1000|0;OVT.push(now);OVC.push(s.cpu||0);OVTEMP.push(s.temp||0);
+  const cut=now-3600;while(OVT.length&&OVT[0]<cut){OVT.shift();OVC.shift();OVTEMP.shift();}
+  ovChart.setData([OVT,OVC,OVTEMP]);}
+
 /* render */
 const chip=(cls,txt)=>`<span class="chip"><span class="dot ${cls}"></span>${txt}</span>`;
 function whichBackup(pr){if(!pr||!pr.active)return null;return pr.kind||'photo';}
@@ -99,7 +112,7 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   TBUF.push(Date.now()/1000|0);
   [['cpu',s.cpu],['temp',s.temp],['mem',s.mem_used],['net_rx',s.net_rx],['disk',st.pct],['dtemp',st.disk_temp]].forEach(([k,v])=>SPARK[k].push(v==null?0:v));
   if(TBUF.length>460){TBUF.shift();for(const k in SPARK)SPARK[k].shift();}
-  updateSparks();
+  updateSparks();pushOv(s);
   if(!$('#detail').classList.contains('hidden'))liveDetail();
   // header + chips
   $('#host').textContent=(nw.host||'nas')+'.local';
@@ -418,4 +431,4 @@ function dragScroll(el){let down=false,sy=0,stp=0,moved=false;
   el.addEventListener('click',e=>{if(moved){e.stopPropagation();e.preventDefault();}},true);}
 ['.tab','.pbody','.scrollbox','.sideinfo'].forEach(sel=>$$(sel).forEach(dragScroll));
 
-connect();setBrightness(br.value);
+connect();setBrightness(br.value);initOvChart();

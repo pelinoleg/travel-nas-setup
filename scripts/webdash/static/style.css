@@ -57,6 +57,11 @@ main{position:relative;height:382px}
 .ring span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600}
 
 .tiles.lastrow{margin-top:8px}
+.ovchart{margin-top:8px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:6px 9px;height:62px;position:relative;overflow:hidden}
+.ovchart .ovlegend{position:absolute;top:5px;left:11px;right:11px;z-index:2;display:flex;gap:12px;font-size:11px;color:var(--mut);font-weight:600}
+.ovlegend .lg{display:flex;align-items:center;gap:4px}.ovlegend .lg i{width:9px;height:3px;border-radius:2px;display:inline-block}
+.ovlegend .lg.cpu i{background:#3b82f6}.ovlegend .lg.temp i{background:#f85149}.ovlegend .lgr{margin-left:auto;opacity:.7}
+#ovchart-c{position:absolute;inset:0}
 /* apps launcher */
 .appsgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .appcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 10px;text-align:center;min-height:92px}

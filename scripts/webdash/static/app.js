@@ -61,17 +61,21 @@ function updateSparks(){$$('.spark').forEach(cv=>{const k=cv.dataset.s;if(!SPARK
   drawSpark(cv,arr,col,sparkMax(k,arr));});}
 setInterval(()=>['cpu','temp','mem','net_rx','disk','dtemp'].forEach(m=>{if(sparkWin(m)>900)fetchSparkHist(m);}),60000);
 
-/* живой широкий график CPU+Temp за час (низ главного экрана) */
+/* живой широкий график CPU+Temp (низ главного). Период настраивается в Settings. */
 let ovChart=null,OVT=[],OVC=[],OVTEMP=[];
+const ovWin=()=>+(localStorage.ov_period||3600);
 async function initOvChart(){const el=$('#ovchart-c');if(!el||typeof uPlot==='undefined')return;
-  try{const[c,t]=await Promise.all([fetch('/api/history?m=cpu&range=1h').then(r=>r.json()),fetch('/api/history?m=temp&range=1h').then(r=>r.json())]);
-    OVT=c.t||[];OVC=c.v||[];OVTEMP=(t.v||[]).slice(0,OVT.length);}catch(e){}
+  const w=ovWin(),lgr=$('#ovchart-wrap .lgr');if(lgr)lgr.textContent='last '+fmtPer(w);
+  try{const r=histRange(w),[c,t]=await Promise.all([fetch('/api/history?m=cpu&range='+r).then(x=>x.json()),fetch('/api/history?m=temp&range='+r).then(x=>x.json())]);
+    OVT=c.t||[];OVC=c.v||[];OVTEMP=(t.v||[]).slice(0,OVT.length);
+    const now=Date.now()/1000|0;let i=0;while(i<OVT.length&&OVT[i]<now-w)i++;OVT=OVT.slice(i);OVC=OVC.slice(i);OVTEMP=OVTEMP.slice(i);}catch(e){}
+  if(ovChart){ovChart.destroy();ovChart=null;}el.innerHTML='';
   ovChart=new uPlot({width:el.clientWidth||760,height:el.clientHeight||62,cursor:{show:false},legend:{show:false},
     scales:{x:{time:true},y:{range:[0,100]}},axes:[{show:false},{show:false}],
     series:[{},{stroke:'#3b82f6',width:1.6,fill:'#3b82f622',points:{show:false}},{stroke:'#f85149',width:1.6,points:{show:false}}]},
     [OVT,OVC,OVTEMP],el);}
 function pushOv(s){if(!ovChart)return;const now=Date.now()/1000|0;OVT.push(now);OVC.push(s.cpu||0);OVTEMP.push(s.temp||0);
-  const cut=now-3600;while(OVT.length&&OVT[0]<cut){OVT.shift();OVC.shift();OVTEMP.shift();}
+  const cut=now-ovWin();while(OVT.length&&OVT[0]<cut){OVT.shift();OVC.shift();OVTEMP.shift();}
   ovChart.setData([OVT,OVC,OVTEMP]);}
 
 /* render */
@@ -497,6 +501,7 @@ $$('select[data-sp]').forEach(s=>{const m=s.dataset.sp;s.value=localStorage['spa
   s.onchange=()=>{uiSet('spark_'+m,s.value);fetchSparkHist(m);updateSparks();updatePeriodLabels();};
   if(+s.value>900)fetchSparkHist(m);});
 updatePeriodLabels();
+{const ovp=$('#ov-period');if(ovp){ovp.value=localStorage.ov_period||'3600';ovp.onchange=()=>{uiSet('ov_period',ovp.value);initOvChart();};}}
 
 /* accent */
 const ACCENTS=['#e8a87c','#d29922','#d9c47a','#f0883e','#f85149','#ec6cb9','#c264f0','#a371f7','#7c83f7','#3b82f6','#2196f3','#22d3ee','#2dd4bf','#3fb950','#56d364','#a5d64c','#f0506e','#b1bac4'];

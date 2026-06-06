@@ -337,6 +337,30 @@ if [[ -n "$STORAGE_DEV" ]]; then
             sudo mount "$STORAGE_MOUNT"
         fi
 
+        # USB-SATA/NVMe-боксы Realtek(0bda)/JMicron(152d)/ASMedia(174c) на Pi с UAS
+        # склонны сбрасываться под нагрузкой → I/O error → ext4 уходит в read-only
+        # (теряются бэкапы). Отключаем UAS для бриджа этого диска (usb-storage.quirks).
+        QP="$(readlink -f "/sys/block/$(lsblk -nro PKNAME "$STORAGE_DEV" 2>/dev/null | head -1)" 2>/dev/null)"
+        QBRIDGE=""
+        while [[ -n "$QP" && "$QP" != "/" ]]; do
+            if [[ -f "$QP/idVendor" && -f "$QP/idProduct" ]]; then
+                QBRIDGE="$(cat "$QP/idVendor"):$(cat "$QP/idProduct")"; break
+            fi
+            QP="$(dirname "$QP")"
+        done
+        case "$QBRIDGE" in
+            0bda:*|152d:*|174c:*)
+                CMDL=/boot/firmware/cmdline.txt; [[ -f "$CMDL" ]] || CMDL=/boot/cmdline.txt
+                if ! grep -q "usb-storage.quirks=[^ ]*$QBRIDGE:u" "$CMDL" 2>/dev/null; then
+                    if grep -qE "usb-storage.quirks=[^ ]+" "$CMDL" 2>/dev/null; then
+                        sudo sed -i "s/\(usb-storage.quirks=[^ ]*\)/\1,$QBRIDGE:u/" "$CMDL"
+                    else
+                        sudo sed -i "s/\$/ usb-storage.quirks=$QBRIDGE:u/" "$CMDL"
+                    fi
+                    warn "USB-бокс $QBRIDGE нестабилен с UAS на Pi — отключил UAS (usb-storage.quirks=$QBRIDGE:u). Применится после REBOOT."
+                fi ;;
+        esac
+
         # Файл-маркер — по нему диск опознаётся при следующих запусках (любой label).
         echo "travel-nas storage; uuid=$STORAGE_UUID" | sudo tee "$STORAGE_MOUNT/$STORAGE_MARKER" >/dev/null
 

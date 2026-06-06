@@ -685,6 +685,7 @@ def api_events():
 # ===== Photos (JPG-просмотр/отбор импортов) =====
 PHOTO_ROOT = CONF["STORAGE_MOUNT"] + "/usb-imports"
 THUMB_DIR = CONF["STORAGE_MOUNT"] + "/.travel-nas/photo-thumbs"
+_thumb_sem = threading.Semaphore(2)   # не больше 2 vips разом — иначе Pi4 захлёбывается
 def _is_jpg(n): return n.lower().endswith((".jpg", ".jpeg"))
 def _safe_photo(rel):
     root = os.path.realpath(PHOTO_ROOT)
@@ -732,13 +733,17 @@ def api_photo_img():
     key = hashlib.sha1(("%s|%d|%d" % (request.args.get("f"), int(os.path.getmtime(ap)), sz)).encode()).hexdigest()[:20]
     tp = os.path.join(THUMB_DIR, key + ".jpg")
     if not os.path.isfile(tp):
-        os.makedirs(THUMB_DIR, exist_ok=True)
-        tmp = tp.replace(".jpg", ".%d.tmp.jpg" % os.getpid())   # атомарно: пишем в temp → rename
-        subprocess.run(["vipsthumbnail", ap, "--size", "%dx%d" % (sz, sz), "-o", tmp + "[Q=82,strip]"],
-                       timeout=25, capture_output=True)
-        if os.path.isfile(tmp):
-            try: os.replace(tmp, tp)
-            except Exception: pass
+        with _thumb_sem:                       # сериализуем генерацию (макс 2)
+            if not os.path.isfile(tp):         # пока ждали — мог уже сгенериться
+                os.makedirs(THUMB_DIR, exist_ok=True)
+                tmp = tp.replace(".jpg", ".%d.tmp.jpg" % os.getpid())   # атомарно: temp → rename
+                try:
+                    subprocess.run(["vipsthumbnail", ap, "--size", "%dx%d" % (sz, sz), "-o", tmp + "[Q=82,strip]"],
+                                   timeout=40, capture_output=True)
+                    if os.path.isfile(tmp): os.replace(tmp, tp)
+                except Exception:
+                    try: os.path.isfile(tmp) and os.remove(tmp)
+                    except Exception: pass
     return send_file(tp if os.path.isfile(tp) else ap, mimetype="image/jpeg")
 
 @app.route("/api/photos/exif")

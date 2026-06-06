@@ -354,8 +354,15 @@ function renderYT(){const yt=(last.services||{}).yt||{},tog=$('#yt-toggle'),B=`h
   const pill=(n,l,c)=>`<div class="pill"${c?` style="border-color:${c}66"`:''}><div class="pn"${c?` style="color:${c}"`:''}>${n}</div><div class="pl">${l}</div></div>`;
   const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span>${v}</span></div>`,J=p=>fetch(B+p).then(r=>r.json()).catch(()=>null);
   Promise.all([J('/api/music/stats'),J('/api/storage/largest-channels'),J('/api/queue'),J('/api/videos'),J('/api/manual/count')]).then(([mus,large,queue,vids,man])=>{
-    $('#yt-pills').innerHTML=pill(yt.videos||0,'videos','#f85149')+pill(TB(yt.total_bytes),'size','#22d3ee')+pill(yt.channels||0,'channels','#3b82f6')
-      +pill((mus&&mus.tracks)||0,'music','#a371f7')+(man&&man.count?pill(man.count,'manual','#d29922'):'');
+    // видео БЕЗ музыки
+    const V=Array.isArray(vids)?vids.filter(x=>!(x.is_music||x.is_music_via_playlist)):[];
+    const vBytes=V.reduce((a,x)=>a+(x.file_size_bytes||0),0);
+    const mT=(mus&&mus.tracks)||0,mB=(mus&&mus.total_bytes)||0;
+    // ОБЩАЯ статистика (видео + музыка)
+    $('#yt-pills').innerHTML=pill(V.length+mT,'items','#3b82f6')+pill(TB(vBytes+mB),'total size','#22d3ee')+pill(yt.channels||0,'channels','#e8a87c')+(man&&man.count?pill(man.count,'manual','#d29922'):'');
+    // ВИДЕО (исключая музыку)
+    $('#yt-video').innerHTML=`<div class="sideinfo">${R(ic('i-video')+' Videos',V.length||(yt.videos||0))}${R('Size',TB(vBytes||((yt.total_bytes||0)-mB)))}${R('Channels',yt.channels||0)}${(yt.pending?R('Pending',yt.pending):'')}</div>`;
+    // МУЗЫКА
     $('#yt-music').innerHTML=mus?`<div class="sideinfo">${R(ic('i-music')+' Tracks',mus.tracks||0)}${R('Playlists',mus.playlists||0)}${R('Favorites',mus.favorites||0)}${R('Size',TB(mus.total_bytes))}</div>`:'<div class="note">no music</div>';
     const Q=Array.isArray(queue)?queue:[];
     $('#yt-queue').innerHTML=Q.length?Q.slice(0,12).map(x=>{const dl=(x.status||'').toLowerCase()==='downloading',p=x.progress!=null?Math.round(x.progress):null;

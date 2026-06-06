@@ -141,6 +141,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:32px;heigh
 /* YT pills */
 .ytcols{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px}
 .ytcol{min-width:0}
+.h .ic{width:15px;height:15px;vertical-align:-2px;margin-right:3px}
 .chrow{padding:6px 2px}
 .chtop{display:flex;justify-content:space-between;gap:8px;font-size:13px;margin-bottom:4px}
 .chrow .bar-fill{height:6px}

@@ -241,15 +241,19 @@ async function renderNasPage(){const sv=last.services||{},nb=sv.nas_backup||{},p
     const dot=e.status?`<span class="dot ${e.status==='ok'?'ok':'crit'}"></span> `:'';
     return `<div class="svc-item"><span>${ic('i-box')} <span class="ell">${mod}</span></span><span class="u">${dot}${e.size?e.size+' ':''}→ ${fold||mod}</span></div>`;}).join('')
     ||`<div class="note">${cfg?'modules empty — добавь в Edit config (формат: rsync-модуль/подпапка|локальная_папка)':'not configured — нажми «Edit config»'}</div>`;
-  // карточка последнего бэкапа (когда + успех)
-  let last_run=0,anyFail=false,hasRun=false;
-  mods.forEach(e=>{if(e.last_run){last_run=Math.max(last_run,e.last_run);hasRun=true;}if(e.status==='fail')anyFail=true;});
+  // карточка последнего бэкапа (когда + успех). last_run/status бывают null —
+  // тогда сигнал о наличии копии берём из exists+size + времени проверки (updated).
+  let last_run=0,anyFail=false,hasData=false,totSz=0;
+  const szGB=s=>{const m=(s||'').match(/([\d.]+)\s*([KMGT])/i);if(!m)return 0;return +m[1]*{K:1e-6,M:1e-3,G:1,T:1e3}[m[2].toUpperCase()];};
+  mods.forEach(e=>{if(e.last_run)last_run=Math.max(last_run,e.last_run);if(e.exists||e.last_run)hasData=true;if(e.status==='fail')anyFail=true;totSz+=szGB(e.size);});
   const rel=ts=>{if(!ts)return'';const d=(Date.now()/1000|0)-ts;return d<3600?Math.round(d/60)+' min ago':d<86400?Math.round(d/3600)+'h ago':Math.round(d/86400)+'d ago';};
+  const when=last_run?rel(last_run):(nb.updated?'checked '+rel(nb.updated):'');
+  const szTxt=totSz?(totSz>=1?totSz.toFixed(1)+' GB':(totSz*1000).toFixed(0)+' MB'):'';
   let lastCard;
-  if(active)lastCard=`<div class="bkcard"><div class="lbic spin">${ic('i-cloud')}</div><div class="bkc"><div class="bkt">Backing up…</div>${bkProg(pr)}</div></div>`;
-  else if(!hasRun)lastCard=`<div class="lastbk none">${ic('i-cloud')}<div><div class="lbt">No backups yet</div><div class="lbs">press Run to start the first backup</div></div></div>`;
-  else if(anyFail)lastCard=`<div class="lastbk fail">${ic('i-stop')}<div><div class="lbt">Last backup failed</div><div class="lbs">${rel(last_run)} — see Log</div></div></div>`;
-  else lastCard=`<div class="lastbk ok">${ic('i-cloud')}<div><div class="lbt">Backed up ✓</div><div class="lbs">${rel(last_run)}</div></div></div>`;
+  if(active)lastCard=`<div class="lastbk run">${ic('i-cloud')}<div><div class="lbt">Backing up… ${pr.percent||0}%</div><div class="lbs">${pr.speed||''} eta ${pr.eta||'?'}</div></div></div>`;
+  else if(!hasData)lastCard=`<div class="lastbk none">${ic('i-cloud')}<div><div class="lbt">No backups yet</div><div class="lbs">press Run to start the first backup</div></div></div>`;
+  else if(anyFail)lastCard=`<div class="lastbk fail">${ic('i-stop')}<div><div class="lbt">Last backup failed</div><div class="lbs">${when} — see Log</div></div></div>`;
+  else lastCard=`<div class="lastbk ok">${ic('i-cloud')}<div><div class="lbt">Backed up ✓ ${szTxt}</div><div class="lbs">${when||'copy present'}</div></div></div>`;
   const progBlock=lastCard;
   const acts=active?`<button class="cbtn stop" id="bk-stop">${ic('i-stop')}Stop</button>`
     :`<button class="cbtn run" id="bk-run">${ic('i-cloud')}Run</button><button class="cbtn dry" id="bk-dry">${ic('i-list')}Dry-run</button><button class="cbtn diff" id="bk-diff">${ic('i-activity')}Diff</button>`;

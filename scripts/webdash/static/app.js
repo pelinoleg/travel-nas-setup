@@ -220,19 +220,15 @@ function renderPhotoPage(){const sv=last.services||{},pr=sv.progress||{},ph=sv.p
   $('#photo-body').innerHTML=bkCard(ic('i-camera'),'Copy photos from card to disk',body)
     +'<div class="h" style="margin-top:6px">Imports on disk <span id="imp-total" class="k"></span></div><div id="bk-cleanup" class="svc-list"></div>';
   loadCleanup();}
-function schedBanner(sched){const on=sched&&sched!=='off';
-  return `<div class="schedbanner ${on?'on':'off'}" id="nas-sched-banner">${ic('i-clock')}<div class="sb"><div class="sbt">Auto-backup ${on?'ON':'OFF'}</div><div class="sbs">${on?sched:'manual only — runs only when you press Run'}</div></div></div>`;}
-/* редактор расписания (понятный: off → одна кнопка Enable; on → freq/time + Off) */
-function renderSchedArea(sched,edit){const on=sched&&sched!=='off';const sm=(sched||'').match(/^(daily|weekly) (\d\d:\d\d)/),tm=sm?sm[2]:'03:00';
-  let h=schedBanner(on?sched:'off');
-  if(on||edit)h+=`<div class="schedrow"><select id="sch-freq"><option value="daily">daily</option><option value="weekly">weekly (Sun)</option></select>
-    <input type="time" id="sch-time" value="${tm}"><button class="cbtn run sm" id="sch-set">${on?'Update':'Enable'}</button>${on?'<button class="cbtn stop sm" id="sch-off">Turn off</button>':''}</div>`;
-  else h+=`<button class="cbtn enable wide2" id="sch-enable">${ic('i-clock')}Enable auto-backup</button>`;
+/* Auto-backup: сам баннер — тумблер (тап вкл/выкл, меняет стиль/контент). */
+function renderSchedArea(sched){const on=sched&&sched!=='off';const sm=(sched||'').match(/^(daily|weekly) (\d\d:\d\d)/),fr=sm?sm[1]:'daily',tm=sm?sm[2]:'03:00';
+  let h=`<div class="schedbanner toggle ${on?'on':'off'}" id="nas-sched-banner">${ic('i-clock')}<div class="sb"><div class="sbt">Auto-backup ${on?'ON':'OFF'}</div><div class="sbs">${on?sched:'tap to enable'}</div></div><span class="tgl ${on?'on':''}"></span></div>`;
+  if(on)h+=`<div class="schedrow"><select id="sch-freq"><option value="daily">daily</option><option value="weekly">weekly (Sun)</option></select><input type="time" id="sch-time" value="${tm}"><button class="cbtn run sm" id="sch-set">Update</button></div>`;
   $('#sch-area').innerHTML=h;
-  if(sm&&$('#sch-freq'))$('#sch-freq').value=sm[1];
-  const e=$('#sch-enable');if(e)e.onclick=()=>renderSchedArea('off',true);
-  const s=$('#sch-set');if(s)s.onclick=()=>{const fr=$('#sch-freq').value,t=$('#sch-time').value;doAction('nas-sched-set',{freq:fr,time:t});renderSchedArea(fr+' '+t,false);toast('auto-backup ON · '+fr+' '+t);};
-  const o=$('#sch-off');if(o)o.onclick=()=>{doAction('nas-sched-off');renderSchedArea('off',false);toast('auto-backup OFF');};}
+  if($('#sch-freq'))$('#sch-freq').value=fr;
+  $('#nas-sched-banner').onclick=()=>{if(on){doAction('nas-sched-off');renderSchedArea('off');toast('auto-backup OFF');}
+    else{doAction('nas-sched-set',{freq:'daily',time:'03:00'});renderSchedArea('daily 03:00');toast('auto-backup ON · daily 03:00');}};
+  const s=$('#sch-set');if(s)s.onclick=()=>{const f=$('#sch-freq').value,t=$('#sch-time').value;doAction('nas-sched-set',{freq:f,time:t});renderSchedArea(f+' '+t);toast('updated · '+f+' '+t);};}
 /* NAS backup — домашний NAS → /mnt/storage/nas-backup (rsync-модули). Без удаления. */
 async function renderNasPage(){const sv=last.services||{},nb=sv.nas_backup||{},pr=sv.progress||{},active=pr.active&&pr.kind==='nas',sched=sv.nas_sched||'off';
   const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span class="ell">${v}</span></div>`;
@@ -240,18 +236,18 @@ async function renderNasPage(){const sv=last.services||{},nb=sv.nas_backup||{},p
   const cfg=conf.configured;
   const folders=(conf.modules||[]).map(m=>{const[mod,fold]=m.split('|');return `<div class="svc-item"><span>${ic('i-box')} <span class="ell">${mod}</span></span><span class="u">→ ${fold||mod}</span></div>`;}).join('')
     ||`<div class="note">${cfg?'modules empty — добавь в Edit config (формат: rsync-модуль/подпапка|локальная_папка)':'not configured — нажми «Edit config»'}</div>`;
-  const statusCard=bkCard(ic('i-cloud'),'Backup from home NAS',active?bkProg(pr):`<div class="bks">${cfg?(nb.last_run?'last run '+nb.last_run:'idle'):'not configured'}</div>`);
+  // прогресс-карточка ТОЛЬКО во время бэкапа (idle-плашку убрали — путала и липла)
+  const progBlock=active?`<div class="bkcard" style="margin-top:10px">${ic('i-cloud')}<div class="bkc"><div class="bkt">Backing up…</div>${bkProg(pr)}</div></div>`:'';
   const acts=active?`<button class="cbtn stop wide2" id="bk-stop">${ic('i-stop')}Stop backup</button>`
-    :`<div class="nasbtns"><button class="cbtn run" id="bk-run">${ic('i-cloud')}Run</button><button class="cbtn dry" id="bk-dry">${ic('i-list')}Dry-run</button><button class="cbtn diff" id="bk-diff">${ic('i-activity')}Diff</button></div>`;
+    :`<div class="nasbtns"><button class="cbtn run" id="bk-run">${ic('i-cloud')}Run</button><button class="cbtn dry" id="bk-dry">${ic('i-list')}Dry</button><button class="cbtn diff" id="bk-diff">${ic('i-activity')}Diff</button></div>`;
   const panel=`<div class="naspanel">
-    <div class="h">Actions</div>${acts}
-    <div class="h" style="margin-top:7px">Auto-backup</div><div id="sch-area"></div>
-    <div class="h" style="margin-top:7px">Connection</div>
+    ${acts}
+    <div class="h" style="margin-top:8px">Auto-backup</div><div id="sch-area"></div>
+    <div class="h" style="margin-top:8px">Connection</div>
     <div class="sideinfo">${R('Host',conf.host||'—')}${R('User',conf.user||'—')}${R('Dest',conf.dest||'—')}${nb.last_status?R('Status',nb.last_status==='failed'?'<span style="color:var(--crit)">failed</span>':'<span style="color:var(--ok)">'+nb.last_status+'</span>'):''}</div>
-    <button class="minib wide2" id="nas-editcfg">${ic('i-list')}Edit config</button>
-    <button class="minib wide2" id="nas-viewlog">${ic('i-activity')}View run log</button></div>`;
-  $('#nas-body').innerHTML=`<div class="naslayout"><div class="nasmain"><div class="h">Backup folders</div><div class="svc-list">${folders}</div>${statusCard}</div>${panel}</div>`;
-  renderSchedArea(sched,false);
+    <div class="nasbtns" style="margin-top:8px"><button class="minib" id="nas-editcfg" style="flex:1">${ic('i-list')}Edit config</button><button class="minib" id="nas-viewlog" style="flex:1">${ic('i-activity')}Log</button></div></div>`;
+  $('#nas-body').innerHTML=`<div class="naslayout"><div class="nasmain"><div class="h">Backup folders</div><div class="svc-list">${folders}</div>${progBlock}</div>${panel}</div>`;
+  renderSchedArea(sched);
   $('#nas-viewlog').onclick=()=>openLogfile('__nas__','NAS backup run log');
   $('#nas-editcfg').onclick=()=>{$$('.page').forEach(p=>p.classList.add('hidden'));$('#page-configs').classList.remove('hidden');editConfig('nas-backup.conf');};
   $('#nas-acts').innerHTML='';   // действия теперь в правой панели, шапку чистим

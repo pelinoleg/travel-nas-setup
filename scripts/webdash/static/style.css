@@ -194,6 +194,10 @@ table#proc-cpu,table#proc-mem{width:100%;border-collapse:collapse;font-size:12px
 .schedbanner.on{background:rgba(63,185,80,.14);border-color:var(--ok)}.schedbanner.on .ic{color:var(--ok)}
 .schedbanner.off .ic{color:var(--mut)}
 .schedbanner .sbt{font-weight:700;font-size:15px}.schedbanner .sbs{color:var(--mut);font-size:12px}
+.schedbanner.toggle{cursor:pointer}.schedbanner.toggle:active{filter:brightness(1.15)}
+.schedbanner .tgl{margin-left:auto;width:40px;height:23px;border-radius:12px;background:var(--line);position:relative;flex:none}
+.schedbanner .tgl::after{content:"";position:absolute;top:2px;left:2px;width:19px;height:19px;border-radius:50%;background:#fff;transition:left .2s}
+.schedbanner .tgl.on{background:var(--ok)}.schedbanner .tgl.on::after{left:19px}
 .schedrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px}
 .schedrow select,.schedrow input{padding:7px 9px;background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:8px}
 

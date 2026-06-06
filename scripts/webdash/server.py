@@ -733,8 +733,12 @@ def api_photo_img():
     tp = os.path.join(THUMB_DIR, key + ".jpg")
     if not os.path.isfile(tp):
         os.makedirs(THUMB_DIR, exist_ok=True)
-        subprocess.run(["vipsthumbnail", ap, "--size", "%dx%d" % (sz, sz), "-o", tp + "[Q=82,strip]"],
+        tmp = tp.replace(".jpg", ".%d.tmp.jpg" % os.getpid())   # атомарно: пишем в temp → rename
+        subprocess.run(["vipsthumbnail", ap, "--size", "%dx%d" % (sz, sz), "-o", tmp + "[Q=82,strip]"],
                        timeout=25, capture_output=True)
+        if os.path.isfile(tmp):
+            try: os.replace(tmp, tp)
+            except Exception: pass
     return send_file(tp if os.path.isfile(tp) else ap, mimetype="image/jpeg")
 
 @app.route("/api/photos/exif")

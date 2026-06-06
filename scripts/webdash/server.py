@@ -711,6 +711,17 @@ def api_docker():
 @app.route("/api/action/<name>", methods=["POST"])
 def api_action(name):
     if name == "screen": return api_screen()
+    if name == "osk":   # показать/скрыть тач-клавиатуру (squeekboard) по фокусу поля
+        show = "true" if (request.json or {}).get("show", True) else "false"
+        uid = os.getuid()
+        env = dict(os.environ, XDG_RUNTIME_DIR="/run/user/%d" % uid,
+                   DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/%d/bus" % uid)
+        try:
+            subprocess.run(["busctl", "--user", "call", "sm.puri.OSK0", "/sm/puri/OSK0",
+                            "sm.puri.OSK0", "SetVisible", "b", show], env=env, timeout=4,
+                           stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+        except Exception: pass
+        return jsonify({"ok": True})
     if name == "power-mode":
         m = (request.json or {}).get("mode")
         cmd = ["sudo", "-n", "/usr/local/bin/power-mode.sh", m] if m in ("auto", "normal", "saver") else None

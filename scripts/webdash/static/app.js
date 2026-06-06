@@ -502,6 +502,11 @@ $$('#accent .swatch').forEach(s=>s.onclick=()=>applyAccent(s.dataset.c));
 $$('#bgsw .swatch').forEach(s=>s.onclick=()=>applyBg(+s.dataset.i));
 applyAccent(localStorage.accent||'#3b82f6');applyBg(localStorage.bgTheme!=null?+localStorage.bgTheme:0);
 
+/* тач-клавиатура (squeekboard) по фокусу текстовых полей — Chromium сам не зовёт */
+const KBSEL='input:not([type=range]):not([type=checkbox]):not([type=radio]):not([type=button]),textarea';
+addEventListener('focusin',e=>{if(e.target&&e.target.matches&&e.target.matches(KBSEL))api('/api/action/osk',{show:true});});
+addEventListener('focusout',e=>{if(e.target&&e.target.matches&&e.target.matches(KBSEL))setTimeout(()=>{const a=document.activeElement;if(!a||!a.matches(KBSEL))api('/api/action/osk',{show:false});},250);});
+
 /* drag-scroll */
 function dragScroll(el){let down=false,sy=0,stp=0,moved=false;
   el.addEventListener('pointerdown',e=>{if(e.target.closest('input,textarea,select'))return;down=true;sy=e.clientY;stp=el.scrollTop;moved=false;});

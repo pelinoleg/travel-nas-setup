@@ -38,8 +38,28 @@ if (
     fetch_script "webdash/static/app.js"      "$WD_DIR/static/app.js"
     fetch_script "webdash/static/style.css"   "$WD_DIR/static/style.css"
     # cpu-boost.sh — нужен кнопкам CPU Boost. На DSI 19-display его НЕ кладёт
-    # (фетч в MHS35-ветке после DSI-return), поэтому кладём здесь сами.
+    # (фетч в MHS35-ветке после DSI-return), поэтому кладём здесь сами + boot-restore
+    # (если ребут во время буста — вернуть docker-лимиты на старте).
     fetch_script "cpu-boost.sh" /usr/local/bin/cpu-boost.sh
+    if [[ ! -f "$CONFIG_DIR/cpu-boost.conf" ]]; then
+        fetch_conf_example "cpu-boost.conf.example" "$CONFIG_DIR/cpu-boost.conf"
+        sudo chmod 0644 "$CONFIG_DIR/cpu-boost.conf"
+    fi
+    write_systemd_unit cpu-boost-restore.service << 'U'
+[Unit]
+Description=Restore docker CPU limits after boot (clear stale cpu-boost)
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/cpu-boost.sh off
+
+[Install]
+WantedBy=multi-user.target
+U
+    sudo systemctl daemon-reload
+    sudo systemctl enable cpu-boost-restore.service 2>/dev/null || true
 
     # uPlot (вендорим локально — дашборд должен работать оффлайн)
     UP=1.6.31

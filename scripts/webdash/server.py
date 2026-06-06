@@ -671,8 +671,11 @@ def api_config_save():
     d = request.json or {}
     p = _conf_path(d.get("name", ""))
     if not p: return jsonify({"error": "bad name"}), 400
+    # нормализуем «умные» кавычки/тире (тач-клавиатура их вставляет → ломает bash-конфиг)
+    content = (d.get("content", "") or "").translate({0x201c: '"', 0x201d: '"', 0x201e: '"',
+               0x2018: "'", 0x2019: "'", 0x2013: "-", 0x2014: "-", 0x00a0: " "})
     try:
-        r = subprocess.run(["sudo", "-n", "tee", p], input=d.get("content", ""),
+        r = subprocess.run(["sudo", "-n", "tee", p], input=content,
                            capture_output=True, text=True, timeout=10)
         return jsonify({"ok": r.returncode == 0, "err": r.stderr[-200:]})
     except Exception as e:

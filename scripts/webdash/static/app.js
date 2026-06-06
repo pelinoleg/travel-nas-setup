@@ -238,11 +238,10 @@ async function renderNasPage(){const sv=last.services||{},nb=sv.nas_backup||{},p
     ||`<div class="note">${cfg?'modules empty — добавь в Edit config (формат: rsync-модуль/подпапка|локальная_папка)':'not configured — нажми «Edit config»'}</div>`;
   // прогресс-карточка ТОЛЬКО во время бэкапа (idle-плашку убрали — путала и липла)
   const progBlock=active?`<div class="bkcard" style="margin-top:10px">${ic('i-cloud')}<div class="bkc"><div class="bkt">Backing up…</div>${bkProg(pr)}</div></div>`:'';
-  const acts=active?`<button class="cbtn stop wide2" id="bk-stop">${ic('i-stop')}Stop backup</button>`
-    :`<div class="nasbtns"><button class="cbtn run" id="bk-run">${ic('i-cloud')}Run</button><button class="cbtn dry" id="bk-dry">${ic('i-list')}Dry</button><button class="cbtn diff" id="bk-diff">${ic('i-activity')}Diff</button></div>`;
+  const acts=active?`<button class="cbtn stop" id="bk-stop">${ic('i-stop')}Stop</button>`
+    :`<button class="cbtn run" id="bk-run">${ic('i-cloud')}Run</button><button class="cbtn dry" id="bk-dry">${ic('i-list')}Dry-run</button><button class="cbtn diff" id="bk-diff">${ic('i-activity')}Diff</button>`;
   const panel=`<div class="naspanel">
-    ${acts}
-    <div class="h" style="margin-top:8px">Auto-backup</div><div id="sch-area"></div>
+    <div class="h">Auto-backup</div><div id="sch-area"></div>
     <div class="h" style="margin-top:8px">Connection</div>
     <div class="sideinfo">${R('Host',conf.host||'—')}${R('User',conf.user||'—')}${R('Dest',conf.dest||'—')}${nb.last_status?R('Status',nb.last_status==='failed'?'<span style="color:var(--crit)">failed</span>':'<span style="color:var(--ok)">'+nb.last_status+'</span>'):''}</div>
     <div class="nasbtns" style="margin-top:8px"><button class="minib" id="nas-editcfg" style="flex:1">${ic('i-list')}Edit config</button><button class="minib" id="nas-viewlog" style="flex:1">${ic('i-activity')}Log</button></div></div>`;
@@ -250,9 +249,12 @@ async function renderNasPage(){const sv=last.services||{},nb=sv.nas_backup||{},p
   renderSchedArea(sched);
   $('#nas-viewlog').onclick=()=>openLogfile('__nas__','NAS backup run log');
   $('#nas-editcfg').onclick=()=>{$$('.page').forEach(p=>p.classList.add('hidden'));$('#page-configs').classList.remove('hidden');editConfig('nas-backup.conf');};
-  $('#nas-acts').innerHTML='';   // действия теперь в правой панели, шапку чистим
+  $('#nas-acts').innerHTML=acts;   // Run/Dry/Diff/Stop — в шапке справа, возле заголовка
   const b=(id,act,msg)=>{const e=$('#'+id);if(e)e.onclick=()=>{doAction(act);toast(msg);};};
-  b('bk-run','nas-backup','backup started');b('bk-dry','nas-dry','dry-run → View run log');b('bk-diff','nas-diff','diff → View run log');b('bk-stop','nas-stop','stopping');}
+  b('bk-run','nas-backup','backup started');b('bk-stop','nas-stop','stopping');
+  // dry/diff — детачатся, вывод в журнал → авто-открываем лог с результатом
+  const bLog=(id,act)=>{const e=$('#'+id);if(e)e.onclick=()=>{doAction(act);toast(act.replace('nas-','')+' running…');setTimeout(()=>openLogfile('__nas__','NAS '+act.replace('nas-','')+' result'),3000);};};
+  bLog('bk-dry','nas-dry');bLog('bk-diff','nas-diff');}
 function updateBackupLive(){const pr=(last.services||{}).progress||{};
   const open=!$('#page-photo').classList.contains('hidden')?'photo':(!$('#page-nas').classList.contains('hidden')?'nas':null);
   if(!open)return;const wantActive=!!(pr.active&&pr.kind===open);

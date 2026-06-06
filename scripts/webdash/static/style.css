@@ -44,6 +44,8 @@ main{position:relative;height:382px}
 .dlbadge.on{display:inline-flex;animation:dlpulse 1.1s ease-in-out infinite}
 .dlbadge .ic{width:13px;height:13px;color:var(--ok)}
 @keyframes dlpulse{0%,100%{opacity:1}50%{opacity:.3}}
+.dlspin .ic{width:28px;height:28px;color:#3b82f6;animation:dlbounce .9s ease-in-out infinite}
+@keyframes dlbounce{0%,100%{transform:translateY(-3px)}50%{transform:translateY(3px)}}
 .tile[data-open]:active{border-color:var(--acc)}
 .th{display:flex;align-items:center;gap:6px;color:var(--mut);font-size:12px}
 .th .ic{width:15px;height:15px}

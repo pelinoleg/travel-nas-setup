@@ -333,22 +333,31 @@ async function loadCleanup(){try{const r=await(await fetch('/api/imports')).json
 async function delImport(name){await api('/api/imports/delete',{name});toast('deleted');loadCleanup();}
 
 /* YT page */
-function renderYT(){const yt=(last.services||{}).yt||{};
-  if(!Object.keys(yt).length){$('#yt-pills').innerHTML='';$('#yt-info').innerHTML='<div class="note">YT-Archiver offline.</div>';$('#yt-toggle').style.display='none';return;}
+function renderYT(){const yt=(last.services||{}).yt||{},tog=$('#yt-toggle');
+  if(!Object.keys(yt).length){$('#yt-status').innerHTML='<div class="note">YT-Archiver offline.</div>';$('#yt-pills').innerHTML='';$('#yt-queue').innerHTML='';$('#yt-recent').innerHTML='';tog.style.display='none';return;}
+  // 1) статус-баннер
+  let st;
+  if(yt.downloading>0)st=`<div class="lastbk run"><span class="dlspin">${ic('i-dl')}</span><div><div class="lbt">Downloading ${yt.downloading}</div><div class="lbs">${yt.pending||0} in queue${yt.error?' · '+yt.error+' errors':''}</div></div></div>`;
+  else if(yt.paused)st=`<div class="lastbk none">${ic('i-stop')}<div><div class="lbt">Paused</div><div class="lbs">${yt.pending||0} pending</div></div></div>`;
+  else st=`<div class="lastbk ok">${ic('i-video')}<div><div class="lbt">Up to date ✓</div><div class="lbs">${yt.pending||0} pending${yt.error?' · '+yt.error+' errors':''}</div></div></div>`;
+  $('#yt-status').innerHTML=st;
+  // 2) пилюли
   const pill=(n,l,c)=>`<div class="pill"${c?` style="border-color:${c}66"`:''}><div class="pn"${c?` style="color:${c}"`:''}>${n}</div><div class="pl">${l}</div></div>`;
-  $('#yt-pills').innerHTML=pill(yt.videos||0,'videos','#f85149')+pill(TB(yt.total_bytes),'size','#22d3ee')+pill(yt.channels||0,'channels','#3b82f6')
-    +pill(yt.downloading||0,'downloading',yt.downloading?'#3fb950':null)+pill(yt.pending||0,'pending',yt.pending?'#d29922':null);
-  const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span>${v}</span></div>`;
-  $('#yt-info').innerHTML=R('state',yt.paused?'paused':'running')+R('errors',yt.error||0)+R('max parallel',yt.max_concurrent||1);
-  const t=$('#yt-toggle');t.style.display='';t.innerHTML=yt.paused?ic('i-play')+'Resume all':ic('i-stop')+'Pause all';
-  t.onclick=async()=>{await api('/api/yt',{action:yt.paused?'resume':'pause'});toast(yt.paused?'resumed':'paused');setTimeout(()=>api('/api/snapshot').then(r=>r.json()).then(d=>{last=d;renderYT();}),800);};
-  // обогащаем напрямую с YT-бэкенда (CORS=*): музыка + недавние
+  $('#yt-pills').innerHTML=pill(yt.videos||0,'videos','#f85149')+pill(TB(yt.total_bytes),'size','#22d3ee')+pill(yt.channels||0,'channels','#3b82f6');
+  // 3) кнопка
+  tog.style.display='';tog.innerHTML=yt.paused?ic('i-play')+'Resume':ic('i-stop')+'Pause';
+  tog.onclick=async()=>{await api('/api/yt',{action:yt.paused?'resume':'pause'});toast(yt.paused?'resumed':'paused');setTimeout(()=>api('/api/snapshot').then(r=>r.json()).then(d=>{last=d;renderYT();}),800);};
+  // 4) очередь + недавние + музыка (с YT-бэкенда, CORS=*)
   fetch(`http://${location.hostname}:8081/api/videos`).then(r=>r.json()).then(v=>{
     const music=v.filter(x=>x.is_music||x.is_music_via_playlist).length;
     $('#yt-pills').insertAdjacentHTML('beforeend',pill(music,'music','#a371f7'));
-    const rec=v.filter(x=>x.downloaded_at).sort((a,b)=>(b.downloaded_at||'').localeCompare(a.downloaded_at||'')).slice(0,8);
-    $('#yt-recent').innerHTML=(rec.length?rec:v.slice(0,8)).map(x=>`<div class="svc-item"><span>${ic((x.is_music||x.is_music_via_playlist)?'i-music':'i-video')} ${(x.title||'').slice(0,44)}</span><span class="u">${x.file_size_bytes?TB(x.file_size_bytes):''}</span></div>`).join('')||'<div class="note">empty</div>';
-  }).catch(()=>{$('#yt-recent').innerHTML='<div class="note">нет связи с YT-бэкендом</div>';});}
+    const ico=x=>ic((x.is_music||x.is_music_via_playlist)?'i-music':'i-video');
+    const q=v.filter(x=>['downloading','pending','queued','processing'].includes((x.status||'').toLowerCase()));
+    $('#yt-queue').innerHTML=q.length?q.map(x=>{const p=x.progress!=null?Math.round(x.progress):null,dl=(x.status||'').toLowerCase()==='downloading';
+      return `<div class="svc-item ${dl?'online':''}"><span>${ico(x)} ${(x.title||'').slice(0,40)}</span><span class="u">${dl?(p!=null?p+'%':'↓'):x.status}</span></div>`;}).join(''):'<div class="note">очередь пуста</div>';
+    const rec=v.filter(x=>x.downloaded_at).sort((a,b)=>(b.downloaded_at||'').localeCompare(a.downloaded_at||'')).slice(0,10);
+    $('#yt-recent').innerHTML=(rec.length?rec:v.slice(0,10)).map(x=>`<div class="svc-item"><span>${ico(x)} ${(x.title||'').slice(0,40)}</span><span class="u">${x.file_size_bytes?TB(x.file_size_bytes):''}</span></div>`).join('')||'<div class="note">empty</div>';
+  }).catch(()=>{$('#yt-queue').innerHTML='<div class="note">нет связи с YT-бэкендом</div>';});}
 
 /* Power */
 const MODEDESC={auto:'Auto — system picks governor by temp/throttle.',normal:'Normal — ondemand, up to max clock.',saver:'Saver — powersave, min clock.'};

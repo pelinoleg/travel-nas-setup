@@ -30,6 +30,9 @@ if (
     fi
     # grim — скриншот Wayland для кнопки «Screenshot → Telegram»
     command -v grim >/dev/null 2>&1 || { wait_for_apt; apt_install grim; }
+    # vips/exiftool — тумбнейлы и EXIF для таба Photos
+    command -v vipsthumbnail >/dev/null 2>&1 || { wait_for_apt; apt_install libvips-tools; }
+    command -v exiftool >/dev/null 2>&1 || { wait_for_apt; apt_install libimage-exiftool-perl; }
 
     # 2) Код + статика
     sudo mkdir -p "$WD_DIR/static"

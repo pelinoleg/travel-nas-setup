@@ -54,6 +54,7 @@
   <nav id="tabs">
     <button data-tab="overview" class="active"><svg class="ic"><use href="#i-activity"/></svg>Overview</button>
     <button data-tab="events"><svg class="ic"><use href="#i-list"/></svg>Events</button>
+    <button data-tab="photos"><svg class="ic"><use href="#i-camera"/></svg>Photos</button>
     <button data-tab="apps"><svg class="ic"><use href="#i-grid"/></svg>Apps</button>
     <button data-tab="storage"><svg class="ic"><use href="#i-disk"/></svg>Disks</button>
     <button data-tab="settings"><svg class="ic"><use href="#i-settings"/></svg>Settings</button>
@@ -88,6 +89,12 @@
   </section>
 
   <section id="tab-events" class="tab"><div id="ev-filters" class="evfilters"></div><div id="events-body"></div></section>
+
+  <section id="tab-photos" class="tab">
+    <div class="phbar"><select id="ph-sel"></select><span id="ph-count" class="k"></span>
+      <span class=" phhint" id="ph-hint"></span></div>
+    <div id="ph-grid" class="phgrid"></div>
+  </section>
 
   <section id="tab-apps" class="tab">
     <div class="h">Apps — open service UI</div>
@@ -129,6 +136,10 @@
       </span></div>
     <div class="setrow"><label><svg class="ic"><use href="#i-activity"/></svg>Overview graph (bottom)</label>
       <select id="ov-period"><option value="3600">1h</option><option value="10800">3h</option><option value="21600">6h</option><option value="43200">12h</option><option value="86400">24h</option></select></div>
+    <div class="setrow"><label><svg class="ic"><use href="#i-camera"/></svg>Photo thumbnail size</label>
+      <select id="ph-thumb"><option value="300">small</option><option value="400">medium</option><option value="550">large</option></select></div>
+    <div class="setrow"><label><svg class="ic"><use href="#i-camera"/></svg>Send Saved photo to Telegram</label>
+      <select id="ph-tg"><option value="0">off</option><option value="1">on</option></select></div>
     <div class="setrow"><label><svg class="ic"><use href="#i-net"/></svg>Open on network</label>
       <span id="net-url" class="sub"></span></div>
   </section>
@@ -273,6 +284,20 @@
     <span id="appframe-title"></span>
     <button id="appframe-qr" class="bigbtn">QR</button></div>
   <iframe id="appframe-iframe" src="about:blank"></iframe>
+</div>
+
+<div id="ph-view" class="hidden">
+  <div class="pv-top"><button id="pv-close" class="bigbtn"><svg class="ic"><use href="#i-back"/></svg></button>
+    <span id="pv-name"></span><span id="pv-pos" class="k"></span>
+    <button id="pv-exif-btn" class="bigbtn">EXIF</button></div>
+  <div id="pv-stage" class="pv-stage"><img id="pv-img" src=""></div>
+  <button id="pv-prev" class="pv-arrow l">‹</button><button id="pv-nextarr" class="pv-arrow r">›</button>
+  <div id="pv-exif" class="pv-exif hidden"></div>
+  <div class="pv-acts">
+    <button id="pv-next" class="cbtn"><svg class="ic"><use href="#i-play"/></svg>Next</button>
+    <button id="pv-del" class="cbtn pv-del"><svg class="ic"><use href="#i-stop"/></svg>Delete</button>
+    <button id="pv-save" class="cbtn pv-save"><svg class="ic"><use href="#i-cloud"/></svg>Save</button>
+  </div>
 </div>
 
 <div id="ambient" class="hidden">

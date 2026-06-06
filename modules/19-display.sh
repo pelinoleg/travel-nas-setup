@@ -160,6 +160,7 @@ $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/nas-backup.sh
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/nas-backup-status.py
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/daily-summary.sh
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/pi-config-backup.sh
+$DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/photo-cull.sh *
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/travel-nas-update
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/travel-nas-update --full
 $DASHBOARD_USER ALL=(root) NOPASSWD: /usr/local/bin/power-mode.sh

@@ -78,6 +78,8 @@ REPO_RAW="https://raw.githubusercontent.com/pelinoleg/travel-nas-setup/main"
 declare -A SCRIPTS=(
     [tg-notify.sh]=/usr/local/bin/tg-notify.sh
     [photo-backup.sh]=/usr/local/bin/photo-backup.sh
+    [photo-cull.sh]=/usr/local/bin/photo-cull.sh
+    [photo-thumbs.sh]=/usr/local/bin/photo-thumbs.sh
     [nas-backup.sh]=/usr/local/bin/nas-backup.sh
     [nas-schedule.sh]=/usr/local/bin/nas-schedule.sh
     [pi-config-backup.sh]=/usr/local/bin/pi-config-backup.sh
@@ -204,6 +206,7 @@ REQUIRED_CMDS=(
     "/usr/local/bin/nas-backup-status.py"
     "/usr/local/bin/daily-summary.sh"
     "/usr/local/bin/pi-config-backup.sh"
+    "/usr/local/bin/photo-cull.sh *"
     "/usr/local/bin/travel-nas-update"
     "/usr/local/bin/travel-nas-update --full"
     "/usr/local/bin/power-mode.sh"

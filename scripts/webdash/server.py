@@ -12,9 +12,9 @@
 #   /api/action/screen     → яркость/поворот/гашение/выход из kiosk
 # История пишется в SQLite на /mnt/storage (не на microSD).
 # =============================================================================
-import json, os, pwd, re, sqlite3, subprocess, threading, time, glob, gzip, shutil, urllib.request, zipfile
+import json, os, pwd, re, sqlite3, subprocess, threading, time, glob, gzip, hashlib, shutil, urllib.request, zipfile
 from pathlib import Path
-from flask import Flask, Response, request, jsonify, send_from_directory
+from flask import Flask, Response, request, jsonify, send_from_directory, send_file
 
 BASE = Path(__file__).resolve().parent
 STATIC = BASE / "static"
@@ -681,6 +681,79 @@ def api_events():
     ev = [e for e in ev if e.get("ts")]
     ev.sort(key=lambda e: e.get("ts", 0), reverse=True)
     return jsonify(ev[:120])
+
+# ===== Photos (JPG-просмотр/отбор импортов) =====
+PHOTO_ROOT = CONF["STORAGE_MOUNT"] + "/usb-imports"
+THUMB_DIR = CONF["STORAGE_MOUNT"] + "/.travel-nas/photo-thumbs"
+def _is_jpg(n): return n.lower().endswith((".jpg", ".jpeg"))
+def _safe_photo(rel):
+    root = os.path.realpath(PHOTO_ROOT)
+    p = os.path.realpath(os.path.join(root, rel or ""))
+    return p if (p == root or p.startswith(root + os.sep)) else None
+
+@app.route("/api/photos/sessions")
+def api_photo_sessions():
+    out = []
+    if os.path.isdir(PHOTO_ROOT):
+        for date in os.listdir(PHOTO_ROOT):
+            dp = os.path.join(PHOTO_ROOT, date)
+            if not os.path.isdir(dp) or date[0] in "._": continue
+            for run in os.listdir(dp):
+                rp = os.path.join(dp, run)
+                if not os.path.isdir(rp) or run.endswith(".incomplete"): continue
+                cnt = sum(sum(1 for f in fs if _is_jpg(f)) for _, _, fs in os.walk(rp))
+                if cnt:
+                    out.append({"id": date + "/" + run, "name": run.split("_USB_")[0],
+                                "date": date, "count": cnt, "ts": int(os.path.getmtime(rp))})
+    out.sort(key=lambda s: s["ts"], reverse=True)
+    return jsonify(out)
+
+@app.route("/api/photos/list")
+def api_photo_list():
+    base = _safe_photo(request.args.get("session", ""))
+    if not base or not os.path.isdir(base): return jsonify([])
+    root = os.path.realpath(PHOTO_ROOT); files = []
+    for dp, dirs, fs in os.walk(base):
+        dirs[:] = [d for d in dirs if d[0] not in "._" and not d.endswith(".incomplete")]
+        for f in fs:
+            if _is_jpg(f):
+                ap = os.path.join(dp, f)
+                files.append({"f": os.path.relpath(ap, root), "name": f, "ts": int(os.path.getmtime(ap))})
+    files.sort(key=lambda x: x["name"])
+    return jsonify(files)
+
+@app.route("/api/photos/img")
+def api_photo_img():
+    ap = _safe_photo(request.args.get("f", "")); size = request.args.get("s", "")
+    if not ap or not os.path.isfile(ap): return ("", 404)
+    if size == "full" or not size: return send_file(ap, mimetype="image/jpeg")
+    try: sz = max(80, min(2400, int(size)))
+    except Exception: sz = 400
+    key = hashlib.sha1(("%s|%d|%d" % (request.args.get("f"), int(os.path.getmtime(ap)), sz)).encode()).hexdigest()[:20]
+    tp = os.path.join(THUMB_DIR, key + ".jpg")
+    if not os.path.isfile(tp):
+        os.makedirs(THUMB_DIR, exist_ok=True)
+        subprocess.run(["vipsthumbnail", ap, "--size", "%dx%d" % (sz, sz), "-o", tp + "[Q=82,strip]"],
+                       timeout=25, capture_output=True)
+    return send_file(tp if os.path.isfile(tp) else ap, mimetype="image/jpeg")
+
+@app.route("/api/photos/exif")
+def api_photo_exif():
+    ap = _safe_photo(request.args.get("f", ""))
+    if not ap or not os.path.isfile(ap): return jsonify({})
+    out = sh(["exiftool", "-j", "-Make", "-Model", "-LensModel", "-FNumber", "-ExposureTime",
+              "-ISO", "-FocalLength", "-DateTimeOriginal", "-ImageSize", ap], timeout=10)
+    try: return jsonify(json.loads(out)[0])
+    except Exception: return jsonify({})
+
+@app.route("/api/photos/action", methods=["POST"])
+def api_photo_action():
+    b = request.json or {}; ap = _safe_photo(b.get("f", "")); act = b.get("action", "")
+    if not ap or not os.path.isfile(ap) or act not in ("delete", "save"): return jsonify({"ok": False}), 400
+    args = ["sudo", "-n", "/usr/local/bin/photo-cull.sh", act, ap]
+    if act == "save" and b.get("tg"): args.append("tg")
+    r = subprocess.run(args, capture_output=True, text=True, timeout=40)
+    return jsonify({"ok": r.returncode == 0, "out": (r.stdout + r.stderr).strip()})
 
 @app.route("/api/failed")
 def api_failed():

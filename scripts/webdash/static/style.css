@@ -153,6 +153,29 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:32px;heigh
 .sgrow{display:flex;gap:16px}
 .sgn{font-size:23px;font-weight:700;line-height:1}.sgl{font-size:11px;color:var(--mut);margin-top:3px}
 .g-all .sgn{color:#5b9bff}.g-vid .sgn{color:#ff6b63}.g-mus .sgn{color:#bd8cff}
+/* Photos */
+.phbar{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.phhint{margin-left:auto;color:var(--mut);font-size:13px;font-weight:600}
+.phgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(115px,1fr));gap:6px}
+.phcell{aspect-ratio:1;background:var(--panel2);border-radius:8px;overflow:hidden;cursor:pointer}
+.phcell img{width:100%;height:100%;object-fit:cover;display:block}
+#ph-view{position:fixed;inset:0;z-index:300;background:#000;display:flex;flex-direction:column}
+#ph-view.hidden{display:none}
+.pv-top{display:flex;align-items:center;gap:12px;padding:6px 10px;background:rgba(0,0,0,.6);z-index:2}
+.pv-top #pv-name{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pv-top #pv-pos{margin-left:auto}.pv-top #pv-exif-btn{width:auto;padding:0 14px;font-size:13px;font-weight:700}
+.pv-stage{flex:1;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:0}
+.pv-stage img{max-width:100%;max-height:100%;object-fit:contain}
+.pv-stage.zoomed{overflow:auto;display:block}
+.pv-stage.zoomed img{max-width:none;max-height:none;width:auto;height:auto}
+.pv-arrow{position:absolute;top:46%;transform:translateY(-50%);z-index:3;width:46px;height:70px;background:rgba(0,0,0,.4);color:#fff;border:none;font-size:34px;border-radius:10px}
+.pv-arrow.l{left:8px}.pv-arrow.r{right:8px}.pv-arrow.hidden{display:none}
+.pv-exif{position:absolute;left:0;right:0;bottom:66px;display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:center;padding:8px 14px;background:rgba(0,0,0,.55);font-size:13px;color:#cfd6df;z-index:3}
+.pv-exif.hidden{display:none}
+.pv-acts{display:flex;gap:10px;padding:9px;background:rgba(0,0,0,.7);justify-content:center;z-index:2}
+.pv-acts .cbtn{flex:1;max-width:210px;justify-content:center;font-size:16px;padding:13px}
+.pv-del{background:rgba(248,81,73,.18);color:var(--crit);border-color:var(--crit)}
+.pv-save{background:rgba(63,185,80,.18);color:var(--ok);border-color:var(--ok)}
 /* ambient — большие часы на простое */
 #ambient{position:fixed;inset:0;z-index:200;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center}
 #ambient.hidden{display:none}

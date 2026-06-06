@@ -53,9 +53,6 @@ main{position:relative;height:382px}
 .th{display:flex;align-items:center;gap:6px;color:var(--mut);font-size:12px}
 .th .ic{width:15px;height:15px}
 .tv{font-size:30px;font-weight:700;line-height:1.1;margin-top:2px}
-/* CPU — крупнее по умолчанию, ещё крупнее при warn/high/crit (в пределах разумного) */
-#cpu{font-size:40px;transition:font-size .3s}
-#cpu.lv-warn{font-size:46px}#cpu.lv-high{font-size:50px}#cpu.lv-crit{font-size:54px}
 /* YT/Docker — крупнее количество + размер */
 #yt-v,#dk{font-size:30px;line-height:1.1;margin-top:1px}
 #yt-sub,#dk-sub{font-size:13px;font-weight:600}

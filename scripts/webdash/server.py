@@ -89,7 +89,15 @@ def sample_fast():
     freq = read("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq")
     fmax = read("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq")
     rrx, rtx = net_rate()
-    return {"cpu": cpu_percent(), "temp": temp,
+    bright = None; screen_on = True
+    for bd in glob.glob("/sys/class/backlight/*/"):
+        try:
+            b = int(read(bd + "brightness")); m = int(read(bd + "max_brightness"))
+            if m: bright = round(b / m * 100)
+            screen_on = read(bd + "bl_power", "0") in ("0", "")
+        except Exception: pass
+        break
+    return {"cpu": cpu_percent(), "temp": temp, "bright": bright, "screen_on": screen_on,
             "mem_used": round(mt - ma, 2), "mem_total": round(mt, 2),
             "throttled": thr, "throttled_now": thr not in ("", "0x0"),
             "governor": read("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor", "?"),
@@ -154,7 +162,15 @@ def sample_storage():
                         "disk_temp": d["temp"], "health": d["health"],
                         "mounted": True, "device": "/dev/" + p["name"]}
     if not prim:
-        prim = {"pct": None, "mounted": False}
+        prim = {"pct": None}
+    prim["mounted"] = os.path.ismount(CONF["STORAGE_MOUNT"])   # авторитетно, не из lsblk
+    ro = False                                                  # read-only / ext4 emergency
+    for line in read("/proc/mounts").splitlines():
+        f = line.split()
+        if len(f) >= 4 and f[1] == CONF["STORAGE_MOUNT"]:
+            o = "," + f[3] + ","
+            ro = "emergency_ro" in o or "shutdown" in o or ",ro," in o
+    prim["readonly"] = ro
     prim["disks"] = disks
     return prim
 

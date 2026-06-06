@@ -41,9 +41,9 @@ case "$arg" in
         ;;
     on)   write "$PWR" 0; echo "backlight ON" ;;
     off)  write "$PWR" 4; echo "backlight OFF" ;;
-    +*)   write "$BR" "$(clamp $(( cur + ${arg#+} )))"; echo "brightness → $(cat "$BR")/$MAX" ;;
-    -*)   write "$BR" "$(clamp $(( cur - ${arg#-} )))"; echo "brightness → $(cat "$BR")/$MAX" ;;
-    *%)   write "$BR" "$(clamp $(( ${arg%\%} * MAX / 100 )))"; echo "brightness → $(cat "$BR")/$MAX" ;;
+    +*)   write "$BR" "$(clamp $(( cur + ${arg#+} )))"; write "$PWR" 0; echo "brightness → $(cat "$BR")/$MAX" ;;
+    -*)   write "$BR" "$(clamp $(( cur - ${arg#-} )))"; write "$PWR" 0; echo "brightness → $(cat "$BR")/$MAX" ;;
+    *%)   write "$BR" "$(clamp $(( ${arg%\%} * MAX / 100 )))"; write "$PWR" 0; echo "brightness → $(cat "$BR")/$MAX" ;;
     *[!0-9]*) echo "Usage: $0 [ <0-$MAX> | <N%> | +N | -N | on | off ]" >&2; exit 2 ;;
-    *)    write "$BR" "$(clamp "$arg")"; echo "brightness → $(cat "$BR")/$MAX" ;;
+    *)    write "$BR" "$(clamp "$arg")"; write "$PWR" 0; echo "brightness → $(cat "$BR")/$MAX" ;;
 esac

@@ -81,6 +81,12 @@ main{position:relative;height:382px}
 .dstat .dn{font-size:19px;font-weight:700;line-height:1.1}.dstat .dl{color:var(--mut);font-size:11px}
 .dim{opacity:.4}
 .lv-ok{color:var(--ok)}
+.tile.alarm{border-color:var(--crit);animation:alarmpulse 1.4s ease-in-out infinite}
+@keyframes alarmpulse{0%,100%{box-shadow:0 0 0 1px var(--crit) inset}50%{box-shadow:0 0 0 2px var(--crit) inset,0 0 12px rgba(248,81,73,.4)}}
+/* touch-friendly range slider */
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;max-width:260px;height:36px;background:transparent;vertical-align:middle}
+input[type=range]::-webkit-slider-runnable-track{height:8px;background:var(--panel2);border:1px solid var(--line);border-radius:5px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:32px;height:32px;border-radius:50%;background:var(--acc);margin-top:-13px;border:3px solid var(--bg);box-shadow:0 1px 5px rgba(0,0,0,.45)}
 /* акцентные плитки сервисов */
 .t-docker{border-left:3px solid #3b82f6}.t-docker .th .ic{color:#3b82f6}
 .t-yt{border-left:3px solid #f85149}.t-yt .th .ic{color:#f85149}

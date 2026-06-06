@@ -80,11 +80,15 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   $('#mem').textContent=s.mem_total?(+s.mem_used).toFixed(1):'–';$('#mem-tot').textContent=s.mem_total?'/'+Math.round(s.mem_total):'';colorVal('mem','disk',memPct);
   {const tx=s.net_tx||0,rx=s.net_rx||0;
    $('#net').innerHTML=`<span class="dl ${rx>=1?'on':''}">${ic('i-dl')}${fmtNet(rx)}</span><span class="ul ${tx>=1?'on':''}">${ic('i-ul')}${fmtNet(tx)}</span>`;}
-  $('#disk').textContent=st.pct??'–';colorVal('disk','disk',st.pct);
-  const dbar=$('#disk-bar');if(dbar){dbar.style.width=(st.pct||0)+'%';dbar.className=st.pct>=95?'crit':st.pct>=88?'high':st.pct>=75?'warn':'';}
-  $('#disk-sub').textContent=st.size?`${(st.used/1e12).toFixed(2)} / ${(st.size/1e12).toFixed(2)} TB`:'';
+  const dkTile=$('#disk').closest('.tile'),unmounted=st.mounted===false,ro=st.readonly;
+  if(dkTile)dkTile.classList.toggle('alarm',unmounted||ro);
+  if(unmounted){$('#disk').innerHTML='<span class="lv-crit">✕</span>';$('#disk-sub').innerHTML='<span class="lv-crit" style="font-weight:700">NOT MOUNTED</span>';}
+  else if(ro){$('#disk').textContent=st.pct??'–';$('#disk-sub').innerHTML='<span class="lv-crit" style="font-weight:700">READ-ONLY</span>';}
+  else{$('#disk').textContent=st.pct??'–';$('#disk-sub').textContent=st.size?`${(st.used/1e12).toFixed(2)} / ${(st.size/1e12).toFixed(2)} TB`:'';}
+  colorVal('disk','disk',st.pct);
+  const dbar=$('#disk-bar');if(dbar){dbar.style.width=(unmounted?0:st.pct||0)+'%';dbar.className=st.pct>=95?'crit':st.pct>=88?'high':st.pct>=75?'warn':'';}
   const dtemp=$('#disk-temp'),dt=st.disk_temp;
-  if(dt!=null){dtemp.textContent=dt+'°';dtemp.className='dtemp '+(dt>=58?'crit':dt>=52?'high':dt>=45?'warn':'');}else dtemp.textContent='';
+  if(dt!=null&&!unmounted){dtemp.textContent=dt+'°';dtemp.className='dtemp '+(dt>=58?'crit':dt>=52?'high':dt>=45?'warn':'');}else dtemp.textContent='';
   const pt=$('#power-tile');if(pt){pt.className='tile';pt.classList.add('pm-'+(s.pmode||'auto'));}
   $('#power').textContent=s.pmode||'auto';$('#power-sub').textContent=s.governor||'?';
   {const fr=$('#freq');if(fr){fr.textContent=s.freq_mhz||'–';const frac=(s.freq_mhz||0)/(s.freq_max||1800);
@@ -120,8 +124,10 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   const wc=nw.mode==='AP'?'warn':(nw.ip&&nw.ip!=='?'?'ok':'err');
   $('#topchips').innerHTML=chip(wc,nw.mode==='AP'?`Hotspot ${nw.ssid||''}`:`${nw.ssid||'no wifi'} ${nw.signal?nw.signal+'dB':''}`);
   if($('#net-url'))$('#net-url').textContent=`http://${(nw.host||'nas')}.local:8090 · http://${nw.ip||'?'}:8090`;
-  {const nf=$('#night-from').value,nt=$('#night-to').value;
-   $('#screen-sub').innerHTML=`<span>${ic('i-sun')} ${br.value}%</span>${nf&&nt?`<span>${ic('i-moon')} ${nf}–${nt}</span>`:''}`;}
+  {const on=s.screen_on!==false,sb=s.bright;
+   if(sb!=null&&!brDragging){br.value=sb;bv.textContent=sb+'%';}   // слайдер = реальная яркость
+   const nf=$('#night-from').value,nt=$('#night-to').value;
+   $('#screen-sub').innerHTML=(on?`<span>${ic('i-sun')} ${sb!=null?sb:br.value}%</span>`:`<span class="lv-crit">${ic('i-moon')} off</span>`)+(nf&&nt?`<span>${ic('i-moon')} ${nf}–${nt}</span>`:'');}
   renderAlerts(s,st,sv,nw);
   // live-обновление только лёгких частей открытой страницы (без полного rebuild → нет дёрганья)
   if(!$('#page-power').classList.contains('hidden'))renderPower();
@@ -130,7 +136,8 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
 function renderAlerts(s,st,sv,nw){const a=[];
   if(s.throttled_now)a.push(['crit','i-zap','Throttled']);
   if(s.temp>=82)a.push(['crit','i-thermo','CPU '+s.temp+'°C']);else if(s.temp>=72)a.push(['warn','i-thermo',s.temp+'°C']);
-  if(st.mounted===false)a.push(['crit','i-disk','Disk not mounted']);
+  if(st.mounted===false)a.push(['crit','i-disk','Storage disk NOT MOUNTED — backups disabled']);
+  else if(st.readonly)a.push(['crit','i-disk','Disk READ-ONLY (ext4 error) — нужен fsck/ребут']);
   else if(st.pct>=95)a.push(['crit','i-disk','Disk '+st.pct+'%']);else if(st.pct>=88)a.push(['warn','i-disk','Disk '+st.pct+'%']);
   if((nw.ip||'?')==='?')a.push(['warn','i-net','No network']);
   const nb=sv.nas_backup||{};if((nb.last_status||'')==='failed')a.push(['crit','i-cloud','Backup failed']);
@@ -452,9 +459,12 @@ async function loadPiBackup(){try{const d=await(await fetch('/api/pibackup')).js
 $('#pibk-run').onclick=()=>{doAction('pi-backup');toast('pi config backup started');setTimeout(loadPiBackup,4000);};
 
 /* screen */
-const LS=localStorage,br=$('#brightness'),bv=$('#brightness-val');
+const LS=localStorage,br=$('#brightness'),bv=$('#brightness-val');let brDragging=false;
 function setBrightness(v,save){bv.textContent=v+'%';api('/api/action/screen',{brightness:v+'%'});if(save)LS.brightness=v;}
-br.value=LS.brightness||80;bv.textContent=br.value+'%';br.oninput=()=>setBrightness(br.value,true);
+br.value=LS.brightness||80;bv.textContent=br.value+'%';
+br.addEventListener('pointerdown',()=>brDragging=true);
+br.oninput=()=>{brDragging=true;setBrightness(br.value,true);};
+['pointerup','pointercancel','change'].forEach(e=>br.addEventListener(e,()=>setTimeout(()=>brDragging=false,500)));
 $('#screen-timeout').value=LS.screenTimeout||'300';$('#screen-timeout').onchange=e=>LS.screenTimeout=e.target.value;
 ['night-from','night-to','night-level'].forEach(id=>{const el=$('#'+id);if(LS[id])el.value=LS[id];el.onchange=()=>{LS[id]=el.value;nightApplied=null;};});
 $('#rotate-apply').onclick=()=>{const v=$('#rotate').value;if(v)doAction('screen',{rotate:v});};
@@ -515,4 +525,4 @@ function dragScroll(el){let down=false,sy=0,stp=0,moved=false;
   el.addEventListener('click',e=>{if(moved){e.stopPropagation();e.preventDefault();}},true);}
 ['.tab','.pbody','.scrollbox','.sideinfo'].forEach(sel=>$$(sel).forEach(dragScroll));
 
-connect();setBrightness(br.value);initOvChart();
+connect();initOvChart();   /* яркость НЕ форсим на старте — слайдер синхронизируется с реальной */

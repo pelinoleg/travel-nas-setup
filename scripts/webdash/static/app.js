@@ -40,9 +40,9 @@ async function renderEvents(){let ev=[];
       ev.push({ts,type:'yt',title:(e.video_title||e.message||ty||'YT event'),sub:(e.channel_name||'')+(ty?' · '+ty:''),level:/err|fail/i.test(e.type||e.level||'')?'crit':'ok'});});
     _evCache=ev.filter(e=>e.ts).sort((a,b)=>b.ts-a.ts);drawEvents();}catch(e){}}
 function evHidden(){return new Set((localStorage.ev_hidden||'').split(',').filter(Boolean));}
-function drawEvents(){const ev=_evCache,hid=evHidden();
-  $('#ev-filters').innerHTML=EVCATS.map(c=>{const n=ev.filter(e=>e.type===c.k).length;return `<button class="evchip ${hid.has(c.k)?'off':''}" data-k="${c.k}">${ic(c.ic)}${c.label}<span class="evn">${n}</span></button>`;}).join('');
-  $$('#ev-filters .evchip').forEach(b=>b.onclick=()=>{const k=b.dataset.k,h=evHidden();h.has(k)?h.delete(k):h.add(k);uiSet('ev_hidden',[...h].join(','));drawEvents();});
+function drawEvents(){const ev=_evCache,hid=evHidden(),filt=$('#ev-filters'),body=$('#events-body');if(!body)return;
+  if(filt){filt.innerHTML=EVCATS.map(c=>{const n=ev.filter(e=>e.type===c.k).length;return `<button class="evchip ${hid.has(c.k)?'off':''}" data-k="${c.k}">${ic(c.ic)}${c.label}<span class="evn">${n}</span></button>`;}).join('');
+    $$('#ev-filters .evchip').forEach(b=>b.onclick=()=>{const k=b.dataset.k,h=evHidden();h.has(k)?h.delete(k):h.add(k);uiSet('ev_hidden',[...h].join(','));drawEvents();});}
   const dt=ts=>{const d=new Date(ts*1000),t=new Date(),y=new Date();y.setDate(t.getDate()-1);const s=(a,b)=>a.toDateString()===b.toDateString();
     const hm=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
     return (s(d,t)?'Today':s(d,y)?'Yest':d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}))+' '+hm;};
@@ -172,7 +172,7 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   if($('#net-url'))$('#net-url').textContent=`http://${(nw.host||'nas')}.local:8090 · http://${nw.ip||'?'}:8090`;
   if(!$('#ambient').classList.contains('hidden'))updateAmbient();
   {const on=s.screen_on!==false,sb=s.bright;
-   if(sb!=null&&!brDragging){br.value=sb;bv.textContent=sb+'%';}   // слайдер = реальная яркость
+   if(sb!=null&&!brDragging&&!ambientOn){br.value=sb;bv.textContent=sb+'%';}   // слайдер = реальная яркость (не во время ambient)
    const nf=$('#night-from').value,nt=$('#night-to').value;
    $('#screen-sub').innerHTML=(on?`<span>${ic('i-sun')} ${sb!=null?sb:br.value}%</span>`:`<span class="lv-crit">${ic('i-moon')} off</span>`)+(nf&&nt?`<span>${ic('i-moon')} ${nf}–${nt}</span>`:'');}
   renderAlerts(s,st,sv,nw);
@@ -548,25 +548,45 @@ $('#screen-timeout').value=LS.screenTimeout||'300';$('#screen-timeout').onchange
 ['night-from','night-to','night-level'].forEach(id=>{const el=$('#'+id);if(LS[id])el.value=LS[id];el.onchange=()=>{uiSet(id,el.value);nightApplied=null;};});
 $('#rotate-apply').onclick=()=>{const v=$('#rotate').value;if(v)doAction('screen',{rotate:v});};
 let lastAct=Date.now(),screenOff=false,ambientOn=false;
-function ambientShow(){ambientOn=true;updateAmbient();$('#ambient').classList.remove('hidden');api('/api/action/screen',{brightness:(+(localStorage.ambBright||30))+'%'});}
-function ambientHide(){if(!ambientOn)return;ambientOn=false;$('#ambient').classList.add('hidden');lastAct=Date.now();api('/api/action/screen',{brightness:(+br.value)+'%'});}
-function ambShowSet(){return new Set((localStorage.amb_show||'date,wifi,temp,disk,backup').split(',').filter(Boolean));}
-function updateAmbient(){const d=new Date(),s=last.system||{},nw=last.network||{},nb=(last.services||{}).nas_backup||{},sg=last.storage||{},sh=ambShowSet();
+let preAmbBright=80;
+function ambientShow(){if(!ambientOn)preAmbBright=+br.value||80;ambientOn=true;updateAmbient();$('#ambient').classList.remove('hidden');api('/api/action/screen',{brightness:(+(localStorage.ambBright||30))+'%'});}
+function ambientHide(){if(!ambientOn)return;ambientOn=false;$('#ambient').classList.add('hidden');lastAct=Date.now();api('/api/action/screen',{brightness:preAmbBright+'%'});br.value=preAmbBright;bv.textContent=preAmbBright+'%';}
+const AMB_CATS=['Network','System','Storage','Services'];
+const AMB_ITEMS=[
+  {k:'wifi',cat:'Network',label:'WiFi',ic:'i-net'},{k:'ip',cat:'Network',label:'IP address',ic:'i-net'},
+  {k:'signal',cat:'Network',label:'Signal',ic:'i-net'},{k:'ts',cat:'Network',label:'Tailscale',ic:'i-net'},
+  {k:'temp',cat:'System',label:'CPU temp',ic:'i-thermo'},{k:'cpu',cat:'System',label:'CPU load',ic:'i-cpu'},
+  {k:'ram',cat:'System',label:'RAM',ic:'i-ram'},{k:'power',cat:'System',label:'Power mode',ic:'i-zap'},
+  {k:'freq',cat:'System',label:'CPU freq',ic:'i-cpu'},{k:'uptime',cat:'System',label:'Uptime',ic:'i-activity'},
+  {k:'disk',cat:'Storage',label:'Disk used',ic:'i-disk'},{k:'dtemp',cat:'Storage',label:'Disk temp',ic:'i-thermo'},
+  {k:'dfree',cat:'Storage',label:'Disk free',ic:'i-disk'},
+  {k:'backup',cat:'Services',label:'NAS backup',ic:'i-cloud'},{k:'yt',cat:'Services',label:'YT queue',ic:'i-video'},
+  {k:'docker',cat:'Services',label:'Docker',ic:'i-box'}];
+const AMB_DEF='date,wifi,temp,disk,backup';
+function ambShowSet(){return new Set((localStorage.amb_show??AMB_DEF).split(',').filter(Boolean));}
+function ambVals(){const s=last.system||{},nw=last.network||{},sv=last.services||{},sg=last.storage||{},nb=sv.nas_backup||{},yt=sv.yt||{},proj=sv.projects||[];
+  const sig=nw.signal,q=sig!=null?Math.max(0,Math.min(100,2*(sig+100))):null;
+  const bk=nb.last_status==='ok'?'<span style="color:var(--ok)">OK</span>':(nb.last_status==='failed'?'<span style="color:var(--crit)">failed</span>':'—');
+  return {wifi:nw.mode==='AP'?'Hotspot':(nw.ssid||'—'),ip:(nw.ip&&nw.ip!=='?')?nw.ip:'—',signal:q!=null?q+'%':'—',
+    ts:nw.ts_up?'<span style="color:var(--ok)">on</span>':'off',temp:(s.temp??'?')+'°',cpu:(s.cpu??'?')+'%',
+    ram:(s.mem_used??'?')+'%',power:s.pmode||'auto',freq:(s.freq_mhz||'?')+' MHz',uptime:fmtUp(s.uptime||0),
+    disk:(sg.pct??'?')+'%',dtemp:sg.temp!=null?sg.temp+'°':'—',dfree:(sg.total&&sg.used)?TB(sg.total-sg.used):'—',
+    backup:bk,yt:(yt.pending||0)+' queued',docker:proj.length?proj.reduce((a,p)=>a+p.running,0)+'/'+proj.reduce((a,p)=>a+p.total,0):'—'};}
+function updateAmbient(){const d=new Date(),sh=ambShowSet(),V=ambVals();
   $('#amb-time').textContent=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
   $('#amb-date').style.display=sh.has('date')?'':'none';
   $('#amb-date').textContent=d.toLocaleDateString('ru-RU',{weekday:'long',day:'numeric',month:'long'});
-  const bits=[];
-  if(sh.has('wifi'))bits.push(`<span>${ic('i-net')} ${nw.mode==='AP'?'Hotspot':(nw.ssid||'—')}</span>`);
-  if(sh.has('temp'))bits.push(`<span>${ic('i-thermo')} ${s.temp??'?'}°</span>`);
-  if(sh.has('disk'))bits.push(`<span>${ic('i-disk')} ${sg.pct??'?'}%</span>`);
-  if(sh.has('backup'))bits.push(nb.last_status==='ok'?`<span style="color:var(--ok)">${ic('i-cloud')} backup OK</span>`:(nb.last_status==='failed'?`<span style="color:var(--crit)">${ic('i-cloud')} backup failed</span>`:`<span>${ic('i-cloud')} backup —</span>`));
-  $('#amb-stat').innerHTML=bits.join('');}
-const AMBSHOW=[['date','Date'],['wifi','WiFi'],['temp','Temperature'],['disk','Disk'],['backup','Backup']];
+  let cols='';
+  AMB_CATS.forEach(cat=>{const items=AMB_ITEMS.filter(it=>it.cat===cat&&sh.has(it.k));if(!items.length)return;
+    cols+=`<div class="ambcol"><div class="ambct">${cat}</div>`+items.map(it=>`<div class="ambrow">${ic(it.ic)}<span class="ambk">${it.label}</span><span class="ambv">${V[it.k]}</span></div>`).join('')+`</div>`;});
+  $('#amb-stat').innerHTML=cols;}
 function renderAmbientSettings(){const ab=$('#amb-bright');if(ab){ab.value=localStorage.ambBright||30;$('#amb-bright-val').textContent=ab.value+'%';
     ab.oninput=()=>$('#amb-bright-val').textContent=ab.value+'%';
     ab.onchange=()=>{uiSet('ambBright',ab.value);if(ambientOn)api('/api/action/screen',{brightness:ab.value+'%'});};}
-  const sh=ambShowSet();
-  $('#amb-toggles').innerHTML=AMBSHOW.map(([k,l])=>`<button class="evchip ${sh.has(k)?'':'off'}" data-k="${k}">${l}</button>`).join('');
+  const sh=ambShowSet(),chip=(k,l)=>`<button class="evchip ${sh.has(k)?'':'off'}" data-k="${k}">${l}</button>`;
+  let html=`<div class="ambset-cat">General</div><div class="evfilters">${chip('date','Date')}</div>`;
+  AMB_CATS.forEach(cat=>{html+=`<div class="ambset-cat">${cat}</div><div class="evfilters">`+AMB_ITEMS.filter(i=>i.cat===cat).map(i=>chip(i.k,i.label)).join('')+`</div>`;});
+  $('#amb-toggles').innerHTML=html;
   $$('#amb-toggles .evchip').forEach(b=>b.onclick=()=>{const s=ambShowSet(),k=b.dataset.k;s.has(k)?s.delete(k):s.add(k);uiSet('amb_show',[...s].join(','));renderAmbientSettings();if(ambientOn)updateAmbient();});
   $('#amb-preview').onclick=()=>ambientShow();}
 ['pointerdown','touchstart','keydown'].forEach(ev=>addEventListener(ev,()=>{

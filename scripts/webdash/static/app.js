@@ -31,8 +31,9 @@ const evIcon={system:'i-settings',photo:'i-camera',nas:'i-cloud',thermal:'i-ther
 async function renderEvents(){let ev=[];
   try{ev=await(await fetch('/api/events')).json();}catch(e){}
   try{const y=await(await fetch(`http://${location.hostname}:8081/api/events`)).json();
-    (Array.isArray(y)?y:[]).slice(0,25).forEach(e=>{const ts=Math.floor(Date.parse(e.created_at||e.timestamp||e.time||0)/1000)||0;
-      ev.push({ts,type:'yt',title:(e.message||e.title||e.event_type||e.type||'YT event'),sub:e.channel_name||e.video_title||'',level:/err|fail/i.test(e.level||e.event_type||'')?'crit':'ok'});});}catch(e){}
+    (Array.isArray(y)?y:[]).slice(0,30).forEach(e=>{const ts=Math.floor(Date.parse((e.created_at||e.timestamp||e.time||'').replace(' ','T'))/1000)||0;
+      const ty=(e.type||'').replace(/_/g,' ');
+      ev.push({ts,type:'yt',title:(e.video_title||e.message||ty||'YT event'),sub:(e.channel_name||'')+(ty?' · '+ty:''),level:/err|fail/i.test(e.type||e.level||'')?'crit':'ok'});});}catch(e){}
   ev=ev.filter(e=>e.ts).sort((a,b)=>b.ts-a.ts).slice(0,80);
   if(!ev.length){$('#events-body').innerHTML='<div class="note">пока нет событий</div>';return;}
   const lab=ts=>{const d=new Date(ts*1000),t=new Date(),y=new Date();y.setDate(t.getDate()-1);const s=(a,b)=>a.toDateString()===b.toDateString();

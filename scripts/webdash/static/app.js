@@ -105,7 +105,9 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   $('#uptime').textContent='up '+fmtUp(s.uptime||0);
   {const ap=nw.mode==='AP',sig=nw.signal,q=sig!=null?Math.max(0,Math.min(100,2*(sig+100))):null;  // dBm→~%
    $('#wifi-v').textContent=ap?'Hotspot':(nw.ssid||'—');
-   $('#wifi-sub').innerHTML=ap?(nw.ap_ssid||nw.ap_name||''):`${q!=null?ic('i-net')+' '+q+'%':''} ${nw.ip&&nw.ip!=='?'?'· '+nw.ip:'(no ip)'}`+(nw.ts_up?' · TS':'');}
+   const ts=nw.ts_up?` · <span style="color:var(--ok)">TS ✓</span>`:'';
+   $('#wifi-sub').innerHTML=ap?(nw.ap_ssid||nw.ap_name||''):`${q!=null?q+'%':'—'} · ${nw.ip&&nw.ip!=='?'?nw.ip:'no ip'}${ts}`;
+   const wd=$('#wifi-dot');if(wd)wd.className='tdot '+(ap?'warn':(nw.ip&&nw.ip!=='?'?'ok':'crit'));}
   // docker tile — проекты + контейнеры
   const proj=sv.projects||[],down=proj.filter(p=>p.running<p.total).length;
   const totC=proj.reduce((a,p)=>a+p.total,0),runC=proj.reduce((a,p)=>a+p.running,0);
@@ -117,8 +119,9 @@ function render(d){last=d;const s=d.system||{},st=d.storage||{},nw=d.network||{}
   const yt=sv.yt||{};
   if(Object.keys(yt).length){$('#yt-v').innerHTML=`${yt.videos||0}<span class="u2"> vids</span>`;
     $('#yt-sub').innerHTML=`${TB(yt.total_bytes)}${yt.music?' · '+yt.music+' mus':''}${yt.downloading?' · <span style="color:var(--ok)">'+yt.downloading+' dl</span>':(yt.paused?' · <span style="color:var(--warn)">paused</span>':'')}`;
-    $('#yt-dot').className='tdot '+(yt.paused?'warn':(yt.downloading?'ok':''));}
-  else{$('#yt-v').textContent='–';$('#yt-sub').textContent='offline';$('#yt-dot').className='tdot';}
+    $('#yt-dot').className='tdot '+(yt.paused?'warn':(yt.downloading?'ok':''));
+    const dl=$('#yt-dl');if(dl){if(yt.downloading>0){dl.innerHTML=ic('i-dl')+yt.downloading;dl.className='dlbadge on';}else dl.className='dlbadge';}}
+  else{$('#yt-v').textContent='–';$('#yt-sub').textContent='offline';$('#yt-dot').className='tdot';const dl=$('#yt-dl');if(dl)dl.className='dlbadge';}
   // backups tiles (photo/nas раздельно)
   renderBackupTiles(sv);
   // buffers + sparks

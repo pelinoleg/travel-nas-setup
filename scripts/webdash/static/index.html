@@ -67,16 +67,16 @@
       <div class="tile" data-open="detail" data-metric="net_rx"><span class="spkper" data-m="net_rx"></span><div class="th"><svg class="ic"><use href="#i-net"/></svg>Traffic</div><div class="tv2" id="net">–</div><canvas class="spark" data-s="net_rx"></canvas></div>
       <div class="tile" data-open="page-disk"><span id="disk-temp" class="dtemp"></span><div class="th"><svg class="ic"><use href="#i-disk"/></svg>Disk</div><div class="tv"><b id="disk">–</b><span class="u2">%</span></div><div class="bar-fill sm"><i id="disk-bar"></i></div><div class="sub" id="disk-sub"></div><canvas class="spark" data-s="dtemp"></canvas></div>
       <div class="tile" id="power-tile" data-open="page-power"><div class="th"><svg class="ic"><use href="#i-zap"/></svg>Power</div><div class="pmode-lbl" id="power">–</div><div class="tv"><b id="freq">–</b><span class="u2">MHz</span></div><div class="sub" id="power-sub"></div></div>
+      <div class="tile t-docker" data-open="page-docker"><div class="th"><svg class="ic"><use href="#i-box"/></svg>Docker<span class="tdot" id="dk-dot"></span></div><div class="tv2" id="dk">–</div><div class="sub" id="dk-sub"></div></div>
+      <div class="tile t-yt" data-open="page-yt"><span class="dlbadge" id="yt-dl"></span><div class="th"><svg class="ic"><use href="#i-video"/></svg>YT-Archiver<span class="tdot" id="yt-dot"></span></div><div class="tv2" id="yt-v">–</div><div class="sub" id="yt-sub"></div></div>
+    </div>
+    <div class="tiles lastrow" id="lastrow">
+      <div class="tile bk t-photo" id="bk-photo" data-open="page-photo"><svg class="ic bkicon"><use href="#i-camera"/></svg><div class="bkbody"><div class="bktitle">Photo import</div><div class="tv2" id="photo-v">idle</div><div class="sub" id="photo-sub"></div></div></div>
+      <div class="tile bk t-nas" id="bk-nas" data-open="page-nas"><svg class="ic bkicon"><use href="#i-cloud"/></svg><div class="bkbody"><div class="bktitle">NAS backup <span class="tdot" id="nas-dot"></span></div><div class="tv2" id="nas-v">–</div><div class="sub" id="nas-sub"></div></div></div>
       <div class="tile" data-open="page-screen" id="screen-tile"><div class="th"><svg class="ic"><use href="#i-sun"/></svg>Screen</div>
         <div class="ring"><svg viewBox="0 0 40 40"><circle class="rbg" cx="20" cy="20" r="16"/><circle class="rfg" id="ring" cx="20" cy="20" r="16"/></svg><span id="screen-cd">∞</span></div>
         <div class="sub" id="screen-sub"></div></div>
-      <div class="tile" data-open="page-network"><div class="th"><svg class="ic"><use href="#i-net"/></svg>WiFi</div><div class="tv2" id="wifi-v">–</div><div class="sub" id="wifi-sub"></div></div>
-    </div>
-    <div class="tiles lastrow" id="lastrow">
-      <div class="tile t-docker" data-open="page-docker"><div class="th"><svg class="ic"><use href="#i-box"/></svg>Docker<span class="tdot" id="dk-dot"></span></div><div class="tv2" id="dk">–</div><div class="sub" id="dk-sub"></div></div>
-      <div class="tile t-yt" data-open="page-yt"><div class="th"><svg class="ic"><use href="#i-video"/></svg>YT-Archiver<span class="tdot" id="yt-dot"></span></div><div class="tv2" id="yt-v">–</div><div class="sub" id="yt-sub"></div></div>
-      <div class="tile bk t-photo" id="bk-photo" data-open="page-photo"><svg class="ic bkicon"><use href="#i-camera"/></svg><div class="bkbody"><div class="bktitle">Photo import</div><div class="tv2" id="photo-v">idle</div><div class="sub" id="photo-sub"></div></div></div>
-      <div class="tile bk t-nas" id="bk-nas" data-open="page-nas"><svg class="ic bkicon"><use href="#i-cloud"/></svg><div class="bkbody"><div class="bktitle">NAS backup <span class="tdot" id="nas-dot"></span></div><div class="tv2" id="nas-v">–</div><div class="sub" id="nas-sub"></div></div></div>
+      <div class="tile t-wifi" data-open="page-network"><span class="tdot" id="wifi-dot"></span><div class="th"><svg class="ic"><use href="#i-net"/></svg>WiFi</div><div class="tv2" id="wifi-v">–</div><div class="sub" id="wifi-sub"></div></div>
     </div>
     <div class="ovchart" id="ovchart-wrap" data-open="detail" data-metric="cpu">
       <div class="ovlegend"><span class="lg cpu"><i></i>CPU</span><span class="lg temp"><i></i>Temp</span><span class="lgr">last 1h</span></div>

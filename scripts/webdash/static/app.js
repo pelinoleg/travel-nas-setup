@@ -262,8 +262,8 @@ async function renderNasPage(){const sv=last.services||{},nb=sv.nas_backup||{},p
     <div class="h" style="margin-top:8px">Connection</div>
     <div class="sideinfo">${R('Host',conf.host||'—')}${R('User',conf.user||'—')}${R('Dest',conf.dest||'—')}</div>
     <div class="nasbtns" style="margin-top:8px"><button class="minib" id="nas-editcfg" style="flex:1">${ic('i-list')}Edit config</button><button class="minib" id="nas-viewlog" style="flex:1">${ic('i-activity')}Log</button></div></div>`;
-  const diskInfo=nb.disk?` · <span style="color:var(--mut);font-weight:400">${nb.disk.used} on disk</span>`:'';
-  $('#nas-body').innerHTML=`<div class="naslayout"><div class="nasmain">${progBlock}<div class="h">Backup folders${diskInfo}</div><div class="svc-list">${folders}</div></div>${panel}</div>`;
+  const foldHdr=`<div class="foldhdr"><span>Backup folders</span>${nb.disk?`<span class="fhd">${nb.disk.used} / ${nb.disk.total} on disk</span>`:''}</div>`;
+  $('#nas-body').innerHTML=`<div class="naslayout"><div class="nasmain">${progBlock}${foldHdr}<div class="svc-list">${folders}</div></div>${panel}</div>`;
   renderSchedArea(sched);
   $('#nas-viewlog').onclick=()=>showNasResult('Last NAS run');
   $('#nas-editcfg').onclick=()=>{$$('.page').forEach(p=>p.classList.add('hidden'));$('#page-configs').classList.remove('hidden');editConfig('nas-backup.conf');};
@@ -410,7 +410,7 @@ async function doAction(name,body){if(name.startsWith('__del:'))return delImport
 $('#btn-exit').onclick=()=>doAction('screen',{exit_kiosk:true});
 $('#diag-run').onclick=async()=>{toast('building diag…');try{const r=await(await api('/api/diag',{})).json();toast(r.ok?(r.sent?'sent to Telegram':'saved: '+r.path):'error: '+(r.error||''));}catch(e){toast('error');}};
 /* log files viewer (#3) + nas-run log (#4) */
-async function renderLogfiles(){try{const r=await(await fetch('/api/logfiles')).json();
+async function renderLogfiles(){$('#page-logfiles .back').onclick=closePages;try{const r=await(await fetch('/api/logfiles')).json();
   $('#lf-body').innerHTML='<div class="svc-list">'+r.map(f=>`<div class="svc-item" data-n="${f.name}"><span>${f.name}</span><span class="u">${(f.size/1024).toFixed(0)} KB</span></div>`).join('')+'</div>'+(r.length?'':'<div class="note">no log files</div>');
   $$('#lf-body .svc-item').forEach(el=>el.onclick=()=>openLogfile(el.dataset.n,el.dataset.n));}catch(e){$('#lf-body').innerHTML='error';}}
 async function openLogfile(name,title){openPage('page-logfiles');
@@ -420,8 +420,11 @@ async function openLogfile(name,title){openPage('page-logfiles');
 $('#logfiles-btn').onclick=()=>{openPage('page-logfiles');renderLogfiles();};
 /* NAS dry/diff/run — парсим rsync-статистику в понятную сводку (не сырой лог) */
 async function showNasResult(title){openPage('page-logfiles');
+  $('#page-logfiles .back').onclick=()=>openPage('page-nas');   // back → обратно на NAS, не на главную
   $('#lf-body').innerHTML=`<div class="h">${title}</div><div class="note" style="margin:0 0 10px">Dry-run = превью (ничего не копируется). Diff = какие файлы отличаются.</div><div id="nas-res">running…</div>`;
-  try{let t=(await(await fetch('/api/naslog')).text()).replace(/\x1b\[[0-9;]*m/g,'');
+  try{let raw=(await(await fetch('/api/naslog')).text()).replace(/\x1b\[[0-9;]*m/g,'');
+    // только ПОСЛЕДНИЙ запуск (журнал хранит и старые провальные)
+    const seg=raw.split(/Started nas-backup-runtime/);let t=seg.length>1?seg[seg.length-1]:raw;
     const num=re=>{const m=t.match(re);return m?parseInt(m[1].replace(/[, ]/g,'')):null;};
     const sz=re=>{const m=t.match(re);return m?m[1].trim():null;};
     const files=num(/Number of files:\s*([\d,]+)/), copy=num(/regular files transferred:\s*([\d,]+)/);

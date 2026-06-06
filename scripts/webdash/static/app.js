@@ -234,18 +234,31 @@ async function renderNasPage(){const sv=last.services||{},nb=sv.nas_backup||{},p
   const R=(k,v)=>`<div class="row"><span class="k">${k}</span><span class="ell">${v}</span></div>`;
   let conf={};try{conf=await(await fetch('/api/nas-conf')).json();}catch(e){}
   const cfg=conf.configured;
-  const folders=(conf.modules||[]).map(m=>{const[mod,fold]=m.split('|');return `<div class="svc-item"><span>${ic('i-box')} <span class="ell">${mod}</span></span><span class="u">→ ${fold||mod}</span></div>`;}).join('')
+  // per-module статус из nas-backup-status.json: {target:{last_run,status,size}}
+  const ents=Object.entries(nb).filter(([,v])=>v&&typeof v==='object');
+  const byKey=k=>{for(const[kk,v]of ents)if(kk===k||kk.endsWith('/'+k)||k.endsWith('/'+kk))return v;return null;};
+  const folders=(conf.modules||[]).map(m=>{const[mod,fold]=m.split('|');const e=byKey(fold||mod)||{};
+    const dot=e.status?`<span class="dot ${e.status==='ok'?'ok':'crit'}"></span>`:'';
+    return `<div class="svc-item"><span>${ic('i-box')} <span class="ell">${mod}</span></span><span class="u">${dot}${e.size?e.size+' · ':''}→ ${fold||mod}</span></div>`;}).join('')
     ||`<div class="note">${cfg?'modules empty — добавь в Edit config (формат: rsync-модуль/подпапка|локальная_папка)':'not configured — нажми «Edit config»'}</div>`;
-  // прогресс-карточка ТОЛЬКО во время бэкапа (idle-плашку убрали — путала и липла)
-  const progBlock=active?`<div class="bkcard" style="margin-top:10px">${ic('i-cloud')}<div class="bkc"><div class="bkt">Backing up…</div>${bkProg(pr)}</div></div>`:'';
+  // карточка последнего бэкапа (когда + успех)
+  let last_run=0,anyFail=false,hasRun=false;
+  ents.forEach(([,v])=>{if(v.last_run){last_run=Math.max(last_run,v.last_run);hasRun=true;}if(v.status==='fail')anyFail=true;});
+  const rel=ts=>{if(!ts)return'';const d=(Date.now()/1000|0)-ts;return d<3600?Math.round(d/60)+' min ago':d<86400?Math.round(d/3600)+'h ago':Math.round(d/86400)+'d ago';};
+  let lastCard;
+  if(active)lastCard=`<div class="bkcard"><div class="lbic spin">${ic('i-cloud')}</div><div class="bkc"><div class="bkt">Backing up…</div>${bkProg(pr)}</div></div>`;
+  else if(!hasRun)lastCard=`<div class="lastbk none">${ic('i-cloud')}<div><div class="lbt">No backups yet</div><div class="lbs">press Run to start the first backup</div></div></div>`;
+  else if(anyFail)lastCard=`<div class="lastbk fail">${ic('i-stop')}<div><div class="lbt">Last backup failed</div><div class="lbs">${rel(last_run)} — see Log</div></div></div>`;
+  else lastCard=`<div class="lastbk ok">${ic('i-cloud')}<div><div class="lbt">Backed up ✓</div><div class="lbs">${rel(last_run)}</div></div></div>`;
+  const progBlock=lastCard;
   const acts=active?`<button class="cbtn stop" id="bk-stop">${ic('i-stop')}Stop</button>`
     :`<button class="cbtn run" id="bk-run">${ic('i-cloud')}Run</button><button class="cbtn dry" id="bk-dry">${ic('i-list')}Dry-run</button><button class="cbtn diff" id="bk-diff">${ic('i-activity')}Diff</button>`;
   const panel=`<div class="naspanel">
     <div class="h">Auto-backup</div><div id="sch-area"></div>
     <div class="h" style="margin-top:8px">Connection</div>
-    <div class="sideinfo">${R('Host',conf.host||'—')}${R('User',conf.user||'—')}${R('Dest',conf.dest||'—')}${nb.last_status?R('Status',nb.last_status==='failed'?'<span style="color:var(--crit)">failed</span>':'<span style="color:var(--ok)">'+nb.last_status+'</span>'):''}</div>
+    <div class="sideinfo">${R('Host',conf.host||'—')}${R('User',conf.user||'—')}${R('Dest',conf.dest||'—')}</div>
     <div class="nasbtns" style="margin-top:8px"><button class="minib" id="nas-editcfg" style="flex:1">${ic('i-list')}Edit config</button><button class="minib" id="nas-viewlog" style="flex:1">${ic('i-activity')}Log</button></div></div>`;
-  $('#nas-body').innerHTML=`<div class="naslayout"><div class="nasmain"><div class="h">Backup folders</div><div class="svc-list">${folders}</div>${progBlock}</div>${panel}</div>`;
+  $('#nas-body').innerHTML=`<div class="naslayout"><div class="nasmain">${progBlock}<div class="h">Backup folders</div><div class="svc-list">${folders}</div></div>${panel}</div>`;
   renderSchedArea(sched);
   $('#nas-viewlog').onclick=()=>showNasResult('Last NAS run');
   $('#nas-editcfg').onclick=()=>{$$('.page').forEach(p=>p.classList.add('hidden'));$('#page-configs').classList.remove('hidden');editConfig('nas-backup.conf');};
@@ -400,14 +413,26 @@ async function openLogfile(name,title){openPage('page-logfiles');
   $('#lf-back').onclick=renderLogfiles;dragScroll($('#lf-view'));
   try{const url=name==='__nas__'?'/api/naslog':'/api/logfile?name='+encodeURIComponent(name);const t=await(await fetch(url)).text();$('#lf-view').textContent=t||'(empty)';const v=$('#lf-view');v.scrollTop=v.scrollHeight;}catch(e){$('#lf-view').textContent='error';}}
 $('#logfiles-btn').onclick=()=>{openPage('page-logfiles');renderLogfiles();};
-/* NAS dry/diff/run результат — только суть (без ANSI и мусора), крупно */
+/* NAS dry/diff/run — парсим rsync-статистику в понятную сводку (не сырой лог) */
 async function showNasResult(title){openPage('page-logfiles');
-  $('#lf-body').innerHTML=`<div class="h">${title}</div><div class="note" style="margin:0 0 8px">Dry-run = превью, ничего не копируется. Diff = что отличается от копии.</div><div id="nas-res">running…</div>`;
-  try{let t=await(await fetch('/api/naslog')).text();t=t.replace(/\x1b\[[0-9;]*m/g,'');
-    const lines=t.split('\n').filter(l=>l.trim()&&/(\bOK\b|ERR|ERROR|WARN|Module|complet|success|fail|transferred|files|would|Total|sent |received |speedup|differ|deleting|^[<>*][f d])/i.test(l)).slice(-30);
-    $('#nas-res').innerHTML=lines.map(l=>{const c=/ERR|ERROR|fail/i.test(l)?'r':/WARN/i.test(l)?'w':/\bOK\b|complet|success/i.test(l)?'g':'';return `<div class="resline ${c}">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>`;}).join('')||'<div class="note">нет вывода — запусти Dry-run / Diff</div>';
-    dragScroll($('#nas-res'));
-  }catch(e){$('#nas-res').innerHTML='error';}}
+  $('#lf-body').innerHTML=`<div class="h">${title}</div><div class="note" style="margin:0 0 10px">Dry-run = превью (ничего не копируется). Diff = какие файлы отличаются.</div><div id="nas-res">running…</div>`;
+  try{let t=(await(await fetch('/api/naslog')).text()).replace(/\x1b\[[0-9;]*m/g,'');
+    const num=re=>{const m=t.match(re);return m?parseInt(m[1].replace(/[, ]/g,'')):null;};
+    const sz=re=>{const m=t.match(re);return m?m[1].trim():null;};
+    const files=num(/Number of files:\s*([\d,]+)/), copy=num(/regular files transferred:\s*([\d,]+)/);
+    const del=num(/deleted files:\s*([\d,]+)/), created=num(/created files:\s*([\d,]+)/);
+    const total=sz(/Total file size:\s*([\d.,]+\s*\S*)/), failed=/rsync error|\[ERR\]|\bfailed\b/i.test(t);
+    // itemized изменения (diff): строки rsync --itemize-changes
+    const changes=t.split('\n').map(l=>l.trim()).filter(l=>/^([<>ch.*][fdLDS][.+cstpoguaxn?]+\s)|^\*deleting\s/.test(l)).slice(0,60);
+    const pill=(n,l,c)=>`<div class="pill"${c?` style="border-color:${c}66"`:''}><div class="pn"${c?` style="color:${c}"`:''}>${n==null?'–':n}</div><div class="pl">${l}</div></div>`;
+    let banner;
+    if(failed)banner=`<div class="lastbk fail">${ic('i-stop')}<div><div class="lbt">Failed</div><div class="lbs">см. Log — rsync error</div></div></div>`;
+    else if((copy||0)===0&&(del||0)===0&&(created||0)===0)banner=`<div class="lastbk ok">${ic('i-cloud')}<div><div class="lbt">In sync ✓</div><div class="lbs">копия совпадает с NAS, копировать нечего</div></div></div>`;
+    else banner=`<div class="lastbk run">${ic('i-dl')}<div><div class="lbt">${copy||0} файлов к копированию${del?' · '+del+' к удалению':''}</div><div class="lbs">Run выполнит это</div></div></div>`;
+    let h=banner+`<div class="pills" style="margin-top:10px">${pill(files,'files total','#3b82f6')}${pill(copy,'to copy',copy?'#3fb950':null)}${pill(del,'to delete',del?'#f85149':null)}${pill(total,'size','#22d3ee')}</div>`;
+    if(changes.length)h+=`<div class="h" style="margin-top:6px">Changed files (${changes.length})</div><div class="svc-list">`+changes.map(l=>`<div class="svc-item"><span class="ell">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</span></div>`).join('')+`</div>`;
+    $('#nas-res').innerHTML=h;
+  }catch(e){$('#nas-res').innerHTML='<div class="note">ошибка чтения результата</div>';}}
 /* Pi config backup (#1) */
 async function loadPiBackup(){try{const d=await(await fetch('/api/pibackup')).json();
   $('#pibk-info').textContent=d.count?`${d.count} · last ${d.when}`:'none yet';}catch(e){}}

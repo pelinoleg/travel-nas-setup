@@ -153,6 +153,17 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:32px;heigh
 .sgrow{display:flex;gap:16px}
 .sgn{font-size:23px;font-weight:700;line-height:1}.sgl{font-size:11px;color:var(--mut);margin-top:3px}
 .g-all .sgn{color:#5b9bff}.g-vid .sgn{color:#ff6b63}.g-mus .sgn{color:#bd8cff}
+/* events timeline */
+.evday{font-size:11px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.6px;margin:14px 0 8px}
+.evrow{display:flex;align-items:center;gap:11px;padding:9px 0;border-bottom:1px solid var(--line)}
+.evdot{flex:none;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--panel2);border:1px solid var(--line)}
+.evdot .ic{width:18px;height:18px;color:var(--mut)}
+.evdot.ok{border-color:var(--ok)}.evdot.ok .ic{color:var(--ok)}
+.evdot.warn{border-color:var(--warn)}.evdot.warn .ic{color:var(--warn)}
+.evdot.crit{border-color:var(--crit)}.evdot.crit .ic{color:var(--crit)}
+.evbody{flex:1;min-width:0}.evtitle{font-size:14px;font-weight:500}
+.evsub{font-size:12px;color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.evtime{flex:none;color:var(--mut);font-size:12px;font-weight:600}
 .ytcols{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px}
 .ytcol{min-width:0}
 .h .ic{width:15px;height:15px;vertical-align:-2px;margin-right:3px}

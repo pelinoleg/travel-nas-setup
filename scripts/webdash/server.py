@@ -613,6 +613,34 @@ def api_ui():
         return jsonify({"ok": False, "error": str(e)}), 500
     return jsonify({"ok": True})
 
+@app.route("/api/events")
+def api_events():
+    ev = []
+    ds = read_json("/var/lib/travel-nas/daily-summary.json", {})
+    for s in (ds.get("events") or []):
+        m = re.match(r"(\d\d)-(\d\d)-(\d{4})\s+(\d\d):(\d\d)\s+(.*)", s)
+        if not m: continue
+        d, mo, y, hh, mm, txt = m.groups()
+        try: ts = int(time.mktime((int(y), int(mo), int(d), int(hh), int(mm), 0, 0, 0, -1)))
+        except Exception: ts = 0
+        low = txt.lower()
+        lvl = "crit" if ("❌" in txt or "fail" in low or "error" in low) else ("warn" if "⚠" in txt else "ok")
+        txt = re.sub(r"[\U0001F000-\U0001FAFF☀-➿⬀-⯿←-⇿]\s*", "", txt).strip()
+        ev.append({"ts": ts, "type": "system", "title": txt, "level": lvl})
+    for d in sorted(glob.glob("/mnt/storage/usb-imports/*/"), key=os.path.getmtime, reverse=True)[:10]:
+        ev.append({"ts": int(os.path.getmtime(d)), "type": "photo", "title": "Photo import",
+                   "sub": os.path.basename(d.rstrip("/")), "level": "ok"})
+    nb = read_json("/var/lib/travel-nas/nas-backup-status.json", {})
+    for m in (nb.get("modules") if isinstance(nb, dict) else []) or []:
+        if m.get("last_run"):
+            ev.append({"ts": m["last_run"], "type": "nas", "title": "NAS backup: " + (m.get("name") or "?"),
+                       "sub": m.get("size", ""), "level": "crit" if m.get("status") == "fail" else "ok"})
+    th = read_json("/var/lib/travel-nas/thermal-guard.state.json", {})
+    if th.get("last_action") and th.get("last_ts"):
+        ev.append({"ts": int(th["last_ts"]), "type": "thermal", "title": "Thermal: " + str(th.get("last_action")), "level": "warn"})
+    ev.sort(key=lambda e: e.get("ts", 0), reverse=True)
+    return jsonify(ev[:60])
+
 @app.route("/api/failed")
 def api_failed():
     units = []

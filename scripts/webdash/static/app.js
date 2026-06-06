@@ -26,7 +26,22 @@ const colorVal=(id,m,v)=>{const e=$('#'+id);if(!e)return;e.classList.remove('lv-
 /* tabs */
 function switchTab(t){$$('#tabs button').forEach(x=>x.classList.toggle('active',x.dataset.tab===t));
   $$('.tab').forEach(x=>x.classList.toggle('active',x.id==='tab-'+t));activeTab=t;
-  if(t==='storage')renderDisks();else if(t==='apps')renderApps();else if(t==='settings')loadPiBackup();}
+  if(t==='storage')renderDisks();else if(t==='apps')renderApps();else if(t==='settings')loadPiBackup();else if(t==='events')renderEvents();}
+const evIcon={system:'i-settings',photo:'i-camera',nas:'i-cloud',thermal:'i-thermo',yt:'i-video',verify:'i-disk'};
+async function renderEvents(){let ev=[];
+  try{ev=await(await fetch('/api/events')).json();}catch(e){}
+  try{const y=await(await fetch(`http://${location.hostname}:8081/api/events`)).json();
+    (Array.isArray(y)?y:[]).slice(0,25).forEach(e=>{const ts=Math.floor(Date.parse(e.created_at||e.timestamp||e.time||0)/1000)||0;
+      ev.push({ts,type:'yt',title:(e.message||e.title||e.event_type||e.type||'YT event'),sub:e.channel_name||e.video_title||'',level:/err|fail/i.test(e.level||e.event_type||'')?'crit':'ok'});});}catch(e){}
+  ev=ev.filter(e=>e.ts).sort((a,b)=>b.ts-a.ts).slice(0,80);
+  if(!ev.length){$('#events-body').innerHTML='<div class="note">пока нет событий</div>';return;}
+  const lab=ts=>{const d=new Date(ts*1000),t=new Date(),y=new Date();y.setDate(t.getDate()-1);const s=(a,b)=>a.toDateString()===b.toDateString();
+    return s(d,t)?'Today':s(d,y)?'Yesterday':d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'});};
+  let h='',cur=null;
+  ev.forEach(e=>{const d=new Date(e.ts*1000),k=d.toDateString();if(k!==cur){cur=k;h+=`<div class="evday">${lab(e.ts)}</div>`;}
+    const hm=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
+    h+=`<div class="evrow"><span class="evdot ${e.level||'ok'}">${ic(evIcon[e.type]||'i-activity')}</span><div class="evbody"><div class="evtitle">${(e.title||'').slice(0,90)}</div>${e.sub?'<div class="evsub">'+e.sub+'</div>':''}</div><span class="evtime">${hm}</span></div>`;});
+  $('#events-body').innerHTML=h;}
 $$('#tabs button').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
 setInterval(()=>{const d=new Date();$('#clock').textContent=`${('0'+d.getHours()).slice(-2)}:${('0'+d.getMinutes()).slice(-2)}`;},1000);
 

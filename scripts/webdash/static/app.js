@@ -313,17 +313,27 @@ function renderDisks(){const disks=(last.storage||{}).disks||[];
 
 /* Backups */
 function bkbg(pct){return pct!=null?`background:linear-gradient(90deg,rgba(59,130,246,.28) ${pct}%,transparent ${pct}%)`:'';}
-function renderBackupTiles(sv){const nb=sv.nas_backup||{},pr=sv.progress||{},ph=sv.photo||{},w=whichBackup(pr);
+function ago(ts){if(!ts)return '';const s=Math.max(0,Date.now()/1000-ts);
+  return s<90?'just now':s<3600?Math.round(s/60)+'m ago':s<86400?Math.round(s/3600)+'h ago':Math.round(s/86400)+'d ago';}
+function renderBackupTiles(sv){const nb=sv.nas_backup||{},pr=sv.progress||{},ph=sv.photo||{},w=whichBackup(pr),mods=nb.modules||[];
   const pt=$('#bk-photo'),nt=$('#bk-nas');
-  $('#photo-v').textContent=w==='photo'?(pr.percent||0)+'%':(ph.files?ph.files+' files':'idle');
-  $('#photo-sub').textContent=w==='photo'?`${pr.files_done||0}/${pr.files_total||'?'} files`:(ph.bytes?TB(ph.bytes)+(ph.last?' · '+ph.last:''):(ph.last?'last '+ph.last:'—'));
+  // Photo import
+  if(w==='photo'){$('#photo-v').textContent=(pr.percent||0)+'%';$('#photo-sub').textContent=`${pr.files_done||0}/${pr.files_total||'?'} files`;}
+  else{$('#photo-v').innerHTML=ph.files?`${ph.files}<span class="u2"> files</span>`:'—';
+    $('#photo-sub').textContent=ph.last?`${TB(ph.bytes)} · ${ph.last}`:'no imports yet';}
+  $('#photo-dot').className='tdot '+(ph.error?'crit':(ph.files?'ok':''));
   pt.setAttribute('style',w==='photo'?bkbg(pr.percent):'');
-  $('#nas-v').textContent=w==='nas'?(pr.percent||0)+'%':(nb.last_status||nb.status||'idle');
+  // NAS backup — агрегируем статус по модулям + время последнего
+  const st=mods.map(m=>(m.status||'').toLowerCase());
+  const nasLevel=!mods.length?'':(st.some(s=>/fail|err/.test(s))?'crit':(st.some(s=>/warn|partial/.test(s))?'warn':'ok'));
+  const lastRun=Math.max(0,...mods.map(m=>m.last_run||0)),failN=st.filter(s=>/fail|err/.test(s)).length;
   const sched=sv.nas_sched&&sv.nas_sched!=='off'?sv.nas_sched:null;
-  $('#nas-sub').textContent=w==='nas'?`${pr.speed||''} eta ${pr.eta||'?'}`:(sched?'auto '+sched:(nb.last_run?'last '+nb.last_run:'manual'));
+  if(w==='nas'){$('#nas-v').textContent=(pr.percent||0)+'%';$('#nas-sub').textContent=`${pr.speed||''} eta ${pr.eta||'?'}`;}
+  else{$('#nas-v').textContent=lastRun?ago(lastRun):'never';
+    $('#nas-sub').textContent=`${mods.length} modules${failN?' · '+failN+' failed':''}${sched?' · auto '+sched:''}`;}
   nt.setAttribute('style',w==='nas'?bkbg(pr.percent):'');
   pt.classList.toggle('bk-active',w==='photo');nt.classList.toggle('bk-active',w==='nas');
-  $('#nas-dot').className='tdot '+(w==='nas'?'ok':((nb.last_status||'')==='failed'?'crit':(sched?'ok':'')));}
+  $('#nas-dot').className='tdot '+(w==='nas'?'ok':nasLevel);}
 const bkCard=(icon,title,body)=>`<div class="bkcard">${icon}<div class="bkc"><div class="bkt">${title}</div>${body}</div></div>`;
 const bkProg=pr=>`<div class="bkbar"><i id="bk-bar" style="width:${pr.percent||0}%"></i></div><div class="bks"><b id="bk-pct">${pr.percent||0}%</b> · <span id="bk-files">${pr.files_done||0}/${pr.files_total||'?'}</span> files · <span id="bk-speed">${pr.speed||'…'}</span> · eta <span id="bk-eta">${pr.eta||'?'}</span></div>`;
 /* Photo import — карта SD/USB → /mnt/storage/usb-imports (авто при вставке). С удалением. */

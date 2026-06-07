@@ -108,9 +108,23 @@ def sample_fast():
             "load": read("/proc/loadavg").split()[:3], "net_rx": rrx, "net_tx": rtx}
 
 # ---- диски (SD + USB), визуально --------------------------------------------
+_smart_dtype = {}
+def smart_type(dev):
+    # smartctl --scan определяет правильный -d (для USB-мостов: sntasmedia/sntjmicron/sat).
+    # Без него USB-NVMe (Samsung T7) детектится как scsi → нет температуры.
+    if dev not in _smart_dtype:
+        t = ""
+        for line in sh(["sudo", "-n", "smartctl", "--scan"], timeout=8).splitlines():
+            if line.startswith(dev + " ") and " -d " in line:
+                t = line.split(" -d ", 1)[1].split()[0]; break
+        _smart_dtype[dev] = t
+    return _smart_dtype[dev]
+def smart_cmd(dev):
+    t = smart_type(dev)
+    return ["sudo", "-n", "smartctl", "-a"] + (["-d", t] if t else []) + [dev]
 def smart_of(dev):
     temp = None; health = "?"
-    out = sh(["sudo", "-n", "smartctl", "-a", dev], timeout=10)
+    out = sh(smart_cmd(dev), timeout=10)
     for line in out.splitlines():
         low = line.lower()
         if disk_kw(low, "temperature") and temp is None:
@@ -537,7 +551,7 @@ def api_smart():
     src = sh(["findmnt", "-n", "-o", "SOURCE", "--target", CONF["STORAGE_MOUNT"]])
     dev = re.sub(r'p?\d+$', '', src) if src else ''
     if not dev: return jsonify({"error": "no device"}), 404
-    out = sh(["sudo", "-n", "smartctl", "-a", dev], timeout=12)
+    out = sh(smart_cmd(dev), timeout=12)
     def g(*pats):
         for p in pats:
             m = re.search(p, out, re.I | re.M)

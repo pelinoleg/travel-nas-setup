@@ -39,8 +39,8 @@ case "$arg" in
         echo "backlight: $BL"
         echo "brightness: $cur / $MAX (${pct}%)   bl_power=$pwr (0=on,4=off)"
         ;;
-    on)   write "$PWR" 0; echo "backlight ON" ;;
-    off)  write "$PWR" 4; echo "backlight OFF" ;;
+    on)   write "$PWR" 0; [[ "$(cat "$BR" 2>/dev/null)" == "0" ]] && write "$BR" "$MAX"; echo "backlight ON" ;;
+    off)  write "$BR" 0; write "$PWR" 4; echo "backlight OFF" ;;   # brightness=0 — bl_power=4 на DSI лишь притухает
     +*)   write "$BR" "$(clamp $(( cur + ${arg#+} )))"; write "$PWR" 0; echo "brightness → $(cat "$BR")/$MAX" ;;
     -*)   write "$BR" "$(clamp $(( cur - ${arg#-} )))"; write "$PWR" 0; echo "brightness → $(cat "$BR")/$MAX" ;;
     *%)   write "$BR" "$(clamp $(( ${arg%\%} * MAX / 100 )))"; write "$PWR" 0; echo "brightness → $(cat "$BR")/$MAX" ;;

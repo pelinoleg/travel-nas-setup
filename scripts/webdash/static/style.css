@@ -54,7 +54,7 @@ main{position:relative;height:382px}
 .t-photo.bk-active{--pulse:34,211,238}.t-nas.bk-active{--pulse:163,113,247}
 @keyframes bkpulse{0%,100%{box-shadow:inset 0 0 0 1px transparent}50%{box-shadow:inset 0 0 0 1.5px rgba(var(--pulse),.6),0 0 10px rgba(var(--pulse),.3)}}
 .tile[data-open]:active{border-color:var(--acc)}
-.th{display:flex;align-items:center;gap:6px;color:var(--mut);font-size:12px}
+.th{display:flex;align-items:center;gap:6px;color:var(--mut);font-size:14px;font-weight:600}
 .th .ic{width:15px;height:15px}
 .tv{font-size:30px;font-weight:700;line-height:1.1;margin-top:2px}
 /* YT/Docker — крупнее количество + размер */
@@ -117,7 +117,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:32px;heigh
 .tile.bk .bkicon{width:30px;height:30px;flex:none}
 .t-photo .bkicon{color:#22d3ee}.t-nas .bkicon{color:#a371f7}
 .tile.bk .bkbody{min-width:0;flex:1}
-.tile.bk .bktitle{font-size:12px;color:var(--mut);font-weight:600;margin-bottom:3px}
+.tile.bk .bktitle{font-size:14px;color:var(--mut);font-weight:600;margin-bottom:3px}
 .tile.bk .tv2{font-size:17px;margin-top:0;text-transform:none}
 .tile.bk .tdot{position:static;display:inline-block;margin-left:4px;vertical-align:middle}
 .th{position:relative}

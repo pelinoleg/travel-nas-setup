@@ -161,15 +161,24 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:32px;heigh
 .phbar{display:flex;align-items:center;gap:12px;margin-bottom:12px}
 .phhint{margin-left:auto;color:var(--mut);font-size:13px;font-weight:600}
 .phgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(115px,1fr));gap:6px}
-.phcell{aspect-ratio:1;background:var(--panel2);border-radius:8px;overflow:hidden;cursor:pointer}
+.phcell{position:relative;aspect-ratio:1;background:var(--panel2);border-radius:8px;overflow:hidden;cursor:pointer}
 .phcell img{width:100%;height:100%;object-fit:cover;display:block}
+.phcell:active{outline:2px solid var(--acc);outline-offset:-2px}
+.phcell.saved{outline:2px solid var(--ok);outline-offset:-2px}
+.phmk{position:absolute;top:3px;right:3px;width:20px;height:20px;background:rgba(0,0,0,.55);border-radius:50%;display:flex;align-items:center;justify-content:center}
+.phmk .ic{width:12px;height:12px;color:var(--ok)}
 #ph-view{position:fixed;inset:0;z-index:300;background:#000;display:flex;flex-direction:column}
 #ph-view.hidden{display:none}
 .pv-top{display:flex;align-items:center;gap:12px;padding:6px 10px;background:rgba(0,0,0,.6);z-index:2}
 .pv-top #pv-name{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pv-top #pv-pos{margin-left:auto}.pv-top #pv-exif-btn{width:auto;padding:0 14px;font-size:13px;font-weight:700}
 .pv-stage{flex:1;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:0}
-.pv-stage img{max-width:100%;max-height:100%;object-fit:contain}
+.pv-stage img{max-width:100%;max-height:100%;object-fit:contain;transition:opacity .2s}
+.pv-stage.loading img{opacity:.25}
+.pv-top #pv-exif-btn.on{background:color-mix(in srgb,var(--acc) 25%,var(--panel2));color:var(--acc)}
+#pv-flash{position:absolute;inset:0;z-index:4;pointer-events:none;opacity:0;transition:opacity .12s}
+#pv-flash.show{opacity:.4}
+#pv-flash.flash-save{background:var(--ok)}#pv-flash.flash-del{background:var(--crit)}
 .pv-stage.zoomed{overflow:auto;display:block}
 .pv-stage.zoomed img{max-width:none;max-height:none;width:auto;height:auto}
 .pv-arrow{position:absolute;top:46%;transform:translateY(-50%);z-index:3;width:46px;height:70px;background:rgba(0,0,0,.4);color:#fff;border:none;font-size:34px;border-radius:10px}

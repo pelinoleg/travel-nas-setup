@@ -58,8 +58,9 @@ function drawEvents(){const ev=_evCache,hid=evHidden(),filt=$('#ev-filters'),bod
   $('#events-body').innerHTML=h||'<div class="note">no events (all categories hidden?)</div>';}
 
 /* ===== Photos ===== */
-let phFiles=[],phIdx=0,phSession='';
+let phFiles=[],phIdx=0,phSession='',phMark={},phScroll=0;
 const phExifOn=()=>localStorage.phExif!=='0';
+const phThumb=()=>localStorage.phThumb||'400';
 async function renderPhotos(){
   const nw=last.network||{},addr=(nw.ip&&nw.ip!=='?')?nw.ip:((nw.host||'nas')+'.local');
   $('#ph-hint').textContent='📱 '+addr+':8090';
@@ -69,43 +70,59 @@ async function renderPhotos(){
   sel.innerHTML=sess.map(s=>`<option value="${s.id}">${s.date} · ${s.name} (${s.count})</option>`).join('');
   phSession=(localStorage.phSession&&sess.find(s=>s.id===localStorage.phSession))?localStorage.phSession:sess[0].id;
   sel.value=phSession;
-  sel.onchange=()=>{phSession=sel.value;uiSet('phSession',phSession);loadPhotoGrid();};
+  sel.onchange=()=>{phSession=sel.value;uiSet('phSession',phSession);phMark={};phScroll=0;loadPhotoGrid();};
   loadPhotoGrid();}
 async function loadPhotoGrid(){
-  const g=$('#ph-grid');g.innerHTML='<div class="note">loading…</div>';
+  $('#ph-grid').innerHTML='<div class="note">loading…</div>';
   try{phFiles=await(await fetch('/api/photos/list?session='+encodeURIComponent(phSession))).json();}catch(e){phFiles=[];}
-  $('#ph-count').textContent=phFiles.length+' photos';
+  renderGrid();}
+function renderGrid(){const g=$('#ph-grid');
+  $('#ph-count').textContent=phFiles.length+' photos'+(Object.keys(phMark).length?` · ${Object.values(phMark).filter(m=>m==='save').length} saved`:'');
   if(!phFiles.length){g.innerHTML='<div class="note">empty</div>';return;}
-  const ts=localStorage.phThumb||400;
-  g.innerHTML=phFiles.map((f,i)=>`<div class="phcell" data-i="${i}"><img loading="lazy" src="/api/photos/img?s=${ts}&f=${encodeURIComponent(f.f)}"></div>`).join('');
-  $$('#ph-grid .phcell').forEach(c=>c.onclick=()=>openPhoto(+c.dataset.i));}
-function openPhoto(i){phIdx=i;$('#ph-view').classList.remove('hidden');showPhoto();}
-function closePhoto(){$('#ph-view').classList.add('hidden');$('#pv-img').src='';loadPhotoGrid();}
+  const ts=phThumb();
+  g.innerHTML=phFiles.map((f,i)=>`<div class="phcell${phMark[f.f]==='save'?' saved':''}" data-i="${i}"><img loading="lazy" src="/api/photos/img?s=${ts}&f=${encodeURIComponent(f.f)}">${phMark[f.f]==='save'?`<span class="phmk">${ic('i-cloud')}</span>`:''}</div>`).join('');
+  $$('#ph-grid .phcell').forEach(c=>c.onclick=()=>openPhoto(+c.dataset.i));
+  g.scrollTop=phScroll;}
+function openPhoto(i){phScroll=$('#ph-grid').scrollTop;phIdx=i;$('#ph-view').classList.remove('hidden');showPhoto();}
+function closePhoto(){$('#ph-view').classList.add('hidden');$('#pv-img').src='';renderGrid();}
 function showPhoto(){const f=phFiles[phIdx];if(!f){closePhoto();return;}
-  $('#pv-stage').classList.remove('zoomed');
-  $('#pv-img').src='/api/photos/img?s=1920&f='+encodeURIComponent(f.f);
+  const st=$('#pv-stage'),img=$('#pv-img');st.classList.remove('zoomed');st.classList.add('loading');
+  img.onload=()=>st.classList.remove('loading');
+  img.src='/api/photos/img?s=1920&f='+encodeURIComponent(f.f);
   $('#pv-name').textContent=f.name;$('#pv-pos').textContent=(phIdx+1)+' / '+phFiles.length;
   $('#pv-prev').classList.toggle('hidden',phIdx<=0);$('#pv-nextarr').classList.toggle('hidden',phIdx>=phFiles.length-1);
   loadPhotoExif();}
+function fmtExifDate(s){const m=(s||'').match(/(\d{4}):(\d\d):(\d\d) (\d\d:\d\d)/);if(!m)return s||'';
+  return `${+m[3]} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m[2]-1]} ${m[1]} · ${m[4]}`;}
 async function loadPhotoExif(){const p=$('#pv-exif');p.classList.toggle('hidden',!phExifOn());if(!phExifOn())return;
   p.innerHTML='…';let d={};try{d=await(await fetch('/api/photos/exif?f='+encodeURIComponent(phFiles[phIdx].f))).json();}catch(e){}
-  const it=(v,suf)=>v?`<span>${v}${suf||''}</span>`:'';
-  p.innerHTML=(it(d.Model)+it(d.LensModel)+it(d.FNumber&&'ƒ/'+d.FNumber)+it(d.ExposureTime&&d.ExposureTime+'s')+it(d.ISO&&'ISO '+d.ISO)+it(d.FocalLength)+it(d.ImageSize)+it(d.DateTimeOriginal))||'<span>no EXIF</span>';}
+  const it=v=>v?`<span>${v}</span>`:'';
+  p.innerHTML=(it(d.Model)+it(d.LensModel)+it(d.FNumber&&'ƒ/'+d.FNumber)+it(d.ExposureTime&&d.ExposureTime+'s')+it(d.ISO&&'ISO '+d.ISO)+it(d.FocalLength)+it(d.ImageSize)+it(fmtExifDate(d.DateTimeOriginal)))||'<span>no EXIF</span>';}
 function navPhoto(d){const n=phIdx+d;if(n>=0&&n<phFiles.length){phIdx=n;showPhoto();}}
 function toggleZoom(){const st=$('#pv-stage'),z=st.classList.toggle('zoomed'),f=phFiles[phIdx];if(!f)return;
-  $('#pv-img').src='/api/photos/img?s='+(z?'full':'1920')+'&f='+encodeURIComponent(f.f);}
+  st.classList.add('loading');const img=$('#pv-img');img.onload=()=>st.classList.remove('loading');
+  img.src='/api/photos/img?s='+(z?'full':'1920')+'&f='+encodeURIComponent(f.f);}
+function phFlash(cls){const fl=$('#pv-flash');if(!fl)return;fl.className=cls+' show';setTimeout(()=>fl.className='',360);}
 function photoAct(act){const f=phFiles[phIdx];if(!f)return;
-  if(act==='delete'){api('/api/photos/action',{f:f.f,action:'delete'});toast('rejected → _rejected');
+  if(act==='delete'){api('/api/photos/action',{f:f.f,action:'delete'});phMark[f.f]='reject';phFlash('flash-del');toast('rejected → _rejected');
     phFiles.splice(phIdx,1);if(!phFiles.length){closePhoto();return;}if(phIdx>=phFiles.length)phIdx=phFiles.length-1;showPhoto();return;}
-  if(act==='save'){const b={f:f.f,action:'save'};if(localStorage.phTg==='1')b.tg=true;api('/api/photos/action',b);toast(localStorage.phTg==='1'?'saved + Telegram':'saved → _selects');}
+  if(act==='save'){const b={f:f.f,action:'save'};if(localStorage.phTg==='1')b.tg=true;api('/api/photos/action',b);phMark[f.f]='save';phFlash('flash-save');toast(localStorage.phTg==='1'?'saved + Telegram':'saved → _selects');}
   if(phIdx<phFiles.length-1){phIdx++;showPhoto();}else closePhoto();}
 $('#pv-close').onclick=closePhoto;$('#pv-prev').onclick=()=>navPhoto(-1);$('#pv-nextarr').onclick=()=>navPhoto(1);
 $('#pv-next').onclick=()=>photoAct('next');$('#pv-del').onclick=()=>photoAct('delete');$('#pv-save').onclick=()=>photoAct('save');
-$('#pv-exif-btn').onclick=()=>{uiSet('phExif',phExifOn()?'0':'1');loadPhotoExif();};
+$('#pv-exif-btn').onclick=()=>{uiSet('phExif',phExifOn()?'0':'1');$('#pv-exif-btn').classList.toggle('on',phExifOn());loadPhotoExif();};
 $('#pv-stage').addEventListener('dblclick',toggleZoom);
-{let sx=0;const st=$('#pv-stage');
- st.addEventListener('touchstart',e=>sx=e.touches[0].clientX,{passive:true});
- st.addEventListener('touchend',e=>{if(st.classList.contains('zoomed'))return;const dx=e.changedTouches[0].clientX-sx;if(Math.abs(dx)>60)navPhoto(dx<0?1:-1);},{passive:true});}
+{const eb=$('#pv-exif-btn');if(eb)eb.classList.toggle('on',phExifOn());}
+addEventListener('keydown',e=>{if($('#ph-view').classList.contains('hidden'))return;
+  const k=e.key;if(k==='ArrowRight'||k===' '||k==='n')navPhoto(1);else if(k==='ArrowLeft'||k==='p')navPhoto(-1);
+  else if(k==='Escape')closePhoto();else if(k==='Delete'||k==='Backspace')photoAct('delete');
+  else if(k==='s'||k==='Enter')photoAct('save');else if(k==='z')toggleZoom();else return;e.preventDefault();});
+{let sx=0,sy=0;const st=$('#pv-stage');
+ st.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY;},{passive:true});
+ st.addEventListener('touchend',e=>{if(st.classList.contains('zoomed'))return;
+   const dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;
+   if(Math.abs(dy)>90&&Math.abs(dy)>Math.abs(dx)){closePhoto();return;}            // свайп вниз/вверх = закрыть
+   if(Math.abs(dx)>60&&Math.abs(dx)>Math.abs(dy))navPhoto(dx<0?1:-1);},{passive:true});}
 $$('#tabs button').forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
 setInterval(()=>{const d=new Date();$('#clock').textContent=`${('0'+d.getHours()).slice(-2)}:${('0'+d.getMinutes()).slice(-2)}`;},1000);
 

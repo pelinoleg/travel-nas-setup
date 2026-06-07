@@ -35,6 +35,9 @@ if [[ ! -f "$CONFIG" ]]; then
 fi
 # shellcheck source=/dev/null
 source "$CONFIG"
+# STORAGE_UUID живёт в storage-info.conf (не в photo-backup.conf) — подхватываем,
+# иначе пропуск диска-хранилища по UUID не сработает и диск импортнётся сам в себя.
+[[ -z "${STORAGE_UUID:-}" && -f /etc/travel-nas/storage-info.conf ]] && source /etc/travel-nas/storage-info.conf
 
 # Дефолты если не заданы в конфиге
 DEST="${DEST:-/mnt/storage/usb-imports}"
@@ -86,6 +89,14 @@ fi
 DEVICE_UUID=$(lsblk -no UUID "$DEVICE" 2>/dev/null | head -1)
 if [[ -n "$STORAGE_UUID" && "$DEVICE_UUID" == "$STORAGE_UUID" ]]; then
     log_msg "Skipping storage disk (target disk): $DEVICE"
+    exit 0
+fi
+
+# БРОНЕБОЙНО #1: устройство = то, что смонтировано в /mnt/storage → это диск-хранилище.
+# (Работает даже если STORAGE_UUID не задан — спасает от импорта диска самого в себя.)
+STORAGE_SRC=$(findmnt -n -o SOURCE --target /mnt/storage 2>/dev/null | head -1)
+if [[ -n "$STORAGE_SRC" && "$DEVICE" == "$STORAGE_SRC" ]]; then
+    log_msg "Skipping storage disk (mounted at /mnt/storage): $DEVICE"
     exit 0
 fi
 
@@ -142,6 +153,16 @@ if [[ -z "$MOUNT_SRC" ]]; then
 fi
 
 log_msg "Source mounted at: $MOUNT_SRC"
+
+# БРОНЕБОЙНО #2: если в корне источника есть маркер .travel-nas-storage — это НАШ
+# диск-хранилище (а не карта). НИКОГДА не импортируем его (иначе диск копируется сам
+# в себя → десятки тысяч рекурсивных дублей). Также не импортируем если источник == DEST.
+if [[ -e "$MOUNT_SRC/.travel-nas-storage" ]]; then
+    log_msg "ABORT: source has .travel-nas-storage marker ($MOUNT_SRC) — это диск-хранилище, не импортируем"
+    [[ -n "$TEMP_MOUNT" ]] && { umount "$TEMP_MOUNT" 2>/dev/null; rmdir "$TEMP_MOUNT" 2>/dev/null; }
+    exit 0
+fi
+case "$DEST/" in "$MOUNT_SRC"/*) log_msg "ABORT: DEST внутри источника ($MOUNT_SRC) — рекурсия"; exit 0;; esac
 
 # Метка и UUID
 LABEL=$(lsblk -no LABEL "$DEVICE" 2>/dev/null | head -1 | tr ' /' '_-' | tr -cd '[:alnum:]_-')

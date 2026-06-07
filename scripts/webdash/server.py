@@ -238,7 +238,9 @@ def sample_services():
                 for k, v in sorted(projs.items())]
     photo = {}
     try:
-        dirs = sorted(glob.glob("/mnt/storage/usb-imports/*/"), key=os.path.getmtime, reverse=True)
+        dirs = sorted([d for d in glob.glob("/mnt/storage/usb-imports/*/")
+                       if os.path.basename(d.rstrip("/"))[0] not in "._" and not d.rstrip("/").endswith(".incomplete")],
+                      key=os.path.getmtime, reverse=True)
         if dirs:
             d = dirs[0]
             photo = {"last": time.strftime("%d.%m %H:%M", time.localtime(os.path.getmtime(d))),

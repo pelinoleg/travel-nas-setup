@@ -608,9 +608,9 @@ br.value=LS.brightness||80;bv.textContent=br.value+'%';
 br.addEventListener('pointerdown',()=>brDragging=true);
 br.oninput=()=>{brDragging=true;setBrightness(br.value,true);};
 ['pointerup','pointercancel','change'].forEach(e=>br.addEventListener(e,()=>setTimeout(()=>brDragging=false,500)));
-function inNightWindow(){const f=LS['night-from'],t=LS['night-to'];if(!f||!t||f===t)return false;
+function inNightWindow(){const f='22:00',t='07:00';   // фиксированное ночное окно
   const d=new Date(),cur=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
-  return f<t?(cur>=f&&cur<t):(cur>=f||cur<t);}
+  return cur>=f||cur<t;}
 const ambBrightNow=()=>+(inNightWindow()?(LS.ambNight||15):(LS.ambDay||40));
 function bindSel(id,key,def){const e=$('#'+id);if(e){e.value=LS[key]||def;e.onchange=ev=>uiSet(key,ev.target.value);}}
 function bindRange(id,key,def){const e=$('#'+id),v=$('#'+id+'-val');if(e){e.value=LS[key]||def;if(v)v.textContent=e.value+'%';
@@ -620,14 +620,6 @@ bindSel('night-timeout','nightTimeout','60');bindSel('night-action','nightAction
 bindRange('dim-day','dimDay','30');bindRange('dim-night','dimNight','20');
 bindRange('amb-day','ambDay','40');bindRange('amb-night','ambNight','15');
 ['amb-day','amb-night'].forEach(id=>{const e=$('#'+id);if(e)e.addEventListener('change',()=>{if(idleState==='ambient')api('/api/action/screen',{brightness:ambBrightNow()+'%'});});});
-{ // ночное окно — селекты час:минута (нативный time-picker не работает через тач в kiosk)
-  const hrs=Array.from({length:24},(_,i)=>('0'+i).slice(-2)),mins=['00','15','30','45'];
-  const opt=(arr,v)=>arr.map(x=>`<option${x===v?' selected':''}>${x}</option>`).join('');
-  const ff=(LS['night-from']||'').split(':'),ft=(LS['night-to']||'').split(':');
-  const set=(id,arr,v)=>{const e=$('#'+id);if(e)e.innerHTML=opt(arr,v);};
-  set('nf-h',hrs,ff[0]);set('nf-m',mins,ff[1]);set('nt-h',hrs,ft[0]);set('nt-m',mins,ft[1]);
-  const save=()=>{uiSet('night-from',($('#nf-h').value||'00')+':'+($('#nf-m').value||'00'));uiSet('night-to',($('#nt-h').value||'00')+':'+($('#nt-m').value||'00'));};
-  ['nf-h','nf-m','nt-h','nt-m'].forEach(id=>{const e=$('#'+id);if(e)e.onchange=save;});}
 {const pt=$('#ph-thumb');if(pt){pt.value=LS.phThumb||'400';pt.onchange=e=>uiSet('phThumb',e.target.value);}}
 {const pg=$('#ph-tg');if(pg){pg.value=LS.phTg||'0';pg.onchange=e=>uiSet('phTg',e.target.value);}}
 function syncActionUI(){const dd=$('#dim-day-row'),dn=$('#dim-night-row'),da=$('#day-action'),na=$('#night-action');
@@ -659,11 +651,12 @@ const AMB_DEF='date,wifi,temp,disk,backup';
 function ambShowSet(){return new Set((localStorage.amb_show??AMB_DEF).split(',').filter(Boolean));}
 function ambVals(){const s=last.system||{},nw=last.network||{},sv=last.services||{},sg=last.storage||{},nb=sv.nas_backup||{},yt=sv.yt||{},proj=sv.projects||[];
   const sig=nw.signal,q=sig!=null?Math.max(0,Math.min(100,2*(sig+100))):null;
-  const bk=nb.last_status==='ok'?'<span style="color:var(--ok)">OK</span>':(nb.last_status==='failed'?'<span style="color:var(--crit)">failed</span>':'—');
+  const mods=nb.modules||[],mst=mods.map(m=>(m.status||'').toLowerCase());
+  const bk=!mods.length?'—':(mst.some(x=>/fail|err/.test(x))?'<span style="color:var(--crit)">failed</span>':(mst.some(x=>/warn|partial/.test(x))?'<span style="color:var(--warn)">warn</span>':'<span style="color:var(--ok)">OK</span>'));
   return {wifi:nw.mode==='AP'?'Hotspot':(nw.ssid||'—'),ip:(nw.ip&&nw.ip!=='?')?nw.ip:'—',signal:q!=null?q+'%':'—',
     ts:nw.ts_up?'<span style="color:var(--ok)">on</span>':'off',temp:(s.temp??'?')+'°',cpu:(s.cpu??'?')+'%',
     ram:(s.mem_used??'?')+'%',power:s.pmode||'auto',freq:(s.freq_mhz||'?')+' MHz',uptime:fmtUp(s.uptime||0),
-    disk:(sg.pct??'?')+'%',dtemp:sg.temp!=null?sg.temp+'°':'—',dfree:(sg.total&&sg.used)?TB(sg.total-sg.used):'—',
+    disk:(sg.pct??'?')+'%',dtemp:sg.disk_temp!=null?sg.disk_temp+'°':'—',dfree:(sg.size&&sg.used)?TB(sg.size-sg.used):'—',
     backup:bk,yt:(yt.pending||0)+' queued',docker:proj.length?proj.reduce((a,p)=>a+p.running,0)+'/'+proj.reduce((a,p)=>a+p.total,0):'—'};}
 function updateAmbient(){const d=new Date(),sh=ambShowSet(),V=ambVals();
   $('#amb-time').textContent=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);

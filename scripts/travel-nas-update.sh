@@ -101,6 +101,7 @@ declare -A SCRIPTS=(
     [touch-calibrate.sh]=/usr/local/bin/touch-calibrate.sh
     [screen-rotate.sh]=/usr/local/bin/screen-rotate.sh
     [dsi-backlight.sh]=/usr/local/bin/dsi-backlight.sh
+    [screen-blank.sh]=/usr/local/bin/screen-blank.sh
     [dsi-rotate.sh]=/usr/local/bin/dsi-rotate.sh
     [webdash/server.py]=/opt/travel-nas-dashboard/server.py
     [webdash/static/index.html]=/opt/travel-nas-dashboard/static/index.html

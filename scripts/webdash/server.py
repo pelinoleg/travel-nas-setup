@@ -948,7 +948,9 @@ def api_action(name):
 def api_screen():
     d = request.json or {}
     if "brightness" in d: subprocess.run(["/usr/local/bin/dsi-backlight.sh", str(d["brightness"])])
-    if d.get("backlight") in ("on", "off"): subprocess.run(["/usr/local/bin/dsi-backlight.sh", d["backlight"]])
+    if d.get("backlight") in ("on", "off"):
+        env = dict(os.environ, XDG_RUNTIME_DIR="/run/user/1000")
+        subprocess.run(["/usr/local/bin/screen-blank.sh", d["backlight"]], env=env)
     if "rotate" in d: subprocess.Popen(["sudo", "-n", "/usr/local/bin/dsi-rotate.sh", str(d["rotate"])])
     if d.get("exit_kiosk"): subprocess.Popen(["pkill", "-f", "chromium.*localhost:%d" % CONF["PORT"]])
     return jsonify({"ok": True})

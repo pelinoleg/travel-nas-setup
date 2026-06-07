@@ -322,6 +322,7 @@ function renderBackupTiles(sv){const nb=sv.nas_backup||{},pr=sv.progress||{},ph=
   const sched=sv.nas_sched&&sv.nas_sched!=='off'?sv.nas_sched:null;
   $('#nas-sub').textContent=w==='nas'?`${pr.speed||''} eta ${pr.eta||'?'}`:(sched?'auto '+sched:(nb.last_run?'last '+nb.last_run:'manual'));
   nt.setAttribute('style',w==='nas'?bkbg(pr.percent):'');
+  pt.classList.toggle('bk-active',w==='photo');nt.classList.toggle('bk-active',w==='nas');
   $('#nas-dot').className='tdot '+(w==='nas'?'ok':((nb.last_status||'')==='failed'?'crit':(sched?'ok':'')));}
 const bkCard=(icon,title,body)=>`<div class="bkcard">${icon}<div class="bkc"><div class="bkt">${title}</div>${body}</div></div>`;
 const bkProg=pr=>`<div class="bkbar"><i id="bk-bar" style="width:${pr.percent||0}%"></i></div><div class="bks"><b id="bk-pct">${pr.percent||0}%</b> · <span id="bk-files">${pr.files_done||0}/${pr.files_total||'?'}</span> files · <span id="bk-speed">${pr.speed||'…'}</span> · eta <span id="bk-eta">${pr.eta||'?'}</span></div>`;

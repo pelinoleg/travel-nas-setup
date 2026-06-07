@@ -441,3 +441,6 @@ select,input[type=number],input[type=time]{background:var(--panel2);border:1px s
 .bigstat .n{font-size:42px;font-weight:700;line-height:1;color:var(--acc)}
 #photo-body .bigstat .n{color:#22d3ee}
 .bigstat .l{color:var(--mut);font-size:13px;margin-top:4px}
+
+.nsel{display:flex;align-items:center;gap:3px}
+.nsel select{padding:6px 4px;min-width:46px;text-align:center}

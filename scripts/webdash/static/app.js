@@ -608,7 +608,7 @@ br.value=LS.brightness||80;bv.textContent=br.value+'%';
 br.addEventListener('pointerdown',()=>brDragging=true);
 br.oninput=()=>{brDragging=true;setBrightness(br.value,true);};
 ['pointerup','pointercancel','change'].forEach(e=>br.addEventListener(e,()=>setTimeout(()=>brDragging=false,500)));
-function inNightWindow(){const f=$('#night-from').value,t=$('#night-to').value;if(!f||!t)return false;
+function inNightWindow(){const f=LS['night-from'],t=LS['night-to'];if(!f||!t||f===t)return false;
   const d=new Date(),cur=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
   return f<t?(cur>=f&&cur<t):(cur>=f||cur<t);}
 const ambBrightNow=()=>+(inNightWindow()?(LS.ambNight||15):(LS.ambDay||40));
@@ -620,7 +620,14 @@ bindSel('night-timeout','nightTimeout','60');bindSel('night-action','nightAction
 bindRange('dim-day','dimDay','30');bindRange('dim-night','dimNight','20');
 bindRange('amb-day','ambDay','40');bindRange('amb-night','ambNight','15');
 ['amb-day','amb-night'].forEach(id=>{const e=$('#'+id);if(e)e.addEventListener('change',()=>{if(idleState==='ambient')api('/api/action/screen',{brightness:ambBrightNow()+'%'});});});
-['night-from','night-to'].forEach(id=>{const el=$('#'+id);if(el){if(LS[id])el.value=LS[id];el.onchange=()=>uiSet(id,el.value);}});
+{ // ночное окно — селекты час:минута (нативный time-picker не работает через тач в kiosk)
+  const hrs=Array.from({length:24},(_,i)=>('0'+i).slice(-2)),mins=['00','15','30','45'];
+  const opt=(arr,v)=>arr.map(x=>`<option${x===v?' selected':''}>${x}</option>`).join('');
+  const ff=(LS['night-from']||'').split(':'),ft=(LS['night-to']||'').split(':');
+  const set=(id,arr,v)=>{const e=$('#'+id);if(e)e.innerHTML=opt(arr,v);};
+  set('nf-h',hrs,ff[0]);set('nf-m',mins,ff[1]);set('nt-h',hrs,ft[0]);set('nt-m',mins,ft[1]);
+  const save=()=>{uiSet('night-from',($('#nf-h').value||'00')+':'+($('#nf-m').value||'00'));uiSet('night-to',($('#nt-h').value||'00')+':'+($('#nt-m').value||'00'));};
+  ['nf-h','nf-m','nt-h','nt-m'].forEach(id=>{const e=$('#'+id);if(e)e.onchange=save;});}
 {const pt=$('#ph-thumb');if(pt){pt.value=LS.phThumb||'400';pt.onchange=e=>uiSet('phThumb',e.target.value);}}
 {const pg=$('#ph-tg');if(pg){pg.value=LS.phTg||'0';pg.onchange=e=>uiSet('phTg',e.target.value);}}
 function syncActionUI(){const dd=$('#dim-day-row'),dn=$('#dim-night-row'),da=$('#day-action'),na=$('#night-action');

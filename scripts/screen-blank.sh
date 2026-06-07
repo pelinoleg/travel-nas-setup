@@ -6,7 +6,9 @@
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/1000}"
 sock="$(ls "$XDG_RUNTIME_DIR"/wayland-* 2>/dev/null | grep -v lock | head -1)"
 [[ -n "$sock" ]] && export WAYLAND_DISPLAY="$(basename "$sock")"
-OUT="$(wlr-randr 2>/dev/null | awk 'NR==1{print $1}')"; [[ -z "$OUT" ]] && OUT=DSI-1
+# Имя вывода берём из wlopm (он показывает выводы и когда они OFF; wlr-randr в off
+# может выдать не то → wlopm --on промахивается).
+OUT="$(wlopm 2>/dev/null | awk 'NR==1{print $1}')"; [[ -z "$OUT" ]] && OUT=DSI-1
 
 case "${1:-}" in
   off) wlopm --off "$OUT" 2>/dev/null; /usr/local/bin/dsi-backlight.sh off >/dev/null 2>&1 ;;

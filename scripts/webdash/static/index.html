@@ -34,6 +34,7 @@
 <symbol id="i-settings" viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2.3"/><line x1="4" y1="12" x2="20" y2="12"/><circle cx="15" cy="12" r="2.3"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="18" r="2.3"/></symbol>
 <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4l1.4-1.4M17 7l1.4-1.4"/></symbol>
 <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></symbol>
+<symbol id="i-screen" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></symbol>
 <symbol id="i-activity" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></symbol>
 <symbol id="i-list" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></symbol>
 <symbol id="i-box" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.3 7 12 12 20.7 7"/><line x1="12" y1="22" x2="12" y2="12"/></symbol>
@@ -48,6 +49,7 @@
     <span id="uptime" class="up"></span>
     <span id="clock"></span>
     <button id="btn-ambient" class="bigbtn"><svg class="ic"><use href="#i-moon"/></svg></button>
+    <button id="btn-screenoff" class="bigbtn"><svg class="ic"><use href="#i-screen"/></svg></button>
     <button id="btn-power" class="bigbtn"><svg class="ic"><use href="#i-power"/></svg></button>
     <button id="btn-exit" class="bigbtn"><svg class="ic"><use href="#i-exit"/></svg></button>
   </div>
@@ -176,13 +178,26 @@
   <div class="pbody">
     <div class="setrow"><label><svg class="ic"><use href="#i-sun"/></svg>Brightness</label>
       <input type="range" id="brightness" min="5" max="100" value="80"><span id="brightness-val">80%</span></div>
-    <div class="setrow link" data-open="page-ambient"><label><svg class="ic"><use href="#i-moon"/></svg>Ambient &amp; idle screen</label><span class="chev">›</span></div>
-    <div class="setrow"><label><svg class="ic"><use href="#i-moon"/></svg>Night dim</label>
-      <input type="time" id="night-from"> – <input type="time" id="night-to">
-      to <input type="number" id="night-level" min="5" max="100" value="20">%</div>
-    <div class="setrow"><label><svg class="ic"><use href="#i-restart"/></svg>Rotate (reboot)</label>
-      <select id="rotate"><option value="">—</option><option>0</option><option>90</option><option>180</option><option>270</option></select>
-      <button id="rotate-apply">Apply</button></div>
+
+    <div class="h" style="margin-top:6px"><svg class="ic"><use href="#i-sun"/></svg>Daytime idle</div>
+    <div class="setrow"><label>Go idle after</label>
+      <select id="screen-timeout"><option value="0">never</option><option value="60">1 min</option><option value="300">5 min</option><option value="600">10 min</option><option value="1800">30 min</option></select></div>
+    <div class="setrow"><label>Action</label>
+      <select id="day-action"><option value="dim">Dim brightness</option><option value="ambient">Ambient clock</option><option value="off">Screen off</option></select></div>
+    <div class="setrow" id="dim-day-row"><label>Dim to</label>
+      <input type="range" id="dim-day" min="5" max="100" value="30"><span id="dim-day-val">30%</span></div>
+
+    <div class="h" style="margin-top:10px"><svg class="ic"><use href="#i-moon"/></svg>Night idle</div>
+    <div class="setrow"><label>Night window</label>
+      <input type="time" id="night-from"> – <input type="time" id="night-to"></div>
+    <div class="setrow"><label>Go idle after</label>
+      <select id="night-timeout"><option value="20">20 sec</option><option value="30">30 sec</option><option value="60">1 min</option><option value="120">2 min</option><option value="300">5 min</option><option value="600">10 min</option></select></div>
+    <div class="setrow"><label>Action</label>
+      <select id="night-action"><option value="dim">Dim brightness</option><option value="ambient">Ambient clock</option><option value="off">Screen off</option></select></div>
+    <div class="setrow" id="dim-night-row"><label>Dim to</label>
+      <input type="range" id="dim-night" min="5" max="100" value="20"><span id="dim-night-val">20%</span></div>
+
+    <div class="setrow link" data-open="page-ambient" style="margin-top:10px"><label><svg class="ic"><use href="#i-moon"/></svg>Ambient widgets &amp; brightness</label><span class="chev">›</span></div>
   </div>
 </div>
 
@@ -262,18 +277,14 @@
 </div>
 
 <div id="page-ambient" class="page hidden">
-  <div class="phead"><button class="bigbtn back"><svg class="ic"><use href="#i-back"/></svg></button><span>Ambient &amp; idle screen</span></div>
+  <div class="phead"><button class="bigbtn back"><svg class="ic"><use href="#i-back"/></svg></button><span>Ambient screen</span></div>
   <div class="pbody">
-    <div class="setrow"><label><svg class="ic"><use href="#i-power"/></svg>Go idle after</label>
-      <select id="screen-timeout"><option value="0">never</option><option value="60">1 min</option>
-        <option value="300">5 min</option><option value="600">10 min</option><option value="1800">30 min</option></select></div>
-    <div class="setrow"><label><svg class="ic"><use href="#i-moon"/></svg>Idle action</label>
-      <select id="idle-mode"><option value="ambient">Ambient clock</option><option value="off">Screen off</option></select></div>
-    <div class="setrow"><label><svg class="ic"><use href="#i-moon"/></svg>Night: go idle after</label>
-      <select id="night-timeout"><option value="">same as above</option><option value="20">20 sec</option><option value="30">30 sec</option><option value="60">1 min</option><option value="120">2 min</option><option value="300">5 min</option></select></div>
-    <div class="setrow"><label><svg class="ic"><use href="#i-sun"/></svg>Ambient brightness</label>
-      <input type="range" id="amb-bright" min="5" max="100" value="30"><span id="amb-bright-val">30%</span></div>
-    <div class="h" style="margin-top:6px">Show on ambient</div>
+    <div class="h"><svg class="ic"><use href="#i-sun"/></svg>Ambient brightness</div>
+    <div class="setrow"><label>Day</label>
+      <input type="range" id="amb-day" min="5" max="100" value="40"><span id="amb-day-val">40%</span></div>
+    <div class="setrow"><label>Night</label>
+      <input type="range" id="amb-night" min="5" max="100" value="15"><span id="amb-night-val">15%</span></div>
+    <div class="h" style="margin-top:10px">Show on ambient</div>
     <div id="amb-toggles" class="evfilters"></div>
     <button id="amb-preview" class="cbtn dry" style="margin-top:14px"><svg class="ic"><use href="#i-moon"/></svg>Preview ambient</button>
   </div>

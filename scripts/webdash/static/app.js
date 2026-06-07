@@ -645,11 +645,12 @@ const AMB_ITEMS=[
   {k:'freq',cat:'System',label:'CPU freq',ic:'i-cpu'},{k:'uptime',cat:'System',label:'Uptime',ic:'i-activity'},
   {k:'disk',cat:'Storage',label:'Disk used',ic:'i-disk'},{k:'dtemp',cat:'Storage',label:'Disk temp',ic:'i-thermo'},
   {k:'dfree',cat:'Storage',label:'Disk free',ic:'i-disk'},
-  {k:'backup',cat:'Services',label:'NAS backup',ic:'i-cloud'},{k:'yt',cat:'Services',label:'YT queue',ic:'i-video'},
-  {k:'docker',cat:'Services',label:'Docker',ic:'i-box'}];
+  {k:'traffic',cat:'Network',label:'Traffic',ic:'i-net'},
+  {k:'backup',cat:'Services',label:'NAS backup',ic:'i-cloud'},{k:'photo',cat:'Services',label:'Photo import',ic:'i-camera'},
+  {k:'yt',cat:'Services',label:'YT queue',ic:'i-video'},{k:'docker',cat:'Services',label:'Docker',ic:'i-box'}];
 const AMB_DEF='date,wifi,temp,disk,backup';
 function ambShowSet(){return new Set((localStorage.amb_show??AMB_DEF).split(',').filter(Boolean));}
-function ambVals(){const s=last.system||{},nw=last.network||{},sv=last.services||{},sg=last.storage||{},nb=sv.nas_backup||{},yt=sv.yt||{},proj=sv.projects||[];
+function ambVals(){const s=last.system||{},nw=last.network||{},sv=last.services||{},sg=last.storage||{},nb=sv.nas_backup||{},yt=sv.yt||{},proj=sv.projects||[],ph=sv.photo||{};
   const sig=nw.signal,q=sig!=null?Math.max(0,Math.min(100,2*(sig+100))):null;
   const mods=nb.modules||[],mst=mods.map(m=>(m.status||'').toLowerCase());
   const bk=!mods.length?'—':(mst.some(x=>/fail|err/.test(x))?'<span style="color:var(--crit)">failed</span>':(mst.some(x=>/warn|partial/.test(x))?'<span style="color:var(--warn)">warn</span>':'<span style="color:var(--ok)">OK</span>'));
@@ -657,7 +658,9 @@ function ambVals(){const s=last.system||{},nw=last.network||{},sv=last.services|
     ts:nw.ts_up?'<span style="color:var(--ok)">on</span>':'off',temp:(s.temp??'?')+'°',cpu:(s.cpu??'?')+'%',
     ram:s.mem_total?Math.round(s.mem_used/s.mem_total*100)+'%':(s.mem_used??'?')+' GB',power:s.pmode||'auto',freq:(s.freq_mhz||'?')+' MHz',uptime:fmtUp(s.uptime||0),
     disk:(sg.pct??'?')+'%',dtemp:sg.disk_temp!=null?sg.disk_temp+'°':'—',dfree:(sg.size&&sg.used)?TB(sg.size-sg.used):'—',
-    backup:bk,yt:(yt.pending||0)+' queued',docker:proj.length?proj.reduce((a,p)=>a+p.running,0)+'/'+proj.reduce((a,p)=>a+p.total,0):'—'};}
+    traffic:'↓'+fmtNet(s.net_rx||0),
+    backup:bk,photo:ph.files?ph.files+' files'+(ph.last?' · '+ph.last:''):'—',
+    yt:(yt.pending||0)+' queued',docker:proj.length?proj.reduce((a,p)=>a+p.running,0)+'/'+proj.reduce((a,p)=>a+p.total,0):'—'};}
 function updateAmbient(){const d=new Date(),sh=ambShowSet(),V=ambVals();
   $('#amb-time').textContent=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
   $('#amb-date').style.display=sh.has('date')?'':'none';

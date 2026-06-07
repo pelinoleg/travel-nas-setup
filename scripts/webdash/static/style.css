@@ -185,8 +185,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:32px;heigh
 #ambient.hidden{display:none}
 .amb-time{font-size:150px;font-weight:200;line-height:.9;letter-spacing:3px;color:#737d8c}
 .amb-date{font-size:23px;color:#5b6573;text-transform:capitalize;margin-top:6px}
-.amb-stat{display:flex;gap:20px;margin-top:28px;align-items:flex-start;flex-wrap:nowrap;justify-content:center;width:100%;padding:0 14px}
-.ambcol{text-align:left;flex:1;min-width:0;max-width:180px}
+.amb-stat{display:flex;gap:26px;margin-top:28px;align-items:flex-start;flex-wrap:nowrap;justify-content:center;width:100%;padding:0 16px}
+.ambcol{text-align:left;flex:1;min-width:0;max-width:230px}
 .ambct{font-size:11px;font-weight:700;letter-spacing:.7px;color:#4a525e;text-transform:uppercase;margin-bottom:9px}
 .ambrow{display:flex;align-items:center;gap:8px;font-size:15px;padding:3px 0;color:#737d8c}
 .ambrow .ic{width:14px;height:14px;color:#4a525e;flex:none}

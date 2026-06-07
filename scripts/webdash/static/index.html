@@ -49,7 +49,6 @@
     <span id="uptime" class="up"></span>
     <span id="clock"></span>
     <button id="btn-ambient" class="bigbtn"><svg class="ic"><use href="#i-moon"/></svg></button>
-    <button id="btn-screenoff" class="bigbtn"><svg class="ic"><use href="#i-screen"/></svg></button>
     <button id="btn-power" class="bigbtn"><svg class="ic"><use href="#i-power"/></svg></button>
     <button id="btn-exit" class="bigbtn"><svg class="ic"><use href="#i-exit"/></svg></button>
   </div>
@@ -183,7 +182,7 @@
     <div class="setrow"><label>Go idle after</label>
       <select id="screen-timeout"><option value="0">never</option><option value="60">1 min</option><option value="300">5 min</option><option value="600">10 min</option><option value="1800">30 min</option></select></div>
     <div class="setrow"><label>Action</label>
-      <select id="day-action"><option value="dim">Dim brightness</option><option value="ambient">Ambient clock</option><option value="off">Screen off</option></select></div>
+      <select id="day-action"><option value="dim">Dim brightness</option><option value="ambient">Ambient clock</option></select></div>
     <div class="setrow" id="dim-day-row"><label>Dim to</label>
       <input type="range" id="dim-day" min="5" max="100" value="30"><span id="dim-day-val">30%</span></div>
 
@@ -193,7 +192,7 @@
     <div class="setrow"><label>Go idle after</label>
       <select id="night-timeout"><option value="20">20 sec</option><option value="30">30 sec</option><option value="60">1 min</option><option value="120">2 min</option><option value="300">5 min</option><option value="600">10 min</option></select></div>
     <div class="setrow"><label>Action</label>
-      <select id="night-action"><option value="dim">Dim brightness</option><option value="ambient">Ambient clock</option><option value="off">Screen off</option></select></div>
+      <select id="night-action"><option value="dim">Dim brightness</option><option value="ambient">Ambient clock</option></select></div>
     <div class="setrow" id="dim-night-row"><label>Dim to</label>
       <input type="range" id="dim-night" min="5" max="100" value="20"><span id="dim-night-val">20%</span></div>
 
